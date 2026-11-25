@@ -9,6 +9,9 @@ V.8 then V.22bis, against the library's answerer
 V.8 then V.21
   data at 3.03 s, 300 bit/s, modulation 1
     300 bit/s: caller got 63 of 63 octets, answerer got 61 of 61
+V.8 then V.23
+  data at 2.94 s, 75/1200 bit/s, modulation 12
+    V.23 1200/75 bit/s: caller got 63 of 63 octets, answerer got 61 of 61
 pre-V.8 answerers: ANS, then
   V.22bis: data at 5.11 s, 2400 bit/s, modulation 3, V.8 0
     2400 bit/s: caller got 63 of 63 octets, answerer got 61 of 61
@@ -19,4 +22,4 @@ pre-V.8 answerers: ANS, then
 no call
   no answer tone: phase 4, end 1
   nothing in common: phase 4, end 3
-orig: 40 checks, 0 failures
+orig: 47 checks, 0 failures

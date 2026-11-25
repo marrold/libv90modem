@@ -36,4 +36,4 @@
   V.22bis to data mode (no cleardown signal: the call goes on):
     answerer end 0: none, data, V.22bis, data reached 1
     caller end 0: none, data, V.22bis, data reached 1
-diag: 7410 checks, 0 failures
+diag: 7411 checks, 0 failures
