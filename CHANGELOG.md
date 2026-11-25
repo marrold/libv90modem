@@ -8,6 +8,18 @@ change is listed here. Rebuild against the new header with every version;
 "Simulation and own answerer only" means: tried against simulated lines and
 this library's own answering modem, never against a real modem or server.
 
+## 0.6.2 (2026-11-25)
+
+Added:
+- V.23 (ITU-T), either role: `V90M_MOD_V23`. 1200 bit/s asymmetric FSK on
+  the forward channel (1300/2100 Hz mark/space), 75 bit/s on the backward
+  channel (390/450 Hz mark/space); the calling modem is the reverse.
+  Start-stop framed as V.21; no error control. Offered in V.8's CM/JM like
+  V.21 and Bell 103, and used as the answering side's fallback when V.8
+  fails (no CM heard, or no mode in common) if configured, same as V.21.
+  `v90m_conn` gains `V90M_CONN_V23` (appended, so existing values are
+  unchanged). Simulation and own answerer only.
+
 ## 0.6.1 (2026-11-24)
 
 Added:

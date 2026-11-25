@@ -14,7 +14,7 @@ analogue telephone adapter, from the ITU-T recommendations. The answering
 side has answered real modems there (see "Tried on real modems"); the
 calling side has not yet called one.
 
-**The API is not stable before version 1.0.** This is 0.6.1; what changed
+**The API is not stable before version 1.0.** This is 0.6.2; what changed
 from one version to the next is in `CHANGELOG.md`.
 
 ## How to use

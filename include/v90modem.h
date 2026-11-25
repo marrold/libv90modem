@@ -55,7 +55,7 @@ extern "C" {
 
 #define V90M_VERSION_MAJOR 0
 #define V90M_VERSION_MINOR 6
-#define V90M_VERSION_PATCH 1
+#define V90M_VERSION_PATCH 2
 /* "0.6.1": the version of the library linked in (may differ from the header) */
 const char *v90m_version(void);
 
