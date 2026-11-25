@@ -197,6 +197,14 @@ int main(void)
     CHECK(t > 0); CHECK_EQ_I(O.modulation, ORIG_MOD_V21); CHECK_EQ_I(A.modulation, ANS_MOD_V21);
     exchange("300 bit/s", 5000);
 
+    printf("V.8 then V.23\n");
+    start(P_ANSWER, V8_MOD_V23 | V8_MOD_V21, V8_MOD_V23, 0);
+    t = to_data(20000, 1);
+    printf("  data at %.2f s, %d/%d bit/s, modulation %d\n", t, O.bitrate, O.rx_bitrate, O.modulation);
+    CHECK(t > 0); CHECK_EQ_I(O.modulation, ORIG_MOD_V23); CHECK_EQ_I(A.modulation, ANS_MOD_V23);
+    CHECK_EQ_I(O.bitrate, 75); CHECK_EQ_I(O.rx_bitrate, 1200);
+    exchange("V.23 1200/75 bit/s", 12000);           /* the caller's backward channel, 75 bit/s, is the slow side */
+
     printf("pre-V.8 answerers: ANS, then\n");
     peer_2400 = 1;
     start(P_LEGACY_V22, V8_MOD_V22 | V8_MOD_V21, 0, 1);

@@ -84,7 +84,9 @@ typedef enum {
     ORIG_V32,         /* V.32bis / V.32, start-up and data */
     ORIG_V34,         /* V.34, Phase 2 to data mode, its retrains included */
     ORIG_V90,         /* V.90 analogue modem, Phase 2 to data mode */
-    ORIG_BELL         /* only Bell offered, ANSam or ANS heard: silent, waiting for a Bell answerer */
+    ORIG_BELL,        /* only Bell offered, ANSam or ANS heard: silent, waiting for a Bell answerer */
+    ORIG_V23          /* V.23: 75 bit/s backward channel (390/450 Hz) transmit,
+                         1200 bit/s forward channel (1300/2100 Hz) receive */
 } orig_phase;
 
 /* the modulation of a connection: the numbers of ANS_MOD_* (modem/answer.h) */
@@ -98,6 +100,7 @@ typedef enum {
 #define ORIG_MOD_V92    7     /* PCM both ways (V.92 with PCM upstream) */
 #define ORIG_MOD_BELL103  8   /* 300 bit/s FSK on Bell 103's tones, in ORIG_V21 */
 #define ORIG_MOD_BELL212A 9   /* 1200 bit/s, in ORIG_V22: V.22 begun on the Bell answer tone */
+#define ORIG_MOD_V23     12   /* V.23: 75 bit/s backward (tx), 1200 bit/s forward (rx) */
 
 /* orig_cfg.modes: V.90 as the analogue modem, next to the V8_MOD_* bits
  * (the number of ANS_MODE_V90) */

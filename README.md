@@ -1,7 +1,7 @@
 # libv90modem
 
 A voice-band data modem in software: V.92, V.90, V.34, V.32bis, V.22bis,
-V.22, V.21, Bell 212A and Bell 103, started by V.8, and U.S. Robotics' x2
+V.22, V.21, V.23, Bell 212A and Bell 103, started by V.8, and U.S. Robotics' x2
 and (experimental) K56flex on the answering side, with V.42 error control
 (LAPM) and V.42bis / V.44 compression. It answers (for V.90 and V.92 as the
 digital, server side) and calls (for V.90 and V.92 as the analogue, client
@@ -14,7 +14,7 @@ analogue telephone adapter, from the ITU-T recommendations. The answering
 side has answered real modems there (see "Tried on real modems"); the
 calling side has not yet called one.
 
-**The API is not stable before version 1.0.** This is 0.6.1; what changed
+**The API is not stable before version 1.0.** This is 0.6.2; what changed
 from one version to the next is in `CHANGELOG.md`.
 
 ## How to use
@@ -119,6 +119,7 @@ built and why; `docs/history/` keeps the development logs.
 | x2 | `V90M_MOD_X2` with V.34, not in the defaults: the server side | no | U.S. Robotics' 56k of 1997: PCM downstream 32000 to 56000 bit/s, V.34 upstream; the client's rate changes followed; mu-law only; no way back to V.34 once the client takes it up (below, and [docs/answering.md](docs/answering.md)) |
 | K56flex | `V90M_MOD_K56` with V.34, not in the defaults: the server side; experimental | no | Rockwell's and Lucent's 56k of 1997, agreed in V.8bis before V.8: PCM downstream 32000 to 56000 bit/s behind no pad, 3 dB or 6 dB, with robbed bits; V.34 upstream; the client's renegotiations and retrains followed; mu-law only; no way back to V.34 once the client takes it up ([docs/answering.md](docs/answering.md)) |
 | Bell 212A | `V90M_MOD_BELL212A` with V.22, not in the defaults | the same | 1200 bit/s; answering with 2225 Hz after 4 s of an unanswered V.22bis answer sequence; calling on hearing 2225 Hz (Bell 103 when no 1200 bit/s answer comes) |
+| V.23 | `V90M_MOD_V23`, in the defaults | the same | 1200 bit/s forward channel (1300/2100 Hz) / 75 bit/s backward channel (390/450 Hz) FSK; the answering side sends the fast channel, the calling side the slow one; no error control |
 | V.14 | yes | yes | start-stop characters on the synchronous bit pump |
 | V.42 | yes | yes | LAPM, detection phase, start-stop fallback, breaks |
 | V.42bis, V.44 | yes | yes | V.44 preferred when both ends have it |

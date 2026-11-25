@@ -23,6 +23,7 @@ Each item names where it is recorded.
   and a U.S. Robotics 56K of 1998 have called it (README, "Tried on real
   modems"). Bell 212A answering was tried only on a test build with the
   2225 Hz tone from the start, by a modem that would also have taken V.22.
+  V.23, either role, has not been tried against a real modem.
 - **The V.92 answering side's own cleardown has met no real modem.** It
   sends what V.92 9.11 / 9.8.1.1.2 / 9.6.1.1.2 give (TRN2d, SUVd, on the
   caller's SUVu one CPd with drn = 0, SUVd) and is over when the caller

@@ -110,6 +110,7 @@ version; the init functions check the length given):
 | `V90M_MOD_BELL212A` | 0x0080 | not in the defaults, either role; answering only with `V90M_MOD_V22` (without: `V90M_ENOTSUP`) |
 | `V90M_MOD_X2` | 0x0100 | answering only (calling: `V90M_ENOTSUP`), with `V90M_MOD_V34` (without: `V90M_ENOTSUP`), not in the defaults: x2 as its server, offered on a mu-law line to a caller whose CM offers V.34 and no PCM; see [answering.md](answering.md), "x2" |
 | `V90M_MOD_K56` | 0x0200 | answering only (calling: `V90M_ENOTSUP`), with `V90M_MOD_V34` (without: `V90M_ENOTSUP`), not in the defaults; experimental: K56flex as its server, offered on a mu-law line in V.8bis before V.8 (every caller then hears our answer tone later: 1.790 s without V.8bis, 3.807 s for a V.8bis caller without K56flex, 3.413 s for a K56flex client); see [answering.md](answering.md), "K56flex" |
+| `V90M_MOD_V23` | 0x0400 | either role, in the defaults: 1200 bit/s forward channel (1300/2100 Hz) / 75 bit/s backward channel (390/450 Hz) asymmetric FSK (ITU-T V.23), start-stop framed as V.21; no error control |
 
 What each does in each role: [answering.md](answering.md),
 [calling.md](calling.md), and the header's comments above `v90m_role` and
@@ -180,8 +181,9 @@ after every sample, and after the end (`end` says why).
 tone), `V90M_CONN_X2` 10 (x2: PCM downstream, `tx_bps` 32000 to 56000;
 V.34 upstream), `V90M_CONN_K56FLEX` 11 (K56flex: PCM downstream, `tx_bps`
 32000 to 56000 in steps of 2000, the figure a Rockwell modem prints; V.34
-upstream in `rx_bps`). The last four were appended; the values above them
-stay as they were.
+upstream in `rx_bps`), `V90M_CONN_V23` 12 (V.23: `tx_bps` 1200 and `rx_bps`
+75 answering, the other way round calling). The last five were appended;
+the values above them stay as they were.
 
 ### `v90m_end`
 

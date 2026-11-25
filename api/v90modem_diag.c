@@ -102,7 +102,7 @@ const char *v90m_err_name(int code)
 
 static const char *const phase_names[] = { "none", "tone", "v8", "phase2", "phase3", "phase4", "train", "data" };
 static const char *const conn_names[] = { "none", "V.21", "V.22", "V.22bis", "V.90", "V.34", "V.32bis", "V.92",
-                                          "Bell 103", "Bell 212A", "x2", "K56flex" };
+                                          "Bell 103", "Bell 212A", "x2", "K56flex", "V.23" };
 /* one name per value of each enum: a table's size is its enum's last value + 1 */
 typedef char dg_phase_rows[sizeof phase_names / sizeof phase_names[0] == (unsigned)DG_LAST_PHASE + 1 ? 1 : -1];
 typedef char dg_conn_rows[sizeof conn_names / sizeof conn_names[0] == (unsigned)DG_LAST_CONN + 1 ? 1 : -1];
@@ -165,6 +165,9 @@ void diag_track_answer(diag_track_t *t, const answer_t *a)
         ph = legacy_phase(a->connected);
         if (a->connected || a->used_v8 || a->fsk_mod == ANS_MOD_BELL103) sel = (uint8_t)a->fsk_mod;
         break;
+    case ANS_V23:
+        ph = legacy_phase(a->connected); sel = V90M_CONN_V23;
+        break;
     case ANS_V32_SIL: case ANS_V32:
         ph = legacy_phase(a->connected); sel = V90M_CONN_V32BIS;
         break;
@@ -226,6 +229,9 @@ void diag_track_orig(diag_track_t *t, const orig_t *o)
         break;
     case ORIG_V21:
         ph = legacy_phase(o->connected); sel = (uint8_t)o->fsk_mod;
+        break;
+    case ORIG_V23:
+        ph = legacy_phase(o->connected); sel = V90M_CONN_V23;
         break;
     case ORIG_V32:
         ph = legacy_phase(o->connected); sel = V90M_CONN_V32BIS;
@@ -296,7 +302,7 @@ int diag_err_answer(const answer_t *a, const diag_track_t *t)
         return C(DG_V8, a->end == ANS_END_NO_COMMON ? V8_ERR_NO_COMMON : V8_ERR_NO_CM);
     case ANS_V22:
         return v22_err(a->end == ANS_END_LOST, a->v22.state == V22S_FAILED);
-    case ANS_V21:
+    case ANS_V21: case ANS_V23:
         return C(DG_V21, a->end == ANS_END_LOST ? V21_ERR_CARRIER : V21_ERR_NO_CARRIER);
     case ANS_V32:
         if (a->u.v32.error) return C(DG_V32, a->u.v32.error);
@@ -346,7 +352,7 @@ int diag_err_orig(const orig_t *o, const diag_track_t *t)
         return C(DG_V8, o->end == ORIG_END_NO_TONE ? V8_ERR_NO_TONE : o->end == ORIG_END_NO_JM ? V8_ERR_NO_JM : V8_ERR_NO_COMMON);
     case ORIG_V22:
         return v22_err(o->end == ORIG_END_LOST, o->e.leg.v22.state == V22S_FAILED);
-    case ORIG_V21:
+    case ORIG_V21: case ORIG_V23:
         return C(DG_V21, o->end == ORIG_END_LOST ? V21_ERR_CARRIER : V21_ERR_NO_CARRIER);
     case ORIG_V32:
         if (o->e.leg.v32.error) return C(DG_V32, o->e.leg.v32.error);

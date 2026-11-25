@@ -1,9 +1,10 @@
 /* The answering modem's legacy scheme (modem/ans_scheme.h): V.22bis / V.22
  * and Bell 212A (ANS_V22), V.21 and Bell 103 (ANS_V21), V.32bis / V.32
- * (ANS_V32, and ANS_V32_SIL after a caller's AA). */
+ * (ANS_V32, and ANS_V32_SIL after a caller's AA), V.23 (ANS_V23). */
 #include "ans_scheme.h"
 #include "v21_bpf.h"
 #include "bell103_bpf.h"
+#include "v23_bpf.h"
 
 #define MS(ms) ((int32_t)(ms) * 8)
 
@@ -29,8 +30,8 @@
  * marks (33 ms) in a row. The band-pass in front passes 980 Hz (-0.1 dB). */
 #define V21_MARK_BLOCKS 20
 #define V21L_980 ((uint32_t)(((uint64_t)V21L_MARK << 32) / 8000))
-#if V21_BPF_N != BELL103_BPF_N
-#error "the two receive band-passes share one loop"
+#if V21_BPF_N != BELL103_BPF_N || V21_BPF_N != V23_BPF_N
+#error "the receive band-passes share one loop"
 #endif
 
 static void bpf_reset(answer_t *a, const int16_t *taps)
@@ -66,6 +67,21 @@ static void start_fsk(answer_t *a, int bell)
 }
 
 void ans_start_v21(answer_t *a) { start_fsk(a, 0); }
+
+/* V.23: answering modem transmits on the forward channel (1300/2100 Hz,
+ * 1200 baud) and receives on the backward channel (390/450 Hz, 75 baud).
+ * The backward band-pass (v23_bpf) keeps the echo of our own forward channel
+ * out of the receiver, as the V.21 band-pass does. */
+void ans_start_v23(answer_t *a)
+{
+    v21mod_init(&a->fmod, V23H_MARK, V23H_SPACE, 8000, 1200, (int16_t)(a->cfg.level * 181 / 128));
+    v21demod_init(&a->fdem, V23L_MARK, V23L_SPACE, 8000, 75);
+    arx_init(&a->uart, 8000, 75);
+    a->cd_thresh = v21demod_energy_of(&a->fdem, V21_CD_AMP);
+    a->fbit = 1; a->cd_run = 0; a->fsk_mod = ANS_MOD_V23;
+    bpf_reset(a, v23_bpf);
+    ans_enter(a, ANS_V23); a->t = 0;
+}
 
 /* V.8 selected V.32 (item 3 covers V.32bis), or a caller without V.8 sent
  * AA: AC goes out now; the 75 ms of silence are behind us either way.
@@ -125,6 +141,36 @@ static int16_t tick_v21(answer_t *a, int16_t rx)
     }
     c = arx_tick(&a->uart, level);
     if (c >= 0 && a->connected) {            /* hand the character on as start-stop bits */
+        a->cfg.putbit(a->cfg.user, 0);
+        for (i = 0; i < 8; i++) a->cfg.putbit(a->cfg.user, (c >> i) & 1);
+        a->cfg.putbit(a->cfg.user, 1);
+    }
+    out = v21mod_tick(&a->fmod, a->fbit, &done);
+    if (done) a->fbit = a->connected ? (a->cfg.getbit(a->cfg.user) & 1) : 1;
+    if (!a->connected && a->t > MS(V21_WAIT_MS)) ans_fail(a, ANS_END_FAILED);
+    return out;
+}
+
+static int16_t tick_v23(answer_t *a, int16_t rx)
+{
+    int level, c, done, i;
+    int16_t out;
+
+    level = v21demod_tick(&a->fdem, v21_bandpass(a, rx));
+    if (a->fdem.energy < a->cd_thresh) {
+        level = 1;
+        if (a->cd_run > 0) a->cd_run = 0;
+        if (a->connected && --a->cd_run < -MS(CD_LOSS_MS)) { ans_fail(a, ANS_END_LOST); return 0; }
+    } else {
+        if (a->cd_run < 0) a->cd_run = 0;
+        if (a->cd_run < MS(V21_CD_ON_MS)) a->cd_run++;
+        else if (!a->connected) {
+            a->connected = 1; a->modulation = ANS_MOD_V23;
+            a->bitrate = 1200; a->rx_bitrate = 75;
+        }
+    }
+    c = arx_tick(&a->uart, level);
+    if (c >= 0 && a->connected) {
         a->cfg.putbit(a->cfg.user, 0);
         for (i = 0; i < 8; i++) a->cfg.putbit(a->cfg.user, (c >> i) & 1);
         a->cfg.putbit(a->cfg.user, 1);
@@ -211,6 +257,7 @@ static int16_t tick(answer_t *a, int16_t rx)
     switch (a->phase) {
     case ANS_V22: return tick_v22(a, rx);
     case ANS_V21: return tick_v21(a, rx);
+    case ANS_V23: return tick_v23(a, rx);
     case ANS_V32_SIL:
         if (a->t >= MS(75)) ans_start_v32(a);
         return 0;

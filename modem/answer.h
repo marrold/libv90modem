@@ -76,6 +76,8 @@ typedef enum {
     ANS_K56RT,           /* K56flex: the client's retrain (its tone B in data mode): 70 ms of
                             silence, then V.34's Phase 2 of a retrain (v34.p2, INFO1a flagged
                             again), then ANS_K56 from the start */
+    ANS_V23,             /* V.23: 1200 bit/s forward channel (1300/2100 Hz) transmit,
+                            75 bit/s backward channel (390/450 Hz) receive */
     ANS_NPHASES          /* the number of phases (not a phase): a new one goes above */
 } ans_phase;
 
@@ -111,6 +113,7 @@ typedef enum {
 #define ANS_MOD_BELL212A 9   /* 1200 bit/s, in ANS_V22: V.22 begun after our 2225 Hz */
 #define ANS_MOD_X2     10    /* x2: PCM downstream, V.34 upstream */
 #define ANS_MOD_K56    11    /* K56flex: PCM downstream, V.34 upstream */
+#define ANS_MOD_V23    12    /* V.23: 1200 bit/s forward (tx), 75 bit/s backward (rx) */
 
 /* why a call ended (answer_t.end, answer_end): set where it fails */
 enum {

@@ -11,7 +11,7 @@
 /* where p34d_trace_bit writes the bits of the V.90 / V.34 receiver */
 const char *trace_bits_path = "live/bits.txt";
 
-static const char *ph[] = { "V8", "V22", "V21", "FAILED", "P2", "P3", "V90", "RETRAIN", "V34", "V32", "V32_SIL", "P3X", "V92", "X2", "V8BIS", "K56", "K56RT" };
+static const char *ph[] = { "V8", "V22", "V21", "FAILED", "P2", "P3", "V90", "RETRAIN", "V34", "V32", "V32_SIL", "P3X", "V92", "X2", "V8BIS", "K56", "K56RT", "V23" };
 /* one name for each ans_phase (modem/answer.h): a new phase without its name
  * fails to compile here instead of reading past the end of ph[] */
 typedef char ph_names_check[sizeof ph / sizeof *ph == ANS_NPHASES ? 1 : -1];

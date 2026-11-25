@@ -14,12 +14,26 @@ N = 81
 HIGH = "--high" in sys.argv
 BELLH = "bell103h" in sys.argv
 BELL = "bell103" in sys.argv and not BELLH
+V23H = "v23h" in sys.argv
+V23 = "v23" in sys.argv and not V23H
 if BELLH:
     LO, HI, CENTRE = 1805.0, 2445.0, 2125.0
     NAME, WHAT, SHOW = "bell103h_bpf", "Bell 103 answer-channel", (1070, 1270, 1650, 2025, 2100, 2225, 2250)
 elif BELL:
     LO, HI, CENTRE = 850.0, 1490.0, 1170.0                 # -6 dB points
     NAME, WHAT, SHOW = "bell103_bpf", "Bell 103 originate-channel", (1070, 1270, 2025, 2100, 2225)
+elif V23H:
+    # calling modem's forward-channel receiver (1200 baud, 1300/2100 Hz): a
+    # wide pass that keeps the whole 1200-baud signal yet rejects the echo of
+    # our own 390/450 Hz backward channel.
+    LO, HI, CENTRE = 800.0, 3400.0, 1700.0
+    NAME, WHAT, SHOW = "v23h_bpf", "V.23 forward-channel", (300, 390, 450, 600, 880, 1300, 1700, 2100, 2700, 3000)
+elif V23:
+    # answering modem's backward-channel receiver (75 baud, 390/450 Hz): a
+    # narrow low pass that rejects the echo of our own 1300/2100 Hz forward
+    # channel.
+    LO, HI, CENTRE = 300.0, 560.0, 420.0
+    NAME, WHAT, SHOW = "v23_bpf", "V.23 backward-channel", (200, 300, 390, 450, 560, 1300, 2100)
 elif HIGH:
     LO, HI, CENTRE = 1430.0, 2070.0, 1750.0
     NAME, WHAT, SHOW = "v21h_bpf", "V.21 high-channel", (980, 1180, 1650, 1850, 2100)
@@ -60,7 +74,7 @@ g0 = gain(h, CENTRE)
 q = [int(round(c / g0 * 32768)) for c in h]
 hq = [c / 32768.0 for c in q]
 def db(f): return 20 * math.log10(max(gain(hq, f), 1e-9))
-report = {f: db(f) for f in (300, 600, 880, 980, 1070, 1080, 1180, 1270, 1280, 1500, 1650, 1850, 2025, 2100, 2225, 2250, 2550)}
+report = {f: db(f) for f in (200, 300, 390, 450, 560, 600, 880, 980, 1070, 1080, 1180, 1270, 1280, 1300, 1500, 1650, 1700, 1850, 2025, 2100, 2225, 2250, 2550, 2700, 3000, 3400)}
 if "--check" in sys.argv:
     for f, v in report.items(): print("%5d Hz %7.2f dB" % (f, v))
     sys.exit(0)

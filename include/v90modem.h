@@ -55,7 +55,7 @@ extern "C" {
 
 #define V90M_VERSION_MAJOR 0
 #define V90M_VERSION_MINOR 6
-#define V90M_VERSION_PATCH 1
+#define V90M_VERSION_PATCH 2
 /* "0.6.1": the version of the library linked in (may differ from the header) */
 const char *v90m_version(void);
 
@@ -176,6 +176,12 @@ typedef enum {
  * (32000 to 56000 in steps of 2000, the figure a Rockwell modem prints)
  * and rx_bps the client's V.34 upstream. */
 #define V90M_MOD_K56      0x0200u
+/* V.23: 1200/75 bps asymmetric FSK (ITU-T V.23). The answering modem
+ * transmits at 1200 bit/s on the forward channel (1300/2100 Hz mark/space)
+ * and receives at 75 bit/s on the backward channel (390/450 Hz mark/space);
+ * the calling modem is the reverse. tx_bps and rx_bps reflect these rates.
+ * Start-stop framed as V.21; no error control. Either role. */
+#define V90M_MOD_V23      0x0400u
 
 /* the modulation of a connection (v90m_state.modulation) */
 typedef enum {
@@ -184,7 +190,9 @@ typedef enum {
     V90M_CONN_BELL103,          /* appended: the values above stay as they were */
     V90M_CONN_BELL212A,         /* V.22 at 1200 bit/s begun on the 2225 Hz Bell answer tone */
     V90M_CONN_X2,               /* (appended) x2: PCM downstream, V.34 upstream */
-    V90M_CONN_K56FLEX           /* (appended) K56flex: PCM downstream, V.34 upstream */
+    V90M_CONN_K56FLEX,          /* (appended) K56flex: PCM downstream, V.34 upstream */
+    V90M_CONN_V23               /* (appended) V.23: 1200 bit/s tx (answering) or rx (calling),
+                                   75 bit/s the other way */
 } v90m_conn;
 
 typedef int  (*v90m_getbit_fn)(void *user);             /* next bit to send, 0 or 1 */
@@ -253,8 +261,8 @@ typedef struct {
 /* alignment for that memory:  union { v90m_align a; uint8_t b[V90M_MEM_SIZE]; } mem; */
 typedef union { long double ld; double d; int64_t i; void *p; void (*f)(void); } v90m_align;
 
-/* Answering, the default modulations, tx_level 3000, echo_delay -1, the
- * rest 0 or NULL. */
+/* Answering, the default modulations (all but V.92, Bell, x2 and K56flex),
+ * tx_level 3000, echo_delay -1, the rest 0 or NULL. */
 void     v90m_cfg_default(v90m_cfg *cfg);
 /* One modem. The only allocation the library makes for it. NULL on failure,
  * with *err (err may be NULL): V90M_EINVAL (cfg NULL or a value out of

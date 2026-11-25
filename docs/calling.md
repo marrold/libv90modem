@@ -25,7 +25,8 @@ listens for the answer tone and tells ANSam (V.8) from ANS (V.25):
   7.1).
 - **ANS** (a pre-V.8 answerer): no CM. With V.32bis on offer, V.32bis
   Annex A (the calling automode modem); otherwise the V.22bis answerer's
-  unscrambled ones lead to V.22bis and a steady V.21 channel 2 mark to V.21.
+  unscrambled ones lead to V.22bis and a steady channel 2 mark to V.21, or,
+  with V.21 not offered, a steady mark on V.23's forward channel to V.23.
 - **Bell**: see below.
 
 It ends the call with `V90M_END_NO_ANSWER_TONE` when no answer tone comes
@@ -49,6 +50,7 @@ when answering. At least one is required (0 gives `V90M_EINVAL`).
 | flag | the calling side | retrain | rate renegotiation | cleardown |
 |---|---|---|---|---|
 | `V90M_MOD_V21` | 300 bit/s, after V.8 or a pre-V.8 answer tone | | | |
+| `V90M_MOD_V23` | 75 bit/s out / 1200 bit/s in, after V.8 or a pre-V.8 answer tone | | | |
 | `V90M_MOD_V22` | V.22 1200, V.22bis 2400 bit/s | at 2400 bit/s | | |
 | `V90M_MOD_V32BIS` | V.32bis / V.32, 4800 to 14400 bit/s; also Annex A after ANS | either end | the one the answerer asks for | |
 | `V90M_MOD_V34` | Phase 2 with its own INFO1c decision, Phases 3 and 4, data | either end | yes | either way |

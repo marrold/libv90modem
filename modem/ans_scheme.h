@@ -69,6 +69,7 @@ int  ans_mod_echo_delay(const answer_t *a);
  * marker) */
 void ans_start_v22(answer_t *a);        /* modem/ans_legacy.c */
 void ans_start_v21(answer_t *a);
+void ans_start_v23(answer_t *a);
 void ans_start_v32(answer_t *a);
 void ans_start_p2(answer_t *a);         /* modem/ans_v90.c */
 void ans_v90_retrain(answer_t *a);      /* a V.90 retrain is due: ANS_RETRAIN, or the end */

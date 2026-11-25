@@ -22,6 +22,7 @@ V.92 and Bell:
 | `V90M_MOD_V32BIS` | V.32bis and V.32 | on |
 | `V90M_MOD_V22` | V.22bis and V.22 | on |
 | `V90M_MOD_V21` | V.21 | on |
+| `V90M_MOD_V23` | V.23, 1200 bit/s forward channel / 75 bit/s backward channel | on |
 | `V90M_MOD_BELL103` | Bell 103, for a caller without V.8 | off |
 | `V90M_MOD_BELL212A` | Bell 212A, with `V90M_MOD_V22`, for a caller without V.8 | off |
 | `V90M_MOD_X2` | x2, U.S. Robotics' 56k of 1997, as its server; only with `V90M_MOD_V34` (without: `V90M_ENOTSUP`) | off |
@@ -45,9 +46,10 @@ first: below, "K56flex".) The menu decides:
   detection phase (V.92 9.3.1): `v90m_state.odp_bypass` is 1, and the V.42
   endpoint should then start without detection
   ([error-control.md](error-control.md)).
-- **V.34**, **V.32bis**, **V.22bis / V.22** or **V.21**, as V.8 selects.
+- **V.34**, **V.32bis**, **V.22bis / V.22**, **V.21** or **V.23**, as V.8
+  selects.
 - **No V.8 at all**: the V.22bis answer sequence after ANSam, V.32bis AA,
-  V.21 after 8 s.
+  V.21 after 8 s, or V.23 if neither V.22 nor V.21 is offered.
 - **Bell 103** (`V90M_MOD_BELL103`): a caller without V.8 that sends 1270 Hz
   (the Bell 103 mark) gets 300 bit/s FSK on 2225 / 2025 Hz, start-stop and
   no error control, as V.21.

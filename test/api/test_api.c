@@ -28,8 +28,8 @@ static void test_cfg(void)
     static uint8_t buf[1 << 20] __attribute__((aligned(16)));
 
     /* the version: the library's string, the header's numbers, and the two agree */
-    CHECK(strcmp(v90m_version(), "0.6.1") == 0);
-    CHECK_EQ_I(V90M_VERSION_MAJOR * 10000 + V90M_VERSION_MINOR * 100 + V90M_VERSION_PATCH, 601);
+    CHECK(strcmp(v90m_version(), "0.6.2") == 0);
+    CHECK_EQ_I(V90M_VERSION_MAJOR * 10000 + V90M_VERSION_MINOR * 100 + V90M_VERSION_PATCH, 602);
     {
         char hv[32];
         snprintf(hv, sizeof hv, "%d.%d.%d", V90M_VERSION_MAJOR, V90M_VERSION_MINOR, V90M_VERSION_PATCH);
@@ -150,7 +150,7 @@ static void test_cfg(void)
         CHECK_EQ_I(st.connected, 0); CHECK_EQ_I(st.end, V90M_END_NONE);
     }
     v90m_destroy(m);
-    c.role = V90M_ROLE_ANSWER; c.modulations = 0x0400;
+    c.role = V90M_ROLE_ANSWER; c.modulations = 0x0800;
     m = v90m_create(&c, &err);
     CHECK(m == NULL); CHECK_EQ_I(err, V90M_EINVAL);
     c.role = V90M_ROLE_ANSWER; c.modulations = 0x8000;
@@ -184,19 +184,20 @@ static void test_cfg(void)
     {
         /* pinned: what v90d sizes its buffers by. The answerer's state sets
          * it (K56flex's lives in its union); the caller's engines share
-         * memory since 0.6.0, at least 12000 octets less than 0.5.0's.
-         * Pinned on x86-64 and 32-bit ARM only; elsewhere both checks hold
-         * by construction (no pin), so that every target prints the same
-         * count of checks */
+         * memory since 0.6.0, at least 11000 octets less than 0.5.0's (12000
+         * from that alone; V.23's wider receive window, V21_MAXWIN, gives
+         * back 1344 of it). Pinned on x86-64 and 32-bit ARM only; elsewhere
+         * both checks hold by construction (no pin), so that every target
+         * prints the same count of checks */
 #if defined(__x86_64__)
-        size_t expect = 106320, was = 118824;
+        size_t expect = 107664, was = 118824;
 #elif defined(__arm__)
-        size_t expect = 106016, was = 118512;
+        size_t expect = 107360, was = 118512;
 #else
-        size_t expect = v90m_mem_size(), was = expect + 12000;
+        size_t expect = v90m_mem_size(), was = expect + 11000;
 #endif
         CHECK(v90m_mem_size() == expect);
-        CHECK(v90m_mem_size() <= was - 12000);
+        CHECK(v90m_mem_size() <= was - 11000);
     }
     CHECK(v90m_ec_mem_size() <= V90M_EC_MEM_SIZE);
     CHECK(v90m_async_mem_size() <= V90M_ASYNC_MEM_SIZE);
@@ -234,7 +235,7 @@ static void test_errors(void)
         bad = c; bad.max_down_bps = -1;    CHECK(v90m_create(&bad, &err) == NULL); CHECK_EQ_I(err, V90M_EINVAL);
         bad = c; bad.max_up_bps = -1;      CHECK(v90m_create(&bad, &err) == NULL); CHECK_EQ_I(err, V90M_EINVAL);
         bad = c; bad.echo_delay = -2;      CHECK(v90m_create(&bad, &err) == NULL); CHECK_EQ_I(err, V90M_EINVAL);
-        bad = c; bad.modulations |= 0x400; CHECK(v90m_create(&bad, &err) == NULL); CHECK_EQ_I(err, V90M_EINVAL);   /* 0x100 is x2, 0x200 K56flex now */
+        bad = c; bad.modulations |= 0x800; CHECK(v90m_create(&bad, &err) == NULL); CHECK_EQ_I(err, V90M_EINVAL);   /* 0x100 x2, 0x200 K56flex, 0x400 V.23; 0x800 unused */
 
         m = v90m_init(mem.b, sizeof mem.b, &c, &err);
         CHECK(m != NULL); CHECK_EQ_I(err, V90M_OK);

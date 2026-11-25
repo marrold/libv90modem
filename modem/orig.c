@@ -4,6 +4,7 @@
 #include "clock.h"
 #include "v21h_bpf.h"
 #include "bell103h_bpf.h"
+#include "v23h_bpf.h"
 #include "probe.h"
 #include "sintab.h"
 
@@ -32,8 +33,8 @@
 #define BELL103_LATE_MS 6000   /* 212A offered too: the same carrier this long without 2225 Hz */
 #define B212_WAIT_MS    3000   /* Bell 212A started: no 1200 bit/s answer by then -> Bell 103 */
 #define BELL_2100 ((uint32_t)(((uint64_t)2100 << 32) / FS))
-#if V21H_BPF_N != BELL103H_BPF_N
-#error "the two FSK receive band-passes share one loop"
+#if V21H_BPF_N != BELL103H_BPF_N || V21H_BPF_N != V23H_BPF_N
+#error "the FSK receive band-passes share one loop"
 #endif
 
 static void fail(orig_t *o, int why) { o->phase = ORIG_FAILED; o->connected = 0; o->end = why; o->t = 0; }
@@ -188,6 +189,28 @@ static void start_v21(orig_t *o)
     o->phase = ORIG_V21; o->t = 0;
 }
 
+/* V.23 forward-channel receiver (1300/2100 Hz, 1200 baud): what the answerer
+ * sends. The forward band-pass (v23h_bpf) keeps the echo of our own backward
+ * channel out of the receiver, as the V.21 band-pass does. */
+static void v23_rx_init(orig_t *o)
+{
+    v21demod_init(&o->fdem, V23H_MARK, V23H_SPACE, FS, 1200);
+    arx_init(&o->uart, FS, 1200);
+    o->cd_thresh = v21demod_energy_of(&o->fdem, V21_CD_AMP);
+    for (o->bpos = 0; o->bpos < 128; o->bpos++) o->bpf[o->bpos] = 0;
+    o->bpos = 0; o->bpf_taps = v23h_bpf;
+}
+
+/* V.23: calling modem transmits on the backward channel (390/450 Hz, 75 baud)
+ * and receives on the forward channel. */
+static void start_v23(orig_t *o)
+{
+    v21mod_init(&o->fmod, V23L_MARK, V23L_SPACE, FS, 75, (int16_t)(o->cfg.level * 181 / 128));
+    if (o->phase != ORIG_LEGACY) v23_rx_init(o);     /* in ORIG_LEGACY it has been listening already */
+    o->fbit = 1; o->cd_run = 0;
+    o->phase = ORIG_V23; o->t = 0;
+}
+
 /* Bell 103 (orig.h): our mark, 1270 Hz, from now on */
 static void start_b103(orig_t *o)
 {
@@ -304,6 +327,34 @@ static int16_t tick_v21(orig_t *o, int16_t rx)
     return out;
 }
 
+static int16_t tick_v23(orig_t *o, int16_t rx)
+{
+    int carrier, level = v21_rx(o, rx, &carrier), c, done, i;
+    int16_t out;
+
+    if (!carrier) {
+        if (o->cd_run > 0) o->cd_run = 0;
+        if (o->connected && --o->cd_run < -MS(CD_LOSS_MS)) { fail(o, ORIG_END_LOST); return 0; }
+    } else {
+        if (o->cd_run < 0) o->cd_run = 0;
+        if (o->cd_run < MS(V21_CD_ON_MS)) o->cd_run++;
+        else if (!o->connected) {
+            o->connected = 1; o->modulation = ORIG_MOD_V23;
+            o->bitrate = 75; o->rx_bitrate = 1200;
+        }
+    }
+    c = arx_tick(&o->uart, level);
+    if (c >= 0 && o->connected) {
+        o->cfg.putbit(o->cfg.user, 0);
+        for (i = 0; i < 8; i++) o->cfg.putbit(o->cfg.user, (c >> i) & 1);
+        o->cfg.putbit(o->cfg.user, 1);
+    }
+    out = v21mod_tick(&o->fmod, o->fbit, &done);
+    if (done) o->fbit = o->connected ? (o->cfg.getbit(o->cfg.user) & 1) : 1;
+    if (!o->connected && o->t > MS(V21_WAIT_MS)) fail(o, ORIG_END_NO_CARRIER);
+    return out;
+}
+
 int16_t orig_tick(orig_t *o, int16_t rx)
 {
     int16_t tx = 0;
@@ -324,9 +375,13 @@ int16_t orig_tick(orig_t *o, int16_t rx)
         switch (o->v8.result) {
         case V8O_RES_ANS:
             if (!v8_offer(o)) { start_bell_wait(o); break; }
-            /* a pre-V.8 answerer: listen for which modulation it starts */
+            /* a pre-V.8 answerer: listen for which modulation it starts. The
+             * channel-2 receiver detects a steady mark; tune it to V.23's
+             * forward channel when V.23, not V.21, is on offer (V.21 first,
+             * then V.23, per the fallback order). */
             if (o->cfg.modes & V8_MOD_V22) v22m_init(&o->e.leg.v22, V22_CALLER, 1, o->cfg.level, o->cfg.getbit, o->cfg.putbit, o->cfg.user);
-            v21_rx_init(o);
+            if (!(o->cfg.modes & V8_MOD_V21) && (o->cfg.modes & V8_MOD_V23)) v23_rx_init(o);
+            else v21_rx_init(o);
             o->mark_run = 0;
             if (o->cfg.modes & V8_MOD_V32) {
                 /* Annex A: the V.32bis caller listens for AC from now on;
@@ -347,6 +402,7 @@ int16_t orig_tick(orig_t *o, int16_t rx)
                 o->phase = ORIG_V32; o->t = 0;
             }
             else if (o->v8.selected == 4 && (o->cfg.modes & V8_MOD_V22)) start_v22(o);
+            else if (o->v8.selected == 10 && (o->cfg.modes & V8_MOD_V23)) start_v23(o);
             else if (o->v8.selected == 12 && (o->cfg.modes & V8_MOD_V21)) start_v21(o);
             else fail(o, ORIG_END_NO_COMMON);      /* a modulation not built yet */
             break;
@@ -402,6 +458,7 @@ int16_t orig_tick(orig_t *o, int16_t rx)
         }
         if (carrier && level == 1 && !(v32 && o->aa)) o->mark_run++; else o->mark_run = 0;
         if ((o->cfg.modes & V8_MOD_V21) && o->mark_run >= MS(V21_MARK_MS)) { start_v21(o); break; }
+        if (!(o->cfg.modes & V8_MOD_V21) && (o->cfg.modes & V8_MOD_V23) && o->mark_run >= MS(V21_MARK_MS)) { start_v23(o); break; }
         if (o->t > MS(LEGACY_MS)) fail(o, ORIG_END_NO_CARRIER);
         break;
     }
@@ -431,6 +488,10 @@ int16_t orig_tick(orig_t *o, int16_t rx)
 
     case ORIG_V21:
         tx = tick_v21(o, rx);
+        break;
+
+    case ORIG_V23:
+        tx = tick_v23(o, rx);
         break;
 
     case ORIG_V32:

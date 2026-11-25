@@ -19,7 +19,7 @@
 enum {
     DG_NONE,
     DG_V8,      /* V.8, either role (below) */
-    DG_V21,     /* V.21 and Bell 103, either role (below) */
+    DG_V21,     /* V.21, Bell 103 and V.23, either role (below) */
     DG_V22,     /* V.22bis, V.22 and Bell 212A, either role (below) */
     DG_V32,     /* V32_ERR_* (v32/v32.h), either role */
     DG_P2D,     /* P2D_ERR_*: answering V.90 / V.92 Phase 2 (modem/p2d.h) */
@@ -70,7 +70,7 @@ enum {
  * v90m_phase or v90m_conn needs its name in api/v90modem_diag.c and this
  * changed (tools/check-diag-names.sh checks that it is the enum's last) */
 #define DG_LAST_PHASE V90M_PHASE_DATA
-#define DG_LAST_CONN  V90M_CONN_K56FLEX
+#define DG_LAST_CONN  V90M_CONN_V23
 
 /* the number of codes in family f (1 .. that); 0 for none */
 #define DG_COUNT_V8   V8_ERR_NO_CM

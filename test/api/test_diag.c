@@ -35,7 +35,7 @@ static void test_names(void)
     static const char *seen[DG_NFAM * 100];
     static const char *const ph[] = { "none", "tone", "v8", "phase2", "phase3", "phase4", "train", "data" };
     static const char *const cn[] = { "none", "V.21", "V.22", "V.22bis", "V.90", "V.34", "V.32bis", "V.92",
-                                      "Bell 103", "Bell 212A", "x2", "K56flex" };
+                                      "Bell 103", "Bell 212A", "x2", "K56flex", "V.23" };
     int f, k, j, total = 0;
     CHECK(strcmp(v90m_err_name(0), "none") == 0);
     CHECK(strcmp(v90m_err_name(-1), "?") == 0);
@@ -66,7 +66,7 @@ static void test_names(void)
     CHECK(strcmp(v90m_phase_name((v90m_phase)8), "?") == 0);
     CHECK(strcmp(v90m_phase_name((v90m_phase)-1), "?") == 0);
     for (k = 0; k < (int)(sizeof cn / sizeof cn[0]); k++) CHECK(strcmp(v90m_conn_name((v90m_conn)k), cn[k]) == 0);
-    CHECK(strcmp(v90m_conn_name((v90m_conn)12), "?") == 0);
+    CHECK(strcmp(v90m_conn_name((v90m_conn)13), "?") == 0);
     CHECK(strcmp(v90m_conn_name((v90m_conn)-1), "?") == 0);
 }
 

@@ -30,7 +30,7 @@ static const ans_scheme_t ans_ended = { tick_ended, NULL, NULL, NULL, NULL, NULL
 /* the phase table: the scheme of each phase */
 static const ans_scheme_t *const phase_scheme[] = {
     [ANS_V8] = &ans_v8, [ANS_V8BIS] = &ans_v8bis,
-    [ANS_V22] = &ans_legacy, [ANS_V21] = &ans_legacy, [ANS_V32_SIL] = &ans_legacy, [ANS_V32] = &ans_legacy,
+    [ANS_V22] = &ans_legacy, [ANS_V21] = &ans_legacy, [ANS_V23] = &ans_legacy, [ANS_V32_SIL] = &ans_legacy, [ANS_V32] = &ans_legacy,
     [ANS_P2] = &ans_p2, [ANS_RETRAIN] = &ans_p2,
     [ANS_P3] = &ans_v90, [ANS_V90] = &ans_v90,
     [ANS_P3X] = &ans_v92, [ANS_V92] = &ans_v92,
@@ -66,7 +66,7 @@ static const ans_scheme_t *mod_scheme(int mod)
 {
     switch (mod) {
     case ANS_MOD_V21: case ANS_MOD_V22: case ANS_MOD_V22BIS: case ANS_MOD_V32BIS:
-    case ANS_MOD_BELL103: case ANS_MOD_BELL212A: return &ans_legacy;
+    case ANS_MOD_BELL103: case ANS_MOD_BELL212A: case ANS_MOD_V23: return &ans_legacy;
     case ANS_MOD_V90: return &ans_v90;
     case ANS_MOD_V92: return &ans_v92;
     case ANS_MOD_V34: return &ans_v34;
@@ -191,6 +191,7 @@ static int16_t tick_v8(answer_t *a, int16_t rx)
     if (a->v8.result == V8A_RES_NO_CM) {           /* pre-V.8 caller */
         if (a->cfg.modes & V8_MOD_V22) ans_start_v22(a);
         else if (a->cfg.modes & V8_MOD_V21) ans_start_v21(a);
+        else if (a->cfg.modes & V8_MOD_V23) ans_start_v23(a);  /* a bare V.23 terminal */
         else ans_fail(a, ANS_END_FAILED);
         return tx;
     }
@@ -199,6 +200,7 @@ static int16_t tick_v8(answer_t *a, int16_t rx)
     else if (a->v8.selected == 1 && (a->cfg.modes & V8_MOD_V34)) ans_start_v34(a);
     else if (a->v8.selected == 3 && (a->cfg.modes & V8_MOD_V32)) ans_start_v32(a);
     else if (a->v8.selected == 4) ans_start_v22(a);
+    else if (a->v8.selected == 10 && (a->cfg.modes & V8_MOD_V23)) ans_start_v23(a);
     else if (a->v8.selected == 12) ans_start_v21(a);
     else ans_fail(a, ANS_END_NO_COMMON);               /* nothing in common */
     return tx;
