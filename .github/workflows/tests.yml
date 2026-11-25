@@ -1,0 +1,354 @@
+name: tests
+
+# Start a run, two ways, both restricted to people with write access:
+#
+#   1. Manually:  Actions -> tests -> Run workflow, choose the branch in
+#      test_ref and a scope (default: all).  (with gh:
+#        gh workflow run tests.yml -f test_ref=my-feature -f scope=all )
+#
+#   2. By commenting on a pull request IN THIS REPO:
+#        /test              run everything against the PR's head branch
+#        /test host         only `make check`              (x86)
+#        /test arm          only `make check-arm`           (Pi, native)
+#      Only a comment from an OWNER/MEMBER/COLLABORATOR triggers it. It reports
+#      back with a comment and a "tests" commit status you can require in
+#      branch protection. (Works on PRs in THIS fork, not the upstream PR.)
+#
+# The one rule: only run it against code you trust (your own branches/PRs) --
+# the jobs compile and run the checked-out ref.
+#
+# This is a supplement to .github/workflows/ci.yml on `main` (which already
+# runs `make check-arm` under qemu on every push/PR, with TEST_SHORT, and
+# stays within GitHub's job limit only because of that -- see its comment).
+# The "arm" job here runs the same `make check-arm` natively on a real Pi 4,
+# which is fast enough that you can afford to drop TEST_SHORT: add
+# `EXTRA_CPPFLAGS=-DTEST_FULL` to the `make check-arm` line below for full
+# coverage, once you've timed a run or two on the real hardware.
+#
+# Secrets required (Settings -> Secrets and variables -> Actions):
+#   MB_KEY_ID   Mythic Beasts API key id      (control panel -> API users)
+#   MB_SECRET   Mythic Beasts API key secret  (shown once at creation)
+#   MB_SSH_KEY  private half of a dedicated CI keypair (ed25519, no passphrase)
+# Optional repo variable:
+#   MB_OS_IMAGE override the OS image; see the "arm" job for how to find a
+#               valid id. Unset: the API's own default image is used.
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_ref:
+        description: Branch or SHA to test
+        required: true
+      scope:
+        description: What to run
+        type: choice
+        options: [all, host, arm]
+        default: all
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write   # post the result comment
+  statuses: write        # post the "tests" commit status
+  actions: write         # a failing job cancels the run, so its sibling stops too
+
+env:
+  API: https://api.mythic-beasts.com/beta
+
+jobs:
+  # ---- decide whether to run, what ref, and which suites --------------------
+  resolve:
+    runs-on: ubuntu-latest
+    # dispatch by a write-access user, OR a "/test" comment on a PR here from
+    # someone with write access. author_association is the commenter's, so only
+    # /test PRs whose code you trust.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       startsWith(github.event.comment.body, '/test') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    outputs:
+      ref:   ${{ steps.r.outputs.ref }}
+      sha:   ${{ steps.r.outputs.sha }}
+      pr:    ${{ steps.r.outputs.pr }}
+      scope: ${{ steps.r.outputs.scope }}
+    steps:
+      - name: Resolve ref + scope
+        id: r
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          IN_REF: ${{ inputs.test_ref }}
+          IN_SCOPE: ${{ inputs.scope }}
+          PR_NUM: ${{ github.event.issue.number }}
+          BODY: ${{ github.event.comment.body }}   # via env, never inline (injection)
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = workflow_dispatch ]; then
+            ref="$IN_REF"; sha=""; pr=""; sel="${IN_SCOPE:-all}"
+          else
+            pr="$PR_NUM"
+            info=$(gh pr view "$pr" -R "$REPO" --json headRefName,headRefOid)
+            ref=$(printf '%s' "$info" | jq -r .headRefName)
+            sha=$(printf '%s' "$info" | jq -r .headRefOid)
+            # second whitespace-separated token of the comment ("" if none)
+            set -- $BODY
+            sel="${2:-}"
+          fi
+          case "$sel" in
+            ""|all)              scope=all  ;;
+            host|x86|check)      scope=host ;;
+            arm|arm-check|check-arm) scope=arm ;;
+            *)
+              if [ -n "${pr:-}" ]; then
+                gh pr comment "$pr" -R "$REPO" --body \
+                  "❓ unknown selector \`$sel\`. Use: \`/test\` (all), \`/test host\`, or \`/test arm\`."
+              fi
+              echo "unknown selector: $sel" >&2; exit 1 ;;
+          esac
+          printf 'ref=%s\nsha=%s\npr=%s\nscope=%s\n' "$ref" "$sha" "$pr" "$scope" >> "$GITHUB_OUTPUT"
+      - name: Acknowledge on the PR
+        if: steps.r.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment "${{ steps.r.outputs.pr }}" -R "${{ github.repository }}" \
+            --body "⏳ tests started (scope: \`${{ steps.r.outputs.scope }}\`) on \`${{ steps.r.outputs.ref }}\` — [watch the run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
+
+  # ---- host / x86 tests ------------------------------------------------------
+  host:
+    needs: resolve
+    if: needs.resolve.outputs.scope == 'all' || needs.resolve.outputs.scope == 'host'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
+      - name: make check
+        run: make check
+      - name: Cancel the run if this job failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel ${{ github.run_id }} -R ${{ github.repository }}
+
+  # ---- ARM-native tests on a throwaway Mythic Beasts Pi 4 --------------------
+  # Runs in the cloud and *drives* the Pi over SSH; the Pi is never a GitHub
+  # runner. Provisioned at the start and DELETED at the end (teardown runs even
+  # on failure/cancel), so nothing is left billing. Runs `make check-arm`,
+  # which is much faster native than under qemu (`ci.yml`'s "arm" job, on
+  # every push/PR): no 300-minute job-limit squeeze, and room to drop
+  # TEST_SHORT if you want (see the top of this file).
+  arm:
+    needs: resolve
+    if: needs.resolve.outputs.scope == 'all' || needs.resolve.outputs.scope == 'arm'
+    runs-on: ubuntu-latest
+    env:
+      MB_KEY_ID: ${{ secrets.MB_KEY_ID }}
+      MB_SECRET: ${{ secrets.MB_SECRET }}
+      # No hardcoded default: an unconfirmed image id just 400s the provision
+      # request. Set the MB_OS_IMAGE repo variable to an id from
+      # `GET /pi/images/4` (Bearer $MB token) once you've confirmed one; until
+      # then this is empty and the API picks its own default image.
+      OS_IMAGE: ${{ vars.MB_OS_IMAGE || '' }}
+    steps:
+      - name: Get API token
+        # The token is tied to the IP that fetched it, so we obtain and use it
+        # entirely within this one job (one runner = one egress IP).
+        run: |
+          set -euo pipefail
+          tok=$(curl -fsS --user "$MB_KEY_ID:$MB_SECRET" \
+                 -d grant_type=client_credentials \
+                 https://auth.mythic-beasts.com/login | jq -r .access_token)
+          echo "::add-mask::$tok"
+          echo "TOK=$tok" >> "$GITHUB_ENV"
+
+      - name: Reap any stale CI Pis
+        # Insurance against an earlier run that was hard-killed before teardown.
+        # (A scheduled reaper is disabled by GitHub on forks; doing it here is
+        # fork-safe. 2 hour grace.)
+        run: |
+          set -euo pipefail
+          now=$(date +%s)
+          curl -fsS -H "Authorization: Bearer $TOK" "$API/pi/servers" \
+            | jq -r '.servers | keys[]' | while read -r n; do
+              case "$n" in
+                ci-*)
+                  epoch=$(printf '%s' "$n" | sed -n 's/^ci-\([0-9]\{1,\}\)-.*/\1/p')
+                  [ -n "$epoch" ] || continue
+                  if [ $((now - epoch)) -gt 7200 ]; then
+                    echo "reaping stale $n"
+                    curl -fsS -X DELETE -H "Authorization: Bearer $TOK" \
+                      "$API/pi/servers/$n" || true
+                  fi ;;
+              esac
+            done
+
+      - name: Install CI SSH key
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${{ secrets.MB_SSH_KEY }}" > ~/.ssh/ci
+          chmod 600 ~/.ssh/ci
+          ssh-keygen -y -f ~/.ssh/ci > ~/.ssh/ci.pub
+
+      - name: Provision Pi 4
+        run: |
+          set -euo pipefail
+          # Mythic Beasts service identifiers are capped at 20 chars; the
+          # epoch (for the reaper's staleness check) plus the run id's last
+          # 5 digits (for uniqueness) is enough and fits.
+          name="ci-$(date +%s)-${GITHUB_RUN_ID: -5}"
+          echo "NAME=$name" >> "$GITHUB_ENV"
+          body=$(jq -n --arg k "$(cat ~/.ssh/ci.pub)" --arg img "$OS_IMAGE" \
+                 '{model:4, disk:10, wait_for_dns:true, ssh_key:$k} + (if $img != "" then {os_image:$img} else {} end)')
+          echo "Provisioning $name${OS_IMAGE:+ with $OS_IMAGE}"
+          hdrs=$(mktemp); resp=$(mktemp)
+          code=$(curl -sS -D "$hdrs" -o "$resp" -w '%{http_code}' -X POST \
+                 -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
+                 -d "$body" "$API/pi/servers/$name")
+          if [ "$code" != 202 ]; then
+            echo "provision request failed (HTTP $code):"; cat "$resp"
+            exit 1
+          fi
+          loc=$(tr -d '\r' < "$hdrs" | awk 'tolower($1)=="location:"{print $2}')
+          [ -n "$loc" ] || { echo "no Location header from provision"; exit 1; }
+          echo "queued: $loc"
+          code=000
+          for i in $(seq 1 60); do        # ~10 min; create is typically 2-3 min
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+                    -H "Authorization: Bearer $TOK" "$loc")
+            echo "  provision poll: $code"
+            [ "$code" = "202" ] || break
+            sleep 10
+          done
+          case "$code" in
+            200|303) : ;;
+            *) echo "provision failed (HTTP $code)"; exit 1 ;;
+          esac
+
+      - name: Wait for boot
+        run: |
+          set -euo pipefail
+          port=
+          status=$(mktemp)
+          for i in $(seq 1 60); do
+            # Not -f: a mid-provision status read can transiently 4xx/5xx,
+            # which isn't fatal here -- just retry it like any other
+            # not-ready-yet poll instead of killing the step.
+            code=$(curl -sS -o "$status" -w '%{http_code}' \
+                   -H "Authorization: Bearer $TOK" "$API/pi/servers/$NAME")
+            if [ "$code" != 200 ]; then
+              echo "  status poll: HTTP $code"; cat "$status" || true
+              sleep 10; continue
+            fi
+            power=$(jq -r '.power' "$status")
+            booting=$(jq -r '.is_booting' "$status")
+            p=$(jq -r '.ssh_port' "$status")
+            echo "  power=$power booting=$booting ssh_port=$p"
+            if [ "$power" = "true" ] && [ "$booting" = "false" ] && [ "$p" != "null" ]; then
+              port=$p; break
+            fi
+            sleep 10
+          done
+          [ -n "$port" ] || { echo "Pi did not become ready"; exit 1; }
+          echo "PORT=$port" >> "$GITHUB_ENV"
+
+      - name: Run ARM tests on the Pi
+        env:
+          REF: ${{ needs.resolve.outputs.ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          host="ssh.$NAME.hostedpi.com"
+          # wait for sshd to answer (DNS + boot can lag the "ready" flag)
+          for i in $(seq 1 30); do
+            if ssh -i ~/.ssh/ci -p "$PORT" -o StrictHostKeyChecking=accept-new \
+                   -o ConnectTimeout=10 "root@$host" true 2>/dev/null; then
+              break
+            fi
+            echo "  waiting for sshd ($i)"; sleep 10
+          done
+          # REF/REPO/NOW are expanded locally (our own inputs); the rest runs
+          # on the Pi. QEMU= (empty) and ARM_CC=gcc make every binary native.
+          now=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          ssh -i ~/.ssh/ci -p "$PORT" -o StrictHostKeyChecking=accept-new \
+              "root@$host" "REF='$REF' REPO='$REPO' NOW='$now' bash -s" <<'REMOTE'
+          set -euxo pipefail
+          # This image's clock boots frozen at a fixed, years-stale snapshot
+          # every time -- there's no NTP client on it at all to fix that. The
+          # runner's own clock is already correct, so just set the Pi's from
+          # that over the SSH connection we already have.
+          date -s "$NOW"
+          date
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -q
+          # Native Pi, not a cross-build host: plain gcc is both host and
+          # target, so no cross-compiler package is needed here.
+          apt-get install -y -q git make gcc
+          rm -rf ci
+          git clone --depth 1 --branch "$REF" "https://github.com/$REPO" ci
+          cd ci
+          make check-arm QEMU= ARM_CC=gcc
+          REMOTE
+
+      - name: Delete the Pi
+        if: always()
+        run: |
+          [ -n "${NAME:-}" ] || exit 0
+          curl -fsS -X DELETE -H "Authorization: Bearer $TOK" \
+               "$API/pi/servers/$NAME" || true
+          echo "deleted $NAME"
+      - name: Cancel the run if this job failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel ${{ github.run_id }} -R ${{ github.repository }}
+
+  # ---- report back on the PR (comment + commit status) ----------------------
+  # The "tests" status reflects whatever suites ran; a selective run (e.g.
+  # /test arm) sets it from that subset only, so require a full /test before
+  # merge if you gate on it.
+  report:
+    needs: [resolve, host, arm]
+    if: always() && needs.resolve.outputs.pr != ''
+    runs-on: ubuntu-latest
+    # A job gated on needs: + if: always() has a known GitHub Actions edge
+    # case (actions/runner#4411) where, after a run is cancelled (which a
+    # failing host/arm job now does to its sibling -- see "Cancel the run if
+    # this job failed"), it can get stuck queued indefinitely rather than
+    # running. Bounds that to a short, visible failure instead of a silent
+    # multi-hour hang if it ever happens.
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Comment result and set commit status
+        env:
+          H: ${{ needs.host.result }}
+          A: ${{ needs.arm.result }}
+        run: |
+          set -euo pipefail
+          url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          emoji() { case "$1" in
+              success) echo "✅ passed";;
+              failure|cancelled|timed_out) echo "❌ $1";;
+              skipped) echo "➖ not run";;
+              *) echo "❔ $1";; esac; }
+          fail=0
+          for r in "$H" "$A"; do
+            case "$r" in failure|cancelled|timed_out) fail=1;; esac
+          done
+          [ "$fail" = 0 ] && state=success || state=failure
+          body=$(printf '**tests — \`%s\`** (scope: %s)\n\n- host (make check): %s\n- arm native (Pi): %s\n\n[run](%s)' \
+                 "${{ needs.resolve.outputs.ref }}" "${{ needs.resolve.outputs.scope }}" \
+                 "$(emoji "$H")" "$(emoji "$A")" "$url")
+          gh pr comment "${{ needs.resolve.outputs.pr }}" -R "${{ github.repository }}" --body "$body"
+          if [ -n "${{ needs.resolve.outputs.sha }}" ]; then
+            gh api -X POST "repos/${{ github.repository }}/statuses/${{ needs.resolve.outputs.sha }}" \
+              -f state="$state" -f context="tests" \
+              -f target_url="$url" -f description="scope: ${{ needs.resolve.outputs.scope }}" >/dev/null
+          fi
