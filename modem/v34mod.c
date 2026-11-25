@@ -1,6 +1,7 @@
 /* V.34 QAM modulator. See v34mod.h. */
 #include <string.h>
 #include "v34mod.h"
+#include "clock.h"
 #include "sintab.h"
 
 /* 10^(-n/20), Q15, n = 0..7 dB */
@@ -47,7 +48,7 @@ void v34mod_put(v34mod_t *m, int32_t re, int32_t im)
     m->hpos = m->hpos ? m->hpos - 1 : V34MOD_NT - 1;
     m->hr[m->hpos] = m->hr[m->hpos + V34MOD_NT] = (int16_t)re;
     m->hi[m->hpos] = m->hi[m->hpos + V34MOD_NT] = (int16_t)im;
-    m->nsym++;
+    m->nsym = clk_sat_inc(m->nsym);
 }
 
 int16_t v34mod_tick(v34mod_t *m)

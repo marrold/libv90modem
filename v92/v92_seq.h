@@ -37,7 +37,7 @@
 #ifndef V90D_V92_SEQ_H
 #define V90D_V92_SEQ_H
 #include "v92.h"
-#include "v90_seq.h"
+#include "../v90/v90_seq.h"
 
 /* The sequence is not of the kind asked for (Jd / Jp, CP / SUV, CPt and CPu /
  * CPus). The kind decides the layout, so it is judged from its bits before

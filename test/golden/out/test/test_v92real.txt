@@ -1,0 +1,5 @@
+  start 0, first state zero: 1512 bits of B1u, 0 wrong
+  start 0, any first state: 1512 bits of B1u, 0 wrong
+  start 1, first state zero: 1512 bits of B1u, 25 wrong
+  start 1, any first state: 1512 bits of B1u, 0 wrong
+v92real: 19 checks, 0 failures

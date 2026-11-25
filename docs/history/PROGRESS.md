@@ -1281,6 +1281,10 @@ TMPDIR to OUT/tmp.
 
 ### m68k: qemu-m68k cannot be trusted with this code
 
+(Corrected in the 0.6.0 audit, Task 5b: this was wrong. It was not qemu
+but GCC 12.3's m68k back end; see "m68k: a GCC wrong-code bug, not qemu"
+below. What follows is what was believed at ports-2.)
+
 On m68k-uclibc (68040, qemu-m68k 10.1.5) twelve programs fail: every one
 built on the V.34 receiver core, `modem/qamrx` (qamrx itself: training mse
 +0.6 dB, 6607 symbol errors at 3000 symbols/s). The emulator, not the code:
@@ -1357,7 +1361,7 @@ answering use; v90d-split needed no change.
 
 ### Open
 
-- m68k: needs real hardware (or another emulator) to say more.
+- m68k: settled in the 0.6.0 audit (Task 5b): a gcc bug, "m68k" below.
 - The two 32-bit products that wrap (v22rx derotation before the gain has
   settled, v90arx's forward update with a wild error) are now defined but
   still wrap: 64 bits would be the right arithmetic, but would change the
@@ -3866,3 +3870,48 @@ Checks after the merge: `make check` ALL HOST CHECKS PASS (api 542,
 answer_x2 386, answer_k56 1418, test_hdlc 4312, test_v42 5634); `make
 check-ubsan` ALL UBSAN CHECKS PASS; `PAR=8 make check-arm` (armv5 uClibc)
 ALL ARM CHECKS PASS; `make test-k56-sm56 MODS=k56` PASS, 52000 / 31200.
+
+## m68k: a GCC wrong-code bug, not qemu (0.6.0 audit, Task 5b)
+
+The twelve m68k failures of ports-2 were the compiler's. GCC 12.3.0 for
+m68k (Bootlin `m68k-68xxx--uclibc--stable-2023.08-1`, `--with-cpu=68040`),
+with `-fomit-frame-pointer` (the default at -O1 and up), compiles
+`(uint64_t)(int)x << 32` divided by a 64-bit libcall (`__udivdi3`,
+`__divdi3`) with x an incoming stack argument as: push the divisor, `subq.l
+#8,%sp` for the dividend, then load x from an sp-relative offset that
+counts the pushes but not the `subq`, 8 bytes short. So it reads another
+argument or the return address. In the tree:
+
+- `modem/qamrx.c`, `qamrx_init`: `dcar` came from the address of the
+  `qamrx_t` (`r`) instead of `car_num`, so the V.34 receiver's carrier ran
+  at the wrong frequency and never trained: the twelve failures. The
+  wrong value depends on where the linker puts the struct, which is why
+  some rebuilds passed by chance (and almost certainly why "fails
+  differently with `-one-insn-per-tb`" was two differently linked binaries,
+  not the emulator).
+- `modem/v90arx.c`, `v90arx_clock`: `ppm_q8` was the return address, so
+  the answering V.90 receiver's clock read a value that depends on the
+  binary's link layout (no test looked at it; a check program printed 4290672329 for
+  every ppm against the host's 4294967296 + ppm * 2^32 / 256e6).
+
+Fix: `qamrx_init` takes `(uint64_t)(uint32_t)car_num << 32` (only the low
+32 bits survive the shift, so the same value; zero-extended, gcc uses a
+different insn), and `v90arx_clock` divides `ppm_q8 * 2^21` by 125000
+instead of `ppm_q8 * 2^32` by 256000000 (the same fraction, so the same
+truncated quotient; no shift by 32). Both checked equal to the old
+expressions for all 2^32 int32 inputs on the host. An m68k assembly scan
+of every tracked C file (all but the two spandsp peers, which need
+spandsp) at -O1, -O2, -Os and -O3, for `subq.l #N,%sp; move.l %sp,%aK`
+followed by an sp-relative source, found these two sites and no others
+before the change, and none after. The port matrix also builds m68k with
+`-fno-omit-frame-pointer`, with which the suite passed under GCC 12.3,
+against new sites; m68k gates in `make verify-phase` like every other target.
+
+qemu-m68k was cleared: 300,000 random operand sets through `mulu.l`,
+`muls.l`, `divu.l`, `divs.l` (64-bit forms, results and flags) matched a
+reference written from the 68040 manual, in normal mode and with
+`-one-insn-per-tb`.
+
+A newer gcc (m68k moved to LRA in 14) was not tried; the bug was not
+reported upstream (the owner's call; a draft is kept outside the
+repository).

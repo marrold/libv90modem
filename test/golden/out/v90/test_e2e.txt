@@ -1,0 +1,2 @@
+  64 start-ups decoded
+test_e2e: 8352 checks, 0 failures

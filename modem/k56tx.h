@@ -24,7 +24,7 @@
 #include <stdint.h>
 #include "k56enc.h"
 #include "v34mp.h"
-#include "v90_scr.h"
+#include "../v90/v90_scr.h"
 
 typedef enum {
     K56TX_SIL1, K56TX_R1, K56TX_TRN1A, K56TX_TRN1B, K56TX_TRN1C, K56TX_JS,
@@ -72,7 +72,7 @@ typedef struct {
                                 the next TRN2A and MARK keep it */
     uint8_t    seg;          /* k56tx_seg */
     uint8_t    reneg;        /* this Phase 4 is a renegotiation's */
-    uint8_t    reneg_due;    /* k56tx_reneg in mid-frame: R2 at its end */
+    uint8_t    reneg_due;    /* k56tx_reneg in mid-frame, or in MP .. E: R2 at the (first) frame's end */
     uint8_t    j_in, mp_in;  /* the client's J, our MP given */
     uint8_t    pad;          /* from the J: TRN2B .. E's pad */
     uint8_t    d_rate, d_pad, d_rbs;      /* k56tx_data's */
@@ -84,7 +84,8 @@ typedef struct {
 void k56tx_init(k56tx_t *t);
 
 /* the client's renegotiation: R2 now, or at the end of the data frame
- * being sent; TRN2A 2048, MP / MP' 1 bit a symbol, E 24; the scrambler,
+ * being sent (with our MP, MP' or E going out: of our first data frame,
+ * B1's); TRN2A 2048, MP / MP' 1 bit a symbol, E 24; the scrambler,
  * history and running sum go on; a new MP is needed (k56tx_set_mp) */
 void k56tx_reneg(k56tx_t *t);
 

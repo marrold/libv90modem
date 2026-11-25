@@ -1,0 +1,10 @@
+test_exact: the S detector and qamrx against their code before Task 30
+  sdet, div  8, 3200 Bd: 2000000 samples, 2000 S / S-bar events: 0 differ
+  sdet, div 16, 3200 Bd: 2000000 samples, 2265 S / S-bar events: 0 differ
+  sdet, div 16, 3000 Bd: 2000000 samples, 2332 S / S-bar events: 0 differ
+  sdet, div  8, 3000 Bd: 2000000 samples, 2173 S / S-bar events: 0 differ
+  sdet, div  5, 3200 Bd: 2000000 samples, 1978 S / S-bar events: 0 differ
+  sdet, div 12, 3200 Bd: 2000000 samples, 2205 S / S-bar events: 0 differ
+  qamrx_update: 1000000 random states (500009 QRX_DENSE), 4864 at the edges: 0 differ
+  qamrx_tick, timing third: 1000000 random states (499916 with dnorm 2^25), 567 at the edges: 0 differ
+test_exact: 14 checks, 0 failures

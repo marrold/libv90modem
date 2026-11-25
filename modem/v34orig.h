@@ -41,19 +41,22 @@ enum {
     V34O_OK = 0,
     V34O_ERR_PHASE2,        /* Phase 2 failed: p2.error says how */
     V34O_ERR_TRAINING,      /* Phase 3 / 4 failed: dx.error says how */
-    V34O_ERR_RETRAINS,      /* too many retrains in a row */
+    V34O_ERR_RETRAINS,      /* too many retrains in a row; once connected, a retrain
+                               that failed (its Phases 3 / 4, or past V34O_RT_P2_MS) */
     V34O_ERR_CLEARDOWN,     /* the answerer cleared down */
     V34O_ERR_CARRIER,       /* the answerer's signal went away */
     V34O_ERR_HANGUP         /* we cleared down (v34orig_cleardown) */
 };
 
 #define V34O_MAX_RETRAINS 4
+#define V34O_RT_P2_MS   30000   /* a retrain's Phase 2 once the call has carried data: past
+                                   this, V34O_ERR_RETRAINS */
 
 typedef struct {
     v34orig_cfg   cfg;
     v34orig_state state;
     int           error;
-    int32_t       t;
+    int32_t       t;                /* samples in V34O_RETRAIN; in a retrain's V34O_PHASE2 */
     p2call_t      p2;
     v34dx_t       dx;
     info0_t       info0a; int have0a;

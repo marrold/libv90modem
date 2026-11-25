@@ -1,0 +1,93 @@
+ clean line (6 dB loss, no echo, linear)
+  clean, 14400                       14400 bit/s  c->a 114721 bits     0 errors   a->c 115141 bits     0 errors   echo  0 dB  mse    0
+  clean, 12000                       12000 bit/s  c->a  95590 bits     0 errors   a->c  95940 bits     0 errors   echo  0 dB  mse    0
+  clean, 9600                         9600 bit/s  c->a  76459 bits     0 errors   a->c  76739 bits     0 errors   echo  0 dB  mse    0
+  clean, 7200                         7200 bit/s  c->a  57328 bits     0 errors   a->c  57538 bits     0 errors   echo  0 dB  mse    0
+  clean, 4800                         4800 bit/s  c->a  38243 bits     0 errors   a->c  38337 bits     0 errors   echo  0 dB  mse    0
+ G.711 mu-law at the answerer's interface (sim/channel)
+  mu-law, 14400                      14400 bit/s  c->a 114721 bits     0 errors   a->c 115141 bits     0 errors   echo  0 dB  mse   12
+  mu-law, 12000                      12000 bit/s  c->a  95590 bits     0 errors   a->c  95940 bits     0 errors   echo  0 dB  mse    6
+  mu-law, 9600                        9600 bit/s  c->a  76459 bits     0 errors   a->c  76739 bits     0 errors   echo  0 dB  mse   18
+  mu-law, 7200                        7200 bit/s  c->a  57328 bits     0 errors   a->c  57538 bits     0 errors   echo  0 dB  mse   13
+  mu-law, 4800                        4800 bit/s  c->a  38243 bits     0 errors   a->c  38337 bits     0 errors   echo  0 dB  mse    5
+ hybrid echo: near 15 dB down at both ends, far echo 20 dB down, 25 ms each way
+  echo, 14400                        14400 bit/s  c->a 114433 bits     0 errors   a->c 115141 bits     0 errors   echo 33 dB  mse   12
+  echo, 12000                        12000 bit/s  c->a  95350 bits     0 errors   a->c  95940 bits     0 errors   echo 33 dB  mse   18
+  echo, 9600                          9600 bit/s  c->a  76267 bits     0 errors   a->c  76739 bits     0 errors   echo 33 dB  mse   18
+  echo, 7200                          7200 bit/s  c->a  57184 bits     0 errors   a->c  57538 bits     0 errors   echo 33 dB  mse    6
+  echo, 4800                          4800 bit/s  c->a  38147 bits     0 errors   a->c  38337 bits     0 errors   echo 33 dB  mse   28
+ low level: -30 dBm0 received at both ends, with the same echo (near echo 0 dB re signal)
+  -30 dBm0, 14400                    14400 bit/s  c->a 114433 bits     0 errors   a->c 115141 bits     0 errors   echo 32 dB  mse   79
+  -30 dBm0, 12000                    12000 bit/s  c->a  95350 bits     0 errors   a->c  95940 bits     0 errors   echo 32 dB  mse   70
+  -30 dBm0, 9600                      9600 bit/s  c->a  76267 bits     0 errors   a->c  76739 bits     0 errors   echo 32 dB  mse   65
+  -30 dBm0, 7200                      7200 bit/s  c->a  57184 bits     0 errors   a->c  57538 bits     0 errors   echo 32 dB  mse   77
+  -30 dBm0, 4800                      4800 bit/s  c->a  38147 bits     0 errors   a->c  38337 bits     0 errors   echo 32 dB  mse   76
+ sample clock offset (caller against network), with echo
+  +100 ppm, 14400                    14400 bit/s  c->a 114445 bits     0 errors   a->c 115135 bits     0 errors   echo 33 dB  mse   27
+  +100 ppm, 12000                    12000 bit/s  c->a  95360 bits     0 errors   a->c  95935 bits     0 errors   echo 33 dB  mse    6
+  +100 ppm, 9600                      9600 bit/s  c->a  76275 bits     0 errors   a->c  76735 bits     0 errors   echo 33 dB  mse   17
+  +100 ppm, 7200                      7200 bit/s  c->a  57190 bits     0 errors   a->c  57535 bits     0 errors   echo 33 dB  mse    6
+  +100 ppm, 4800                      4800 bit/s  c->a  38151 bits     0 errors   a->c  38335 bits     0 errors   echo 33 dB  mse   21
+  -100 ppm, 14400                    14400 bit/s  c->a 114421 bits     0 errors   a->c 115141 bits     0 errors   echo 33 dB  mse   14
+  -100 ppm, 12000                    12000 bit/s  c->a  95340 bits     0 errors   a->c  95940 bits     0 errors   echo 33 dB  mse    2
+  -100 ppm, 9600                      9600 bit/s  c->a  76259 bits     0 errors   a->c  76739 bits     0 errors   echo 33 dB  mse   19
+  -100 ppm, 7200                      7200 bit/s  c->a  57178 bits     0 errors   a->c  57538 bits     0 errors   echo 33 dB  mse   21
+  -100 ppm, 4800                      4800 bit/s  c->a  38143 bits     0 errors   a->c  38337 bits     0 errors   echo 33 dB  mse   14
+ carrier offset (each way), near echo only
+  +2 Hz, 14400                       14400 bit/s  c->a 114379 bits     0 errors   a->c 115135 bits     0 errors   echo 33 dB  mse   13
+  +2 Hz, 12000                       12000 bit/s  c->a  95305 bits     0 errors   a->c  95935 bits     0 errors   echo 33 dB  mse   22
+  +2 Hz, 9600                         9600 bit/s  c->a  76231 bits     0 errors   a->c  76735 bits     0 errors   echo 33 dB  mse    8
+  +2 Hz, 7200                         7200 bit/s  c->a  57157 bits     0 errors   a->c  57535 bits     0 errors   echo 33 dB  mse   18
+  +2 Hz, 4800                         4800 bit/s  c->a  38129 bits     0 errors   a->c  38335 bits     0 errors   echo 33 dB  mse   19
+  -7 Hz, 14400                       14400 bit/s  c->a 114379 bits     0 errors   a->c 115135 bits     0 errors   echo 33 dB  mse   17
+  -7 Hz, 12000                       12000 bit/s  c->a  95305 bits     0 errors   a->c  95935 bits     0 errors   echo 33 dB  mse   16
+  -7 Hz, 9600                         9600 bit/s  c->a  76231 bits     0 errors   a->c  76735 bits     0 errors   echo 33 dB  mse   10
+  -7 Hz, 7200                         7200 bit/s  c->a  57157 bits     0 errors   a->c  57535 bits     0 errors   echo 33 dB  mse   16
+  -7 Hz, 4800                         4800 bit/s  c->a  38129 bits     0 errors   a->c  38335 bits     0 errors   echo 33 dB  mse   12
+ carrier offset with the far echo as well (20 dB down; its phase roll is not tracked): reported only
+  0.2 Hz + far echo, any rate         9600 bit/s  c->a  76231 bits     0 errors   a->c  76735 bits     0 errors   echo 28 dB  mse  140
+  1.0 Hz + far echo, any rate        12000 bit/s  c->a  95305 bits     0 errors   a->c  95935 bits     0 errors   echo 19 dB  mse  916
+  2.0 Hz + far echo, any rate        12000 bit/s  c->a  95305 bits     0 errors   a->c  95935 bits     0 errors   echo 17 dB  mse  452
+  7.0 Hz + far echo, any rate        14400 bit/s  c->a 114379 bits     0 errors   a->c 115135 bits     0 errors   echo 16 dB  mse  358
+ white noise at both receivers (signal -20.4 dBm0), mu-law, echo; one rate offered
+  SNR 32 dB, 14400                   14400 bit/s  c->a 114433 bits     0 errors   a->c 115135 bits     0 errors   echo 22 dB  mse  112
+  SNR 26 dB, 14400                   14400 bit/s  c->a 114433 bits     0 errors   a->c 115135 bits     0 errors   echo 16 dB  mse  331
+  SNR 22 dB, 14400                   14400 bit/s  c->a 114433 bits     0 errors   a->c 115135 bits   112 errors   echo 12 dB  mse  685
+  SNR 20 dB, 14400                   14400 bit/s  c->a 114433 bits  1230 errors   a->c 115135 bits  2844 errors   echo 10 dB  mse 1068
+  SNR 28 dB, 12000                   12000 bit/s  c->a  95350 bits     0 errors   a->c  95940 bits     0 errors   echo 18 dB  mse  224
+  SNR 23 dB, 12000                   12000 bit/s  c->a  95350 bits     0 errors   a->c  95940 bits     0 errors   echo 13 dB  mse  667
+  SNR 19 dB, 12000                   12000 bit/s  c->a  95350 bits     0 errors   a->c  95940 bits     0 errors   echo  9 dB  mse 1829
+  SNR 24 dB, 9600                     9600 bit/s  c->a  76267 bits     0 errors   a->c  76739 bits     0 errors   echo 14 dB  mse  511
+  SNR 20 dB, 9600                     9600 bit/s  c->a  76267 bits     0 errors   a->c  76739 bits     0 errors   echo 10 dB  mse 1222
+  SNR 16 dB, 9600                     9600 bit/s  c->a  76267 bits     0 errors   a->c  76739 bits     0 errors   echo  7 dB  mse 2863
+  SNR 20 dB, 7200                     7200 bit/s  c->a  57184 bits     0 errors   a->c  57538 bits     0 errors   echo 10 dB  mse 1138
+  SNR 17 dB, 7200                     7200 bit/s  c->a  57184 bits     0 errors   a->c  57538 bits     0 errors   echo  8 dB  mse 2300
+  SNR 13 dB, 7200                     7200 bit/s  c->a  57184 bits     0 errors   a->c  57538 bits     0 errors   echo  4 dB  mse 5388
+  SNR 16 dB, 4800                     4800 bit/s  c->a  38147 bits     0 errors   a->c  38335 bits     0 errors   echo  7 dB  mse 3041
+  SNR 13 dB, 4800                     4800 bit/s  c->a  38147 bits     0 errors   a->c  38337 bits     0 errors   echo  4 dB  mse 6625
+  SNR  9 dB, 4800                     4800 bit/s  c->a  38147 bits   120 errors   a->c  38337 bits   174 errors   echo  2 dB  mse 15770
+ the same, all rates offered: the answerer picks from its receiver's error
+  SNR 40 dB, any rate                14400 bit/s  c->a 114433 bits     0 errors   a->c 115141 bits     0 errors   echo 28 dB  mse   36
+  SNR 32 dB, any rate                14400 bit/s  c->a 114433 bits     0 errors   a->c 115135 bits     0 errors   echo 22 dB  mse  112
+  SNR 28 dB, any rate                14400 bit/s  c->a 114433 bits     0 errors   a->c 115135 bits     0 errors   echo 18 dB  mse  210
+  SNR 24 dB, any rate                14400 bit/s  c->a 114433 bits     0 errors   a->c 115135 bits     0 errors   echo 14 dB  mse  503
+  SNR 20 dB, any rate                 9600 bit/s  c->a  76267 bits     0 errors   a->c  76739 bits     0 errors   echo 10 dB  mse 1379
+  SNR 16 dB, any rate                 7200 bit/s  c->a  57184 bits     0 errors   a->c  57538 bits     0 errors   echo  7 dB  mse 3042
+  SNR 12 dB, any rate                 4800 bit/s  c->a  38147 bits     6 errors   a->c  38337 bits     0 errors   echo  4 dB  mse 8060
+ retrain (7.2), mu-law, echo
+  asked for by the caller            both ends retraining 96 ms after the request; data again after 2.90 s at 14400 bit/s; then c->a 114433 bits 0 errors, a->c 115135 bits 0 errors
+  asked for by the answerer          both ends retraining 101 ms after the request; data again after 3.02 s at 14400 bit/s; then c->a 114433 bits 0 errors, a->c 115135 bits 0 errors
+ driver buffering between the modem and the line (mu-law, echo), echo_delay set to match
+  40 samples (5.0 ms)                14400 bit/s  c->a 114433 bits     0 errors   a->c 115141 bits     0 errors   echo 33 dB  mse   18
+                                     turn-round at the line 64.5 T
+  100 samples (12.5 ms)              14400 bit/s  c->a 114433 bits     0 errors   a->c 115141 bits     0 errors   echo 33 dB  mse   27
+                                     turn-round at the line 64.5 T
+  160 samples (20.0 ms)              14400 bit/s  c->a 114433 bits     0 errors   a->c 115141 bits     0 errors   echo 31 dB  mse   17
+                                     turn-round at the line 68.4 T
+ the line turns noisy in data mode (linear, echo; SNR 40 dB, then 19 dB)
+  14400 bit/s; noise up: 316 errors in 58993 bits, retrain begun after 2.15 s; back at 9600 bit/s: c->a 76267 bits 0 errors, a->c 76739 bits 0 errors
+ the caller disappears in data mode (near echo 15 dB down stays)
+  answerer: error 4 (carrier lost) 450 ms after the caller went silent
+ no rate in common (answerer 14400 only, caller 7200 only)
+  answerer gave up after 5.16 s with error 3 (no rate), then silent
+test_call: 358 checks, 0 failures

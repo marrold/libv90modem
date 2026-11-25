@@ -84,9 +84,28 @@ sample by sample, whatever the block length.
 modem to its echo starting back: the driver's buffering, both ways. It is
 `>= 0`, or -1 (the default) for "measure it in every start-up".
 
-- Answering V.90 / V.92: the echo canceller spans 12 ms, placed where the
-  echo is; with -1 the distance is found by correlation during training
-  (`DESIGN.md`, 4.2). `v90m_stats.echo_delay` reports the value in use.
+- Answering V.90 / V.92, x2, K56flex: the echo canceller spans 12 ms,
+  placed where the echo is; with -1 the distance is found by correlation
+  during training (`DESIGN.md`, 4.2, `modem/ecdly.h`).
+  `v90m_stats.echo_delay` reports the value in use. The search covers
+  1280 samples (160 ms). With a round trip (Phase 2's) under 1024 samples
+  (128 ms) it covers 0 to 160 ms; with a longer one it covers the round
+  trip less 128 ms to the round trip plus 32 ms, where the far hybrid's
+  echo comes back when the caller is behind a packet network (an ATA's or a
+  VoIP gateway's jitter buffers: 302 ms on a Cisco IOS FXS port). This
+  round-trip-centred search is Will Sowerbutts's `ecdly_near` (PR #1,
+  V.90), extended to V.92, x2 and K56flex in 0.6.0. Its reach ends at
+  about 3510 samples (439 ms); an echo later than that is not cancelled.
+  The trade-off: with a round trip over 128 ms an echo earlier than the
+  round trip less 128 ms (a near hybrid's, from the line interface's own
+  path) is outside the search, and there is one canceller, so it is not
+  cancelled. Behind a packet link (nsdiald, RTP) the digital modem has no
+  hybrid of its own and the far echo is the only one; a host whose line
+  interface has a hybrid of its own as well, on a long round trip, should
+  give `echo_delay` explicitly only if the near echo is the stronger.
+- Answering V.34: the search finds our own path's delay (0 to 160 ms) and
+  a second canceller is placed a round trip later for the far echo
+  (`modem/v34dx.c`), so both are cancelled; its reach is about 500 ms.
 - Calling V.34: -1 has it found in training (`modem/orig.h`).
 - Calling V.90 / V.92: in this version the value is used as a fixed delay
   of the canceller's reference (a delay line of 512 samples, so 0 to 511);

@@ -1,0 +1,13 @@
+v90arx: the paths that change the taps or the lines
+  train, first design, ls_set        state 3, 21295 decisions, mse   8113, design steps 336, held    0, hash 5655837c
+  holds of 1 symbol (x8), of 200     state 3,  4000 decisions, mse   1029, design steps  56, held  208, hash be462817
+  band edge on (design at once)      state 3,  3999 decisions, mse   1076, design steps  72, held    0, hash 7b59a936
+  timing held, impulses (gate)       state 3,  4000 decisions, mse   3444, design steps  64, held    0, hash a11d2ec2
+  band edge off, holds, impulses     state 3, 11999 decisions, mse   8614, design steps 192, held  120, hash 21dca930
+  taps at the end: forward a4808661, feedback b9c64ac2, estimate 516108ff
+ntrain 1800, held from TRAIN's start to EST's last symbol, line inverted
+  TRAIN at sample 2703 with 0 decisions out, EST's last step on symbol 1850
+  released at symbol 1851
+  state 3, 12000 decisions from TRAIN on, mse   2466, hash cfa5fce1
+  taps at the end: forward b35cb1f9, feedback 2c5b5da9, estimate 454358c0
+v90arx_paths: 3 checks, 0 failures

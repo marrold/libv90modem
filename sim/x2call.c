@@ -111,7 +111,7 @@ void x2call_init(x2call_t *c, const x2call_cfg *cfg)
     v8call_init(&c->v8, 8000, (int16_t)cfg->level, &cm);
     c->state = X2C_V8;
     c->mark_at = -1; c->mk_off = 0;
-    c->k = -1; c->j_from = -1; c->data_at = -1;
+    c->k = -1; c->j_from = -1; c->data_at = -1; c->up_at = -1;
     dpsktx_init(&c->mk, DPSK_FC_B, cfg->level, 0);
     c->nmk = p2ans_x2_info_frame(MARKER, c->mkbits);
     /* what each levels A octet arrives as behind our pad */
@@ -138,7 +138,7 @@ static void tx_symbol(x2call_t *c, int32_t *re, int32_t *im)
     int32_t g = 16384;
     int k;
     *re = *im = 0;
-    if (c->reneg_due && c->sig == SIG_DATA) {
+    if (c->reneg_due && c->sig == SIG_DATA && (!c->cfg.reneg_whole || c->vtx.pos >= 8)) {
         /* the rate change: S in data mode, then as Phase 4 with a short TRN */
         c->reneg_due = 0; c->renegs++; c->reneg_mp = 0; c->rr_acked = 0;
         c->rr_base = c->seen.rr_nak + c->seen.rr_ack;
@@ -207,7 +207,7 @@ static void tx_symbol(x2call_t *c, int32_t *re, int32_t *im)
     case SIG_E:
         pt = v34_tmod_put(&c->tmod, c->renegs ? 3 : 15);
         if (!c->renegs) g = c->g16;
-        if (++c->sn * (c->renegs ? 2 : 4) >= 20) { v34_tx_init(&c->vtx, &c->tpar, c->cfg.getbit, c->cfg.user); go_sig(c, SIG_DATA); }
+        if (++c->sn * (c->renegs ? 2 : 4) >= 20) { v34_tx_init(&c->vtx, &c->tpar, c->cfg.getbit, c->cfg.user); go_sig(c, SIG_DATA); c->up_at = c->now; }
         break;
     default:    /* SIG_DATA: B1, then data */
         if (!v34_tx_in_b1(&c->vtx)) c->seen.data_up = 1;
@@ -457,7 +457,10 @@ int16_t x2call_tick(x2call_t *c, uint8_t octet)
             c->data_at = c->now;        /* (and again after each rate change) */
         }
         if (c->cfg.reneg_ms && c->renegs < (c->cfg.reneg_index2 ? 2 : 1) && !c->reneg_due && c->state == X2C_DATA
-            && c->now - c->data_at >= MS(c->cfg.reneg_ms))
+            && !c->cfg.reneg_up && c->now - c->data_at >= MS(c->cfg.reneg_ms))
+            c->reneg_due = 1;
+        if (c->cfg.reneg_ms && c->cfg.reneg_up && !c->renegs && !c->reneg_due && c->up_at >= 0
+            && c->now - c->up_at >= MS(c->cfg.reneg_ms))
             c->reneg_due = 1;
         if (c->cfg.silent == X2C_SIL_DATA && c->state == X2C_DATA && c->seen.data_frames >= 1334) c->quiet = 1;
         out = tx_sample(c);

@@ -1,0 +1,22 @@
+the Bell answer tone
+  2225 Hz -10 dBm0                                     2225 Hz at 0.160 s
+  2225 Hz 0 dBm0                                       2225 Hz at 0.160 s
+  2225 Hz -40 dBm0                                     2225 Hz at 0.160 s
+  2225 Hz 8 Hz high (a carrier shift on the line)      2225 Hz at 0.160 s
+  2225 Hz 8 Hz low                                     2225 Hz at 0.160 s
+  2225 Hz -30 dBm0 in noise 12 dB below                2225 Hz at 0.160 s
+  2225 Hz starting off the block grid                  2225 Hz at 0.144 s
+not the Bell answer tone
+  2225 Hz -50 dBm0, below the floor                    nothing at -1.000 s
+  2250 Hz -10 dBm0                                     nothing at -1.000 s
+  2250 Hz 7 Hz low                                     nothing at -1.000 s
+  2200 Hz                                              nothing at -1.000 s
+  2025 Hz (Bell 103 answer space)                      nothing at -1.000 s
+  ANSam -10 dBm0 (V.8)                                 nothing at -1.000 s
+  ANS -10 dBm0 (V.25)                                  nothing at -1.000 s
+  V.22 answerer's unscrambled ones, -10 dBm0           nothing at -1.000 s
+  V.22 answerer's scrambled ones, -10 dBm0             nothing at -1.000 s
+  dial tone 350 + 440 Hz                               nothing at -1.000 s
+  white noise -20 dBm0                                 nothing at -1.000 s
+  0.5 s of tone then silence: on 1, 80 ms later 0
+belltone: 27 checks, 0 failures

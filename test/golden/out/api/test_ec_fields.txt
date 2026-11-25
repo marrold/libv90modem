@@ -1,0 +1,4 @@
+ec cfg: 35 values per field, 27 fields, 41896 configurations (1007 valid), 0 differ
+ec defaults: the same for originator -1, 0, 1, 2
+ec status: 37 fields listed and 3 of the endpoint's, the same
+ec fields: 14 checks, 0 failures

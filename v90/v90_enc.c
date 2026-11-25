@@ -50,21 +50,37 @@ int v90_map_from_cp(v90_map_t *m, const v90_cp_t *cp)
 
 /* ---- modulus encoder ------------------------------------------------------ */
 
+/* rcp[M] = ceil(2^32 / M) = floor((2^32 - 1) / M) + 1, for M = 2..128 (M = 1
+ * is not divided). For cur < M 2^16, (cur rcp[M]) >> 32 is cur / M exactly:
+ * with rcp[M] = (2^32 + e) / M, 0 <= e < M, the product over 2^32 is
+ * cur / M + cur e / (M 2^32), and cur e / (M 2^32) < M / 2^16 < 1 / M
+ * (M < 256), which a fraction of at most (M - 1) / M cannot carry past the
+ * next integer. test/test_small_exact.c checks every cur in `full` mode. */
+#define RCP(d)   ((uint32_t)(0xFFFFFFFFu / (d) + 1u))
+#define RCP4(d)  RCP(d), RCP((d) + 1), RCP((d) + 2), RCP((d) + 3)
+#define RCP16(d) RCP4(d), RCP4((d) + 4), RCP4((d) + 8), RCP4((d) + 12)
+static const uint32_t rcp[129] = {
+    0, 0, RCP(2), RCP(3), RCP4(4), RCP4(8), RCP4(12), RCP16(16), RCP16(32), RCP16(48),
+    RCP16(64), RCP16(80), RCP16(96), RCP16(112), RCP(128)
+};
+
 void v90_modulus_encode(const v90_map_t *m, const uint8_t *b, uint8_t k[6])
 {
     /* R0 as three 16-bit limbs (K <= 42), divided by each Mi in turn with
      * schoolbook short division: the running remainder is below Mi <= 128, so
-     * every step fits a 32-bit unsigned divide. */
+     * every step's dividend is below Mi 2^16 <= 2^23, divided through rcp. */
     uint16_t r[3] = { 0, 0, 0 };
     int i, j;
     for (i = 0; i < m->K; i++)
         if (b[i] & 1) r[i >> 4] |= (uint16_t)(1u << (i & 15));
     for (i = 0; i < 6; i++) {
-        uint32_t M = m->M[i], rem = 0;
+        /* (v90_map_check allows 1 <= Mi <= 128; above, C's division) */
+        uint32_t M = m->M[i], mr = M <= 128 ? rcp[M] : 0, rem = 0;
+        if (M <= 1) { k[i] = 0; continue; }     /* R0 mod 1, R0 kept */
         for (j = 2; j >= 0; j--) {
-            uint32_t cur = (rem << 16) | r[j];
-            r[j] = (uint16_t)(cur / M);
-            rem = cur % M;
+            uint32_t cur = (rem << 16) | r[j], q = mr ? (uint32_t)(((uint64_t)cur * mr) >> 32) : cur / M;
+            r[j] = (uint16_t)q;
+            rem = cur - q * M;
         }
         k[i] = (uint8_t)rem;
     }

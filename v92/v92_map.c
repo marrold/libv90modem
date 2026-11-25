@@ -1,5 +1,6 @@
 /* Checks of the data mode parameters and the index -> Ki relation of
  * V.92 6.4.2. See v92.h. */
+#include <string.h>
 #include "v92.h"
 #include "v92_mod.h"
 
@@ -44,4 +45,31 @@ int v92_filt_check(const v92_filt_t *f)
     if ((unsigned)f->lz1 + f->lp1 + f->lz2 + f->lp2 > V92_MAX_LTOT) return V92_ERR_RANGE;
     if (f->lz2 == 0 || f->gain4 == 0) return V92_ERR_RANGE;
     return 0;
+}
+
+/* the zero coefficients at the end of c[0..n-1] */
+static unsigned zeros_at_end(const int16_t *c, unsigned n)
+{
+    unsigned z = 0;
+    while (z < n && c[n - 1 - z] == 0) z++;
+    return z;
+}
+
+void v92_filt_trim(v92_filt_t *dst, const v92_filt_t *src)
+{
+    const int16_t *c = src->coef;
+    unsigned len[4], keep[4], s, at = 0;
+    len[0] = src->lz1; len[1] = src->lp1; len[2] = src->lz2; len[3] = src->lp2;
+    for (s = 0; s < 4; s++) {
+        /* z2(0) stays: LZ2 >= 1 */
+        keep[s] = s == 2 && len[s] > 0 ? len[s] - zeros_at_end(c + 1, len[s] - 1)
+                                       : len[s] - zeros_at_end(c, len[s]);
+        memcpy(dst->coef + at, c, keep[s] * sizeof *c);
+        at += keep[s];
+        c += len[s];
+    }
+    memset(dst->coef + at, 0, (V92_MAX_LTOT - at) * sizeof *c);
+    dst->lz1 = (uint16_t)keep[0]; dst->lp1 = (uint16_t)keep[1];
+    dst->lz2 = (uint16_t)keep[2]; dst->lp2 = (uint16_t)keep[3];
+    dst->gain4 = src->gain4;
 }

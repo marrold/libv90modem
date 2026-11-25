@@ -19,6 +19,7 @@
 #ifndef V90D_MODEM_V92ASEQ_H
 #define V90D_MODEM_V92ASEQ_H
 #include <stdint.h>
+#include "seqhunt.h"
 #include "../v92/v92_seq.h"
 
 /* words in the longest CPd: header, gain, M, lengths, 384 coefficients,
@@ -33,14 +34,15 @@ enum {
 };
 
 typedef struct {
-    int      ones;              /* hunting: ones in a row */
+    seqhunt_t sh;               /* hunting: ones in a row */
     int      in;                /* 1: inside a sequence */
     int      nb;                /* bits of the current word: 0 = the start bit is next */
     uint32_t cur;               /* the word being collected */
     int      nw;                /* words completed, the header being word 0 */
     int      crc_at;            /* the word that is the CRC, as far as known */
     uint16_t crc, crc_want;
-    int      kind;              /* V92_DN_CPD or V92_DN_SUVD */
+    uint8_t  kind;              /* V92_DN_CPD or V92_DN_SUVD */
+    uint8_t  has;               /* V92AS_HAS_*: the parts of the stored CPd */
     int      i_lc, i_pts, ncoef, npts;  /* CPd: where its parts begin */
     int      fill;              /* the sequence has ended: the rest of the frame is fill */
     int      skip;              /* ... and so is the next frame (the CRC ended this one) */
@@ -48,12 +50,36 @@ typedef struct {
     int      ev;                /* events of the frame being taken */
     uint16_t w0;                /* the header word */
     v92_cpd_t cpd;              /* the CPd being received */
+    v92_cpd_t out;              /* the stored CPd with it merged, checked before it is stored */
 } v92aseq_t;
+
+enum {                          /* v92aseq_t.has */
+    V92AS_HAS_MOD = 1, V92AS_HAS_FILT = 2, V92AS_HAS_CONST = 4
+};
 
 void v92aseq_init(v92aseq_t *s);
 /* One data frame of n descrambled bits. Returns the V92AS_ events of the
- * frame; an SUVd received goes to *suvd, a CPd to *cpd (neither is touched
- * otherwise). */
+ * frame; an SUVd received goes to *suvd (not touched otherwise).
+ *
+ * *cpd is the stored CPd, the same one at every call: a CPd received is
+ * merged into it. Table 30's bits 19:21 say which of its three parts a CPd
+ * carries; drn, trellis, e2u_extend, ack and gain4 are always there. Those
+ * and each part carried replace what *cpd held; a part left out is kept
+ * from an earlier CPd, or zero if none had it, and *cpd's has_ flags say
+ * which parts it holds. A CPd that does not check out leaves *cpd as it
+ * was (V92AS_BAD): one whose CRC fails, and one that names an upstream
+ * rate but would leave *cpd with a map or filter that fails v92_map_check
+ * (once it holds the moduli and the constellations) or v92_filt_check
+ * (once it holds the filters). */
 int  v92aseq_frame(v92aseq_t *s, const uint8_t *bits, int n, v92_suvd_t *suvd, v92_cpd_t *cpd);
+/* The start of a Phase 4 (after Phase 3, 9.5.2): hunt afresh, nothing
+ * stored. */
+void v92aseq_phase4(v92aseq_t *s);
+/* The start of a rate renegotiation's Phase 4 (9.8): hunt afresh; the
+ * stored CPd is kept, a CPd there carrying only what changed. */
+void v92aseq_restart(v92aseq_t *s);
+/* 1 when the stored CPd has all three parts (moduli, filters,
+ * constellations): what the upstream encoder needs. */
+int  v92aseq_cpd_complete(const v92aseq_t *s);
 
 #endif

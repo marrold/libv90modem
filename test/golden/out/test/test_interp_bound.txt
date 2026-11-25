@@ -1,0 +1,3 @@
+v34_interp: largest row sum |h| 46728 (row 16), x 32768 = 1531183104, 2^31 = 2147483648
+pcmtx_interp (int64 accumulators, for the record): largest row sum |h| 38260 (row 16), x 32768 = 1253703680
+test_interp_bound: 3 checks, 0 failures

@@ -1,0 +1,12 @@
+   4800 bit/s level  2000 snr  0: S at 472, S-bar at 1398, R at 5871 (word 0ff9 x17), E fd91; mse after TRN 0, in data 0; timing -52; 11948 bits, 0 errors
+   7200 bit/s level  2000 snr  0: S at 472, S-bar at 1398, R at 5871 (word 0ff9 x17), E f9d1; mse after TRN 0, in data 0; timing 19; 17853 bits, 0 errors
+   9600 bit/s level  2000 snr  0: S at 472, S-bar at 1398, R at 5871 (word 0ff9 x17), E fb91; mse after TRN 0, in data 0; timing 117; 23804 bits, 0 errors
+  12000 bit/s level  2000 snr  0: S at 472, S-bar at 1398, R at 5871 (word 0ff9 x17), E f9b1; mse after TRN 0, in data 0; timing 10; 29755 bits, 0 errors
+  14400 bit/s level  2000 snr  0: S at 472, S-bar at 1398, R at 5871 (word 0ff9 x17), E f999; mse after TRN 0, in data 0; timing 377; 35706 bits, 0 errors
+  14400 bit/s level   160 snr  0: S at 484, S-bar at 1398, R at 5871 (word 0ff9 x17), E f999; mse after TRN 1, in data 0; timing 378; 35706 bits, 0 errors
+  14400 bit/s level  8000 snr  0: S at 472, S-bar at 1398, R at 5871 (word 0ff9 x17), E f999; mse after TRN 0, in data 0; timing 378; 35706 bits, 0 errors
+  14400 bit/s level  2000 snr  0: S at 472, S-bar at 1398, R at 14938 (word 0ff9 x17), E f999; mse after TRN 0, in data 0; timing 92; 35706 bits, 0 errors
+  14400 bit/s level  2000 snr 30: S at 472, S-bar at 1398, R at 5871 (word 0ff9 x17), E f999; mse after TRN 101, in data 75; timing 26; 119706 bits, 0 errors
+   9600 bit/s level  2000 snr 24: S at 472, S-bar at 1398, R at 5871 (word 0ff9 x17), E fb91; mse after TRN 430, in data 361; timing 18; 79804 bits, 0 errors
+   4800 bit/s level  2000 snr 15: S at 475, S-bar at 1398, R at 5871 (word 0ff9 x17), E fd91; mse after TRN 3545, in data 2649; timing 116; 39948 bits, 0 errors
+test_rx: 115 checks, 0 failures

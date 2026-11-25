@@ -30,6 +30,12 @@
 #include <inttypes.h>
 #include "test.h"
 #include "v90link.h"
+/* the old cleared flag, from the end reason: 1 the caller's cleardown, 2 ours */
+static int cleared_of(const answer_t *a)
+{
+    int e = answer_end(a);
+    return e == ANS_END_CLEARDOWN_FAR ? 1 : e == ANS_END_CLEARDOWN_OURS ? 2 : 0;
+}
 
 #define MS(x) ((int64_t)(x) * 8)
 
@@ -60,6 +66,17 @@ static void line(vl_cfg *c, int v92, uint32_t seed)
     c->loop_km = 2; c->noise_dbm0 = -75; c->ppm = 20; c->phase = 0.17 * (seed % 5);
     c->echo_db = -16; c->up_loss_db = 6; c->up_noise_dbm0 = -70; c->full = 1; c->caller_orig = 1; c->seed = seed;
     if (v92) { c->v92 = 1; c->caller_v92 = 1; c->up_line = 1; }
+}
+
+/* the receiver's channel estimate and equaliser gone: decisions on nothing
+ * (and the next symbol's sums its last steps formed from them) */
+static void wipe(vl_t *l)
+{
+    v90arx_t *r = &l->org.e.v90.rx;
+    memset(r->h, 0, sizeof r->h);
+    memset(r->f, 0, sizeof r->f);
+    memset(r->b, 0, sizeof r->b);
+    r->hnext_m0 = -1; r->eqnext_m = -1;
 }
 
 static int both(vl_t *l) { return orig_moving(&l->org) && answer_moving(&l->ans); }
@@ -105,16 +122,18 @@ static void count(vl_t *l, int64_t *bd, int64_t *fd, int64_t *bu, int64_t *fu)
     *bd = l->down.got - d0; *bu = l->up.got - u0; *fd = l->down.fails - f0d; *fu = l->up.fails - f0u;
 }
 
-static int connect(vl_t *l, int v92, uint32_t seed)
+static int connect_w(vl_t *l, int v92, uint32_t seed, int words)
 {
     vl_cfg c;
     line(&c, v92, seed);
     vl_init(l, &c);
+    if (words) { l->words = 1; l->wdown.gen = (uint16_t)(0x5a00 + 77 * seed); l->wup.gen = (uint16_t)(0x2c00 + 59 * seed); }
     while (l->k < MS(40000) && !both(l) && l->org.phase != ORIG_FAILED) vl_tick(l);
     if (!both(l)) return 0;
     run_ms(l, 2000);
     return both(l);
 }
+static int connect(vl_t *l, int v92, uint32_t seed) { return connect_w(l, v92, seed, 0); }
 
 static void run(int v92, int kind, uint32_t seed, res_t *o)
 {
@@ -137,10 +156,7 @@ static void run(int v92, int kind, uint32_t seed, res_t *o)
         else CHECK_EQ_I(p34d_renegotiate(&l->ans.p34), 0);
         break;
     case K_WIPE:
-        /* the receiver's channel estimate and equaliser gone: decisions on nothing */
-        memset(l->org.v90.rx.h, 0, sizeof l->org.v90.rx.h);
-        memset(l->org.v90.rx.f, 0, sizeof l->org.v90.rx.f);
-        memset(l->org.v90.rx.b, 0, sizeof l->org.v90.rx.b);
+        wipe(l);
         break;
     case K_ANS_OWN:
         /* the answerer's engine retrains of its own accord (its checks of
@@ -184,8 +200,8 @@ static void run(int v92, int kind, uint32_t seed, res_t *o)
         { int64_t a, b; count(l, &a, &b, &a, &a); o->fd2 = (int)b; }
         o->ok = o->ok && still(l);
     }
-    o->rt_o = orig_retrains(&l->org); o->rt_a = l->ans.retrains; o->rn_o = l->org.v90.renegs;
-    o->rt_ours = l->org.v90.retrains_ours;
+    o->rt_o = orig_retrains(&l->org); o->rt_a = l->ans.retrains; o->rn_o = l->org.e.v90.renegs;
+    o->rt_ours = l->org.e.v90.retrains_ours;
 }
 
 static void print(const char *name, const res_t *o)
@@ -250,6 +266,62 @@ static void cases(int v92)
     }
 }
 
+/* the answerer's rate renegotiation, no V.42: the data both ways is counter
+ * words. Downstream none is lost or repeated, and no bit, at its Rd
+ * (9.6.1.1 / 9.8.1.1: the frames before Rd are data, every one of them).
+ * Upstream, across V.90's S: we send the mapping frame under way whole, and
+ * the answerer delivers the frames its decoder still held but one, the
+ * margin against an S found late (v34_rx_flush_before): exactly one mapping
+ * frame is lost, nothing repeated or wrong. V.92's Ru (on a data frame
+ * boundary, 9.8.2.1.1) cuts off what the caller's prefilter still held
+ * (about dly samples: those frames never reach the far end), and the
+ * answerer keeps a data frame of margin too: whole data frames are lost,
+ * no more than dly / 12 + 3 of them, nothing wrong */
+static void words_reneg(int v92)
+{
+    vl_t *l = &L;
+    int64_t t0, w0, lost0, brk0, u0, ulost0, ubrk0, ugap0, gap, K = 0, dly = 0, frame = 0;
+    int32_t ms;
+    CHECK(connect_w(l, v92, 80 + v92, 1));
+    /* the upstream's frame as it was when the data stopped */
+    if (v92) { K = l->ans.u.v92.cpd.map.K; dly = l->ans.u.v92.dsn.dly; }
+    else frame = (int64_t)l->ans.p34.up_rate * 8 / l->ans.p34.cfg.sym_rate;
+    w0 = l->wdown.words; lost0 = l->wdown.lost; brk0 = l->wdown.breaks;
+    u0 = l->wup.words; ulost0 = l->wup.lost; ubrk0 = l->wup.breaks; ugap0 = l->wup.gap_bits;
+    t0 = l->k;
+    if (v92) CHECK_EQ_I(v92d_renegotiate(&l->ans.u.v92), 0);
+    else CHECK_EQ_I(p34d_renegotiate(&l->ans.p34), 0);
+    ms = back(l, t0, 30000);
+    run_ms(l, 2000);
+    gap = l->wup.gap_bits - ugap0;
+    printf("%s: the answerer renegotiates, counter words: back %d ms, words before %" PRId64 ", after %" PRId64 ", lost %" PRId64 "\n",
+           v92 ? "V.92" : "V.90", (int)ms, w0, l->wdown.words - w0, l->wdown.lost - lost0);
+    printf("  upstream: words before %" PRId64 ", after %" PRId64 ", lost %" PRId64 ", again %" PRId64 "; breaks down %" PRId64 ", up %" PRId64 " (%" PRId64 " bits missing)\n",
+           u0, l->wup.words - u0, l->wup.lost - ulost0, l->wup.again, l->wdown.breaks - brk0, l->wup.breaks - ubrk0, gap);
+    CHECK(ms > 0);
+    CHECK(w0 > 1000);
+    CHECK(l->wdown.words - w0 > 1000);
+    CHECK_EQ_I(l->wdown.lost - lost0, 0);              /* (one frame, 21..42 bits, was) */
+    CHECK_EQ_I(l->wdown.breaks - brk0, 0);
+    CHECK_EQ_I(l->wdown.locked, 1);
+    CHECK(u0 > 1000);
+    CHECK(l->wup.words - u0 > 1000);
+    CHECK_EQ_I(l->wup.again, 0);
+    CHECK_EQ_I(l->wup.breaks - ubrk0, 1);
+    if (!v92) {
+        /* one mapping frame (432 bits, 6 frames, were) */
+        CHECK(gap >= frame - 1 && gap <= frame);
+        CHECK(16 * (l->wup.lost - ulost0) >= gap && 16 * (l->wup.lost - ulost0) < gap + 32);
+    } else {
+        /* whole data frames, within the bound (672 bits, 14 frames, were) */
+        printf("  V.92: %" PRId64 " data frames of %d bits lost, the bound %d (dly %d)\n", gap / K, (int)K,
+               (int)(dly / V92_DFRAME + 3), (int)dly);
+        CHECK(gap > 0 && gap % K == 0);
+        CHECK(gap / K <= dly / V92_DFRAME + 3);
+    }
+    CHECK_EQ_I(l->wup.locked, 1);
+}
+
 /* three retrains in a minute, the fourth refused; one never answered */
 static void limits(int v92)
 {
@@ -273,15 +345,13 @@ static void limits(int v92)
     CHECK_EQ_I(orig_retrains(&l->org), 3);
     /* past the limit the receiver lost is a cleardown (9.7 / 9.11), not a retrain */
     t0 = l->k;
-    memset(l->org.v90.rx.h, 0, sizeof l->org.v90.rx.h);
-    memset(l->org.v90.rx.f, 0, sizeof l->org.v90.rx.f);
-    memset(l->org.v90.rx.b, 0, sizeof l->org.v90.rx.b);
+    wipe(l);
     while (l->k < t0 + MS(10000) && l->org.phase != ORIG_FAILED) vl_tick(l);
     run_ms(l, 500);
     printf("  lost past the limit: end %d after %d ms, answerer cleared %d, retrains %d\n", l->org.end,
-           (int)((l->k - t0) / 8) - 500, l->ans.cleared, orig_retrains(&l->org));
+           (int)((l->k - t0) / 8) - 500, cleared_of(&l->ans), orig_retrains(&l->org));
     CHECK_EQ_I(l->org.end, ORIG_END_RETRAIN);
-    CHECK_EQ_I(l->ans.cleared, 1);
+    CHECK_EQ_I(answer_end(&l->ans), ANS_END_CLEARDOWN_FAR);
     CHECK_EQ_I(orig_retrains(&l->org), 3);
 
     CHECK(connect(l, v92, 95 + v92));
@@ -303,6 +373,10 @@ int main(void)
     cases(0);
 #ifndef TEST_SHORT
     cases(1);
+#endif
+    words_reneg(0);
+#ifndef TEST_SHORT
+    words_reneg(1);
 #endif
     limits(0);
 #ifndef TEST_SHORT

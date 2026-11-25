@@ -70,7 +70,14 @@ enum { P2N_OK = 0,
        P2N_ERR_INFO0,       /* no INFO0c / Tone B */
        P2N_ERR_REV,         /* the Tone B phase reversals never came */
        P2N_ERR_INFO1C,      /* no INFO1c, retrains used up */
-       P2N_ERR_NO_RATE };   /* INFO1c leaves no symbol rate we implement */
+       P2N_ERR_NO_RATE,     /* INFO1c leaves no symbol rate we implement */
+       P2N_ERR_TIME };      /* the exchange ran past P2N_EXCHANGE_MS */
+
+/* A caller that repeats INFO0c keeps taking WAIT_BREV1 back to INFO0, which
+ * starts that state's own limit again: the exchange as a whole has this
+ * long from p2ans_init, p2ans_init_retrain or a counted restart (restarts,
+ * retrains). Far above a normal Phase 2 (3 to 5 s). */
+#define P2N_EXCHANGE_MS 20000
 
 #define P2N_MAX_RETRAINS 2      /* retrains p2ans begins by itself before giving up */
 
@@ -79,6 +86,7 @@ typedef struct {
     p2ans_state state;
     int         error;
     int32_t     now, t;             /* sample clock; samples in the current state */
+    int32_t     t_x;                /* samples since the exchange began (P2N_EXCHANGE_MS) */
     dpsktx_t    tx; dpskrx_t rx;
     probetx_t   ptx; proberx_t prx;
     int         probing;            /* 0 none, 1 L1, 2 L2 */

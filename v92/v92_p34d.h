@@ -23,16 +23,19 @@
  * silence option, and cleardown (9.11) by either side. An upstream signal
  * that stays away for half a second ends the module (V92D_ERR_CARRIER), as
  * in ../modem/p34d: the Recommendation has no procedure for a caller that
- * is gone.
+ * is gone. The signal is looked for in the line as well as after the echo
+ * canceller, and a line that brings only the idle code has no Ru in it,
+ * whatever the canceller gives out (it gives out its estimate of our echo).
  * Not here: quick connect, modem-on-hold, fast parameter exchange (9.9).
  */
 #ifndef V90D_V92_P34D_H
 #define V90D_V92_P34D_H
 #include <stdint.h>
-#include "ec.h"
-#include "ecdly.h"
-#include "tonedet.h"
-#include "v90_tx.h"
+#include "../modem/seqhunt.h"
+#include "../modem/ec.h"
+#include "../modem/ecdly.h"
+#include "../modem/tonedet.h"
+#include "../v90/v90_tx.h"
 #include "v92_rx.h"
 #include "v92_design.h"
 #include "v92_dec.h"
@@ -103,14 +106,16 @@ enum {
 #define V92D_MAX_ECHO_DELAY 1919 /* the longest echo delay that can be given */
 #define V92D_FBUF  2752     /* longest received sequence (Ja) plus a next frame sync */
 #define V92D_B1U_LEAD 2     /* data frames of Ki = 0 passed over before B1u at most (reading 57) */
+#define V92D_UP_EST 144     /* B1u symbols the caller's gain is measured on (within the
+                               255 samples the training receiver keeps) */
 #define V92D_SBUF  (324 + 17 * (V92_DSN_LZ2 + V92_DSN_LP1 + V92_MAX_LC) + 72)  /* our CPd, bits */
 
 typedef struct {
     v92d_cfg   cfg;
     v92d_state state;
     int        error;
-    int32_t    now, t;              /* sample clock; samples in this state */
-    int32_t    t_trn1d;
+    uint32_t   now, t;              /* sample clock; samples in this state (modem/clock.h) */
+    uint32_t   t_trn1d;
     /* transmit */
     v90tx_t    tx;
     v90_jd_t   jd;
@@ -125,6 +130,9 @@ typedef struct {
     int64_t    et_pw;               /* ... and the smoothed power of its two inputs */
     ecdly_t    ecd;                 /* what we sent; ecd.delay is the echo delay in use, given or measured */
     int32_t    base_q4;             /* data mode: the baseline under the caller's symbols, Q4 */
+    int32_t    up_scale;            /* data mode: what the received samples are multiplied by
+                                       before the decoder, Q14: 1 / the caller's gain over
+                                       the design, measured on B1u; 0 = not yet (1) */
     int64_t    nz_acc, nq_acc, ne_acc; int32_t nz_n;    /* TRN1d: residual, quantiser, echo power */
     uint32_t   noise, q_quiet, echo_rms;
     uint32_t   q_trn;               /* smoothed quantiser variance while the caller trains */
@@ -133,7 +141,9 @@ typedef struct {
     int32_t    rev_at;              /* sample of the last reversal, 0 = none */
     int        revs;
     v92_trn_t  trn;
-    int32_t    trn_at;              /* sample at which the training receiver starts, 0 = not armed */
+    uint32_t   trn_at;              /* sample at which the training receiver starts, 0 = not armed
+                                       (one that falls on 0 at the clock's wrap, every 2^32 samples,
+                                       is not armed: that start-up fails on its limit) */
     int        trn_on;              /* 1: v92_trn_tick, 2: data mode (v92_trn_store) */
     int32_t    peak1;               /* v92_trn_peak() of the first TRN1u */
     v92_sgn_t  sgn;                 /* two-level sequences */
@@ -141,13 +151,14 @@ typedef struct {
     int        four;                /* the caller is sending 4-level symbols */
     int32_t    m_trn2u;             /* number of the first TRN2u symbol */
     uint8_t    fbuf[V92D_FBUF];
-    int        fn, ones, zeros;     /* bits collected (0 = hunting), runs */
+    int        fn, zeros; seqhunt_t sh;    /* bits collected (0 = hunting), runs */
     int        want;                /* which sequences: 0 Ja, 1 CPt, 2 SUVu / CPu */
     int        after_seq;           /* bits since a sequence was completed, -1 = none yet */
     v92_ja_t   ja;
     v92_cpu_t  cpx;                 /* CPt, later CPu */
     int        got_ja, got_cpt, got_e1u, got_suvu, got_cpu, got_ack, got_e2u;
-    int        ri_sent, cpd_sent, cpd_repeat; int32_t t_cpd;
+    int        ri_sent, cpd_sent; uint32_t t_cpd;
+    uint32_t   t_clear;             /* sample our cleardown began */
     /* design */
     v92_dsn_t  dsn;
     int        dsn_state;           /* 0 idle, 1 running, 2 done */
@@ -163,7 +174,9 @@ typedef struct {
     int        b1_zero, b1_leads;   /* ... those with Ki = 0; data frames passed over before B1u */
     int        tx_ready, rx_ready;
     int        down_rate, up_rate;  /* bit/s */
-    int        in_reneg, reneg_ours, clearing;
+    int        in_reneg, clearing;
+    int        reneg_ours;          /* 0 the caller's, 1 ours, 2 ours to drop the upstream rate
+                                       (its design one step, 4000 bit/s, below up_rate) */
     int        renegs;              /* renegotiations completed */
     int        retrain_ours;
     int        up_floor;            /* the retrain is ours because the upstream did not hold
@@ -171,10 +184,15 @@ typedef struct {
     tonedet_t  tone_a;              /* Tone A (2400 Hz) watch */
     /* line quality in data mode */
     uint32_t   q_limit; int32_t q_bad; uint32_t bad_seen;
-    int        rate_drops;
+    int        rate_drops;          /* our rate drops so far (a count) */
     /* loss of the upstream signal in data mode, 10 ms blocks */
     uint32_t   sig_ms;              /* mean square of the samples that carried B1u */
-    int64_t    cd_acc; int cd_n, cd_quiet;
+    int64_t    cd_acc;              /* sum of squares after the canceller (B1u: its samples) */
+    uint32_t   cd_line;             /* ... of the line itself, each square >> CD_LINE_SHIFT */
+    int16_t    cd_n;                /* samples in cd_acc */
+    uint8_t    cd_quiet;            /* blocks in a row without the caller's signal */
+    uint8_t    cd_idle;             /* samples in a row (to 255) in which the line brought the
+                                       idle code: no far end, whatever the canceller gives out */
 } v92d_t;
 
 /* Returns 0, or -1 if the configuration cannot work (state is V92D_FAILED):
@@ -185,13 +203,23 @@ uint8_t v92d_tick(v92d_t *p, int16_t rx);
  * V92D_DATA and comes back to it when both directions carry data again.
  * Returns 0, or -1 when not in data mode. */
 int     v92d_renegotiate(v92d_t *p);
-/* From data mode: clear down (9.11): a rate renegotiation whose CPd carries
- * drn = 0, then silence. Ends in V92D_FAILED with V92D_ERR_HANGUP. Returns
+/* From data mode: clear down (9.11): a rate renegotiation (9.8.1.1) whose
+ * CPd, sent on the caller's SUVu, carries drn = 0; over once the caller has
+ * acknowledged it (where 9.6.1.1.4 would send Ed), else after 3.5 s; then
+ * silence. Ends in V92D_FAILED with V92D_ERR_HANGUP whatever happens. Returns
  * 0, or -1 when not in data mode. */
 int     v92d_cleardown(v92d_t *p);
 /* From data mode or a rate renegotiation: retrain (9.7.1.1). The state goes
  * to V92D_RETRAIN. Returns 0, or -1 when the call is not that far. */
 int     v92d_retrain(v92d_t *p);
+
+/* The caller's gain in data mode (v92_p34d.c, "the caller's gain"): from
+ * the V92D_UP_EST samples of t from k0 on (the first symbols of B1u, data
+ * frame interval 0 at k0), sliced on m, with eu2 the mean square of u(n)
+ * the design expects (linear^2), what the samples are to be multiplied by
+ * before the decoder, Q14: 16384 when they are taken as they are. Used by
+ * v92d_tick; open for the tests. */
+int32_t v92d_up_scale(const v92_map_t *m, const v92_trn_t *t, int32_t k0, uint32_t eu2);
 
 #ifdef P34D_TRACE
 /* Debug hook for a replay tool (../live/replay.c), called once per sample:

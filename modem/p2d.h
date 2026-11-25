@@ -33,13 +33,25 @@ typedef enum {
     P2D_REPLY3,         /* timed tone B reversal, 10 ms more */
     P2D_L1, P2D_L2,     /* sending the probing signals; L2 until tone A is heard */
     P2D_INFO1D,
-    P2D_WAIT_INFO1A,
+    P2D_WAIT_INFO1A,    /* silent; INFO1a, or INFO0a again (9.2.1.2.1: back to INFO0) */
     P2D_DONE,
     P2D_FAILED
 } p2d_state;
 
 enum { P2D_OK = 0, P2D_ERR_INFO0 = 1, P2D_ERR_REV, P2D_ERR_TONE_A, P2D_ERR_INFO1A,
-       P2D_ERR_PCM_UP };    /* INFO1a selects PCM upstream where Table 18/V.92 "shall not" be used */
+       P2D_ERR_PCM_UP,      /* INFO1a selects PCM upstream where Table 18/V.92 "shall not" be used */
+       P2D_ERR_TIME };      /* Phase 2 ran past P2D_EXCHANGE_MS */
+
+/* Bounds on a caller that keeps Phase 2 going without end: INFO0a repeated
+ * (each one takes WAIT_REV1 back to INFO0), or Tone A reversed once but
+ * never twice (WAIT_REV2 -> RECOVER -> WAIT_REV1 ...). Far above a normal
+ * Phase 2 (3 to 5 s). */
+#define P2D_EXCHANGE_MS 20000   /* from p2d_init / p2d_init_retrain to P2D_DONE */
+#define P2D_MAX_RECOVER 4       /* entries into P2D_RECOVER (9.2.1.2.3); the next one fails */
+/* INFO0a again once the INFO0 exchange is behind us (9.2.1.2.1): from
+ * WAIT_REV2 or RECOVER, or after our INFO1d (a caller that has lost it and
+ * starts Phase 2 over); each takes us back to INFO0 with INFO0d, bit 28 set */
+#define P2D_MAX_RESTART 2       /* such returns to INFO0; a later INFO0a is ignored */
 
 /* how the call goes on after P2D_DONE (p2d_t.mode) */
 enum { P2D_MODE_V34 = 0,    /* INFO1a of Table 11/V.90: V.34 (V.90 9.2.1.1.8) */
@@ -51,11 +63,14 @@ typedef struct {
     p2d_state state;
     int       error;
     int32_t   now, t;               /* sample clock; samples in the current state */
+    int32_t   t_x;                  /* samples in this Phase 2 (P2D_EXCHANGE_MS) */
+    int       n_recover;            /* entries into P2D_RECOVER (P2D_MAX_RECOVER) */
     int32_t   level;
     dpsktx_t  tx; dpskrx_t rx;
     probetx_t ptx; proberx_t prx;
     int       probing;              /* 0 none, 1 L1, 2 L2 */
-    info0_t   info0a; int got0a, sent_ack, resend;
+    info0_t   info0a; int got0a, resend;
+    int       n_restart;            /* returns to INFO0 on INFO0a again (P2D_MAX_RESTART) */
     int       n_info0d;             /* INFO0d sequences sent */
     info1d_t  info1d;
     info1a_t  info1a;

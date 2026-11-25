@@ -1,0 +1,4 @@
+  frame / unframe: 78 of 78 rate x pad x mask, 2000 frames each
+  shaping: 2416 symbols, 0 with the wrong sign, 0 frames whose shaping signs carried data
+  oracle: 2496 of 2496 rate x pad x mask equal to D-Modem's; frames 0, 1, 599 at mask 0: 0 of 39 differ
+k56enc: 98 checks, 0 failures

@@ -1,0 +1,4 @@
+  answer_v90: Phase 2 from 2.91 s, done at 4.87 s (peer 4.88 s), rtd 3
+  answer_v90: full call connected at 7.64 s: 50666 bit/s down, 28800 bit/s up; down 424156 bits 0 bad, up 240696 bits 0 bad
+  answer_v90: a click 2 s into data mode: up 643896 bits 76 bad, 298368 bits 0 bad from 10 s after it; end 0
+answer_v90: 38 checks, 0 failures

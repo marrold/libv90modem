@@ -1,0 +1,8 @@
+  v22rx clean 2400: mse 2
+  v22rx equaliser: centre 0.842, sum of other taps 0.276
+  v22rx +7 Hz: loop freq 50124456
+  v22rx +200 ppm: timing integrator 1761
+  v22rx ISI: mse 2
+  v22rx combined 2400: 0 errors / 11400 bits, mse 12
+  v22rx 1200 @ 12 dB SNR: 0 errors / 7780 bits
+v22rx: 29 checks, 0 failures

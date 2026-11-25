@@ -1,0 +1,4 @@
+test_v34up: the shared V.34 upstream receiver
+  v34_nl_decode / v34_nl_encode, nonlinear 0, 4096 x 4096 points: 0 differ
+  scaling in and out, 23 rate configurations x 200000 points: 0 differ
+test_v34up: 5 checks, 0 failures

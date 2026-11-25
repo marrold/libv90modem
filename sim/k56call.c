@@ -614,6 +614,7 @@ static void tx_symbol(k56call_t *c, int32_t *re, int32_t *im)
         return;
     case SIG_RTRN:
         pt = v34_tmod_trn(&c->tmod);
+        if (c->cfg.retrain_in_reneg && !c->retrains && c->sn == RN_TRN / 2) c->rt_due = 1;   /* it gives up */
         if (++c->sn == RN_TRN) { build_mp(c, 0); go_sig(c, SIG_MP); }
         break;
     case SIG_PP:
@@ -661,6 +662,10 @@ static void tx_symbol(k56call_t *c, int32_t *re, int32_t *im)
                 if (!c->got_our_mpa) {          /* early E: what our MP' will ask for */
                     vc.data_rate = 31200;     /* the client's best at 3200 baud */
                     vc.trellis = V34_TRELLIS_16; vc.expanded = 0; vc.nonlinear = 0;
+                }
+                if (c->cfg.heavy_up == K56C_HEAVY_ALWAYS || (c->cfg.heavy_up == K56C_HEAVY_FIRST && !c->renegs)) {
+                    /* what our MP asked is ignored */
+                    vc.trellis = V34_TRELLIS_64; vc.expanded = 1; vc.nonlinear = 1;
                 }
                 if (v34_params_init(&c->tpar, &vc) == 0) {
                     c->up_rate = vc.data_rate;

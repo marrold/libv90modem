@@ -1,9 +1,10 @@
-#ifdef V42_XID_TRACE
+#ifdef P34D_XID_TRACE
 #include <stdio.h>
 #endif
 /* V.90 Phases 3 and 4, digital modem. See p34d.h. */
 #include <string.h>
 #include "p34d.h"
+#include "clock.h"
 #include "probe.h"
 #include "../v90/v90_pcm.h"
 
@@ -28,7 +29,6 @@
 #define T_S_AFTER_JD   5100     /* 9.3.1.5, from the start of TRN1d, plus a round trip */
 #define T_DIL_MS       6000     /* 9.3.2.10: 5000 ms from the first S-bar */
 #define T_PHASE4_MS    15000    /* 9.4.1: B1 within 15 s (+ 5 round trips) */
-#define CD_LOSS_SYMS   1600     /* about half a second without signal in data mode */
 
 /* rate renegotiation (9.6) */
 #define RD_UNITS       64       /* Rd for 384 T (units completed when Rd-bar is asked for) */
@@ -37,16 +37,9 @@
 #define T_RENEG_MS     6000     /* 9.6.1: E within 5000 ms + 2 round trips of Rd-bar */
 #define CLEAR_MPS      4        /* MP sequences with drn = 0 before we go silent */
 
-/* is the line still good enough for the upstream rate? (rx.mse in data mode
- * is the error power over the mean signal power, Q16) */
-#define Q_SNR0_DB10    90       /* the rule of TRN2d: 9 dB + 3 dB per bit per symbol ... */
-#define Q_SLACK_DB10   45       /* ... is missed by this much. The rule keeps about 3 dB in
-                                   hand, and in data mode the error is some dB above what
-                                   TRN2d promised (our own louder signal's echo through
-                                   the codec): a rate that works must not be given up. */
+/* is the line still good enough for the upstream rate? (v34up.h: TRN2d's
+ * rule, the slack, the watches) */
 #define Q_MARGIN_DB10  30       /* wrong decisions hide noise: allow for it in the new rate */
-#define Q_BAD_SYMS     3200     /* for about a second */
-#define Q_DEAD_MSE     (65536 / 8)  /* -9 dB: nothing is being received */
 
 #ifdef P34D_TRACE
 void p34d_trace(const p34d_t *p, int16_t rxs, int16_t x);
@@ -58,14 +51,14 @@ enum { RX_IDLE, RX_KNOWN, RX_SEQ, RX_HOLD, RX_SRES, RX_DATA };
 static void fail(p34d_t *p, int err)
 {
     p->state = P34_FAILED; p->error = err; p->t = 0;
-    p->tx_ready = p->rx_ready = 0;
+    p->tx_ready = p->up.rx_ready = 0;
     (void)v90tx_select(&p->tx, V90TX_SILENCE);
 }
 
 static void enter(p34d_t *p, p34d_state s)
 {
-#ifdef V42_XID_TRACE
-    if (p->in_reneg) fprintf(stderr, "P34 state %d left after %d samples for %d\n", (int)p->state, (int)p->t, (int)s);
+#ifdef P34D_XID_TRACE
+    if (p->in_reneg) fprintf(stderr, "P34 state %d left after %lu samples for %d\n", (int)p->state, (unsigned long)p->t, (int)s);
 #endif
     p->state = s; p->t = 0;
 }
@@ -80,9 +73,9 @@ int p34d_init(p34d_t *p, const p34d_cfg *cfg)
     ec_init(&p->ec); p->ec_mu = -1;
     tonedet_init(&p->tone_a, TONEDET_2400);
     sdet_init(&p->sdet, cfg->sym_rate, cfg->car_num, cfg->car_den);
-    qamrx_init(&p->rx, cfg->sym_rate, cfg->car_num, cfg->car_den);
-    v34trn_init(&p->ref, V34T_GPA);
-    v34_tdem_init(&p->tdem, V34_GPA, 4);
+    qamrx_init(&p->up.rx, cfg->sym_rate, cfg->car_num, cfg->car_den);
+    v34trn_init(&p->up.ref, V34T_GPA);
+    v34_tdem_init(&p->up.tdem, V34_GPA, 4);
     p->rxmode = RX_IDLE;
     p->b1_left = -1;
 
@@ -109,7 +102,7 @@ int p34d_init(p34d_t *p, const p34d_cfg *cfg)
 
 static void seq_reset(p34d_t *p, int want_cp)
 {
-    p->fn = 0; p->ones = 0; p->want_cp = want_cp;
+    p->fn = 0; p->sh.ones = 0; p->want_cp = want_cp;
 }
 
 /* highest upstream rate both sides enable, not above drn * 2400; 0 if none */
@@ -139,7 +132,7 @@ static void on_cp(p34d_t *p)
         if (r != 0) { fail(p, P34_ERR_CPT); return; }
         p->got_cpt = 1;
         /* what the equaliser made of the 4-point CPt: mse is |e|^2 / |d|^2 in Q16 */
-        p->snr_db10 = probe_db10(65536, p->rx.mse > 0 ? p->rx.mse : 1);
+        p->snr_db10 = probe_db10(65536, p->up.rx.mse > 0 ? p->up.rx.mse : 1);
         return;
     }
     if (!p->got_cp) {
@@ -181,17 +174,17 @@ static void seq_bit(p34d_t *p, int bit)
     p34d_trace_bit(p, bit);
 #endif
     if (p->fn > 0 && p->fn < P34_FBUF) p->fbuf[p->fn++] = (uint8_t)bit;
+    int sync = seqhunt_bit(&p->sh, bit);
     if (bit) {
-        p->ones++;
         /* E: 20 ones. Inside a sequence a start bit breaks every run at 17;
          * SCR (all ones) only comes before the first CP (9.4.2.2). */
-        if (p->want_cp && p->got_cp && p->ones == 20 && !p->got_e) {
+        if (p->want_cp && p->got_cp && p->sh.ones == 20 && !p->got_e) {
             p->got_e = 1;
             upstream_start(p);
         }
         return;
     }
-    if (p->ones >= 17) {
+    if (sync) {
         /* frame sync and its start bit. What was collected before may be a
          * complete sequence that was not tried yet. */
         if (p->fn > 18) { p->fn -= 18; seq_try(p); if (p->state == P34_FAILED || p->rxmode != RX_SEQ) return; }
@@ -199,7 +192,6 @@ static void seq_bit(p34d_t *p, int bit)
     } else if (p->fn > 0 && (p->fn & 15) == 0) {
         seq_try(p);
     }
-    p->ones = 0;
     if (p->fn >= P34_FBUF) p->fn = 0;
 }
 
@@ -208,7 +200,7 @@ static void seq_bit(p34d_t *p, int bit)
 static void put_data(void *user, int bit)
 {
     p34d_t *p = (p34d_t *)user;
-    if (p->rx_ready && p->cfg.putbit) p->cfg.putbit(p->cfg.user, bit);
+    if (p->up.rx_ready && p->cfg.putbit) p->cfg.putbit(p->cfg.user, bit);
 }
 
 /* E has just ended: B1 starts with the next symbol */
@@ -220,21 +212,10 @@ static void upstream_start(p34d_t *p)
     if (!rate) { fail(p, P34_ERR_RATE); return; }
     c.symbol_rate = (uint16_t)p->cfg.sym_rate; c.data_rate = (uint16_t)rate;
     c.trellis = V34_TRELLIS_16; c.expanded = 0; c.nonlinear = 0; c.scrambler = V34_GPA;
-    if (v34_params_init(&p->vpar, &c) != 0) { fail(p, P34_ERR_RATE); return; }
-    v34_rx_init(&p->vrx, &p->vpar, put_data, p);
-    p->vgain = (int32_t)v34_gain_q14(p->vpar.energy_tx_q8);
+    if (v34up_data_begin(&p->up, &c, put_data, p) != 0) { fail(p, P34_ERR_RATE); return; }
     p->up_rate = rate;
-    {
-        /* the error this rate tolerates: SNR = 9 dB + 3 dB per bit per symbol,
-         * less the slack; 3 dB is a factor of two */
-        int32_t d = Q_SNR0_DB10 + 30 * rate / p->cfg.sym_rate - Q_SLACK_DB10;
-        p->mse_limit = 65536 >> (d / 30);
-        p->mse_limit -= p->mse_limit * (d % 30) / 60;
-        p->q_bad = p->q_dead = 0;
-    }
     p->rxmode = RX_DATA;
     p->b1_left = 0;
-    p->quiet = 0;
     sdet_init(&p->sdet, p->cfg.sym_rate, p->cfg.car_num, p->cfg.car_den);  /* watches for S from here on */
 }
 
@@ -242,7 +223,7 @@ static void upstream_start(p34d_t *p)
 
 static void retrain(p34d_t *p, int ours)
 {
-    p->tx_ready = p->rx_ready = 0;
+    p->tx_ready = p->up.rx_ready = 0;
     p->retrain_ours = ours;
     (void)v90tx_select(&p->tx, V90TX_SILENCE);
     enter(p, P34_RETRAIN);
@@ -264,10 +245,10 @@ static void start_rd(p34d_t *p)
  * is nothing lower. */
 static void rate_down(p34d_t *p)
 {
-    int32_t snr = probe_db10(65536, p->rx.mse > 0 ? p->rx.mse : 1) - Q_MARGIN_DB10;
-    int32_t b10 = (snr - Q_SNR0_DB10) * 10 / 30;
+    int32_t snr = probe_db10(65536, p->up.rx.mse > 0 ? p->up.rx.mse : 1) - Q_MARGIN_DB10;
+    int32_t b10 = (snr - V34UP_SNR0_DB10) * 10 / 30;
     int drn = (int)(((int64_t)p->cfg.sym_rate * b10) / 10) / 2400, now = p->up_rate / 2400;
-#ifdef V42_XID_TRACE
+#ifdef P34D_XID_TRACE
     fprintf(stderr, "P34 rate_down: snr %d, now %d, wanted %d\n", (int)snr, now, drn);
 #endif
     if (drn >= now) drn = now - 1;
@@ -277,13 +258,18 @@ static void rate_down(p34d_t *p)
     start_rd(p);
 }
 
-/* S in data mode (9.6.1.2.1): stop delivering data, follow S to its S-bar */
+/* S in data mode (9.6.1.2.1): stop delivering data, follow S to its S-bar.
+ * What the caller sent before S is data, every whole mapping frame of it:
+ * the decoder's decision delay still holds some (V34_VIT_DEPTH 4D symbols,
+ * S among the newest), and they go on now. Called on each sample from S
+ * heard on, until S is followed (an S too new in the decoder is waited
+ * for, SDET_RUN_WAIT) */
 static void s_heard(p34d_t *p)
 {
-#ifdef V42_XID_TRACE
-    fprintf(stderr, "P34 S heard in data mode (state %d), mse %d\n", (int)p->state, (int)p->rx.mse);
+    if (!v34up_s_flush(&p->up, &p->sdet)) return;
+#ifdef P34D_XID_TRACE
+    fprintf(stderr, "P34 S heard in data mode (state %d), mse %d\n", (int)p->state, (int)p->up.rx.mse);
 #endif
-    p->rx_ready = 0;
     p->in_reneg = 1;
     sres_resume(&p->sres);
     p->rxmode = RX_SRES;
@@ -294,26 +280,16 @@ static void s_heard(p34d_t *p)
 
 static void rx_symbol(p34d_t *p)
 {
-    qamrx_t *r = &p->rx;
-    int32_t dr, di;
-    int n = r->nsym - 1;
-
-    p->zpw += (((int64_t)r->zr * r->zr + (int64_t)r->zi * r->zi) - p->zpw) / 16;
+    qamrx_t *r = &p->up.rx;
 
     switch (p->rxmode) {
     case RX_KNOWN:
-        if (n < V34_PP_LEN) v34_pp(n, &dr, &di); else v34trn_next(&p->ref, &dr, &di);
-        qamrx_update(r, dr, di, QRX_EQ | QRX_CARRIER | (n > 300 ? QRX_TIMING : 0), n < 600 ? 10 : 11);
-        if (n >= V34_PP_LEN + TRN_KNOWN - 1) { p->rxmode = RX_SEQ; seq_reset(p, 0); }
+        if (v34up_known(&p->up, TRN_KNOWN)) { p->rxmode = RX_SEQ; seq_reset(p, 0); }
         break;
 
     case RX_SEQ: {
         /* 4-point decisions; TRN, Ja, SCR, CPt, CP and E all look like this */
-        v34_pt_t pt; unsigned bits;
-        dr = r->zr < 0 ? -QRX_REF : QRX_REF; di = r->zi < 0 ? -QRX_REF : QRX_REF;
-        qamrx_update(r, dr, di, QRX_EQ | QRX_CARRIER | QRX_TIMING, 12);
-        pt.re = (int16_t)(dr < 0 ? -V34_ONE : V34_ONE); pt.im = (int16_t)(di < 0 ? -V34_ONE : V34_ONE);
-        bits = v34_tdem_put(&p->tdem, pt);
+        unsigned bits = v34up_dec4(&p->up, QRX_EQ | QRX_CARRIER | QRX_TIMING);
         seq_bit(p, (int)(bits & 1));
         if (p->rxmode == RX_SEQ) seq_bit(p, (int)((bits >> 1) & 1));
         break;
@@ -336,7 +312,7 @@ static void rx_symbol(p34d_t *p)
             if (p->dil.n == 0 || p->s_events >= 2) {
                 /* Phase 3 is over; CPt follows with scrambler and differential
                  * encoder started from zero (8.5.2) */
-                v34_tdem_init(&p->tdem, V34_GPA, 4);
+                v34_tdem_init(&p->up.tdem, V34_GPA, 4);
                 seq_reset(p, 1);
                 p->rxmode = RX_SEQ;
             } else {
@@ -345,36 +321,16 @@ static void rx_symbol(p34d_t *p)
         }
         break;
 
-    case RX_DATA: {
-        v34_pt_t in, tent;
-        int64_t g = p->vgain;
-        int32_t vr = (int32_t)(((int64_t)r->zr * 512) / g), vi = (int32_t)(((int64_t)r->zi * 512) / g);
-        if (vr > 32767) vr = 32767;
-        if (vr < -32768) vr = -32768;
-        if (vi > 32767) vi = 32767;
-        if (vi < -32768) vi = -32768;
-        in.re = (int16_t)vr; in.im = (int16_t)vi;
-        v34_rx_put(&p->vrx, in, &tent);
-        dr = (int32_t)(((int64_t)tent.re * g) / 512); di = (int32_t)(((int64_t)tent.im * g) / 512);
-        qamrx_update(r, dr, di, QRX_EQ | QRX_CARRIER | QRX_TIMING | QRX_DENSE, 13);
-        if (!p->rx_ready && p->vrx.b1_bits >= p->vpar.map.N) {
-            if (p->vrx.b1_errors * 8 > p->vrx.b1_bits) { fail(p, P34_ERR_B1); return; }
-            p->rx_ready = 1;
-        }
-        if (p->rx_ready && !p->in_reneg) {
-            if (r->mse > Q_DEAD_MSE) { if (++p->q_dead > Q_BAD_SYMS) { retrain(p, 1); return; } }
-            else p->q_dead = 0;
-            if (r->mse > p->mse_limit) { if (++p->q_bad > Q_BAD_SYMS) { p->q_bad = 0; rate_down(p); return; } }
-            else p->q_bad = 0;
-        }
-        /* loss of the upstream signal */
-        if (p->zpw < (int64_t)QRX_REF * QRX_REF / 8) {
-            if (++p->quiet > CD_LOSS_SYMS) fail(p, P34_ERR_CARRIER);
-        } else {
-            p->quiet = 0;
+    case RX_DATA:
+        /* the watches are off during a renegotiation */
+        switch (v34up_data(&p->up, !p->in_reneg, !p->in_reneg)) {
+        case V34UP_B1_BAD: fail(p, P34_ERR_B1); break;
+        case V34UP_DEAD:   retrain(p, 1); break;
+        case V34UP_SLOW:   rate_down(p); break;
+        case V34UP_LOST:   fail(p, P34_ERR_CARRIER); break;
+        default: break;
         }
         break;
-    }
 
     default:    /* RX_IDLE, RX_HOLD: keep the grid running, change nothing */
         qamrx_update(r, r->zr, r->zi, 0, 12);
@@ -404,7 +360,7 @@ uint8_t p34d_tick(p34d_t *p, int16_t rxs)
 
     /* receiver */
     if (p->state == P34_WAIT_S) {
-        (void)qamrx_tick(&p->rx, x);            /* input level for the AGC */
+        (void)qamrx_tick(&p->up.rx, x);         /* input level for the AGC */
         if (sdet_tick(&p->sdet, x)) {
             if (p->cfg.md_len > 0 && p->s_events == 0) {
                 p->s_events = 1;                /* (reused as "MD comes next" here) */
@@ -412,20 +368,19 @@ uint8_t p34d_tick(p34d_t *p, int16_t rxs)
             } else {
                 /* PP(0) is centred 16.5 symbols after the S / S-bar boundary,
                  * and the event came SDET_DELAY samples after it */
-                int32_t d = (int32_t)(((int64_t)132000 * 256) / p->cfg.sym_rate) - (SDET_DELAY(&p->sdet) + 1) * 256;
-                qamrx_sync(&p->rx, d);
+                v34up_sync_pp(&p->up, &p->sdet, p->cfg.sym_rate);
                 p->s_events = 0;
                 p->rxmode = RX_KNOWN;
                 enter(p, P34_TRAIN);
             }
-        } else if (p->t > MS(T_FIRST_S_MS) + MS(p->cfg.md_len * 35)) {
+        } else if ((int64_t)p->t > MS(T_FIRST_S_MS) + MS(p->cfg.md_len * 35)) {
             fail(p, P34_ERR_NO_S);
         }
         return octet;
     }
     if (p->state == P34_MD) {
-        (void)qamrx_tick(&p->rx, x);
-        if (p->t >= MS(p->cfg.md_len * 35)) {
+        (void)qamrx_tick(&p->up.rx, x);
+        if ((int64_t)p->t >= MS(p->cfg.md_len * 35)) {
             sdet_init(&p->sdet, p->cfg.sym_rate, p->cfg.car_num, p->cfg.car_den);
             enter(p, P34_WAIT_S);
         }
@@ -433,7 +388,7 @@ uint8_t p34d_tick(p34d_t *p, int16_t rxs)
     }
     if (p->state == P34_FAILED || p->state == P34_RETRAIN) return octet;
 
-    if (qamrx_tick(&p->rx, x)) rx_symbol(p);
+    if (v34up_tick(&p->up, x, p->rxmode == RX_DATA)) rx_symbol(p);
     if (p->state == P34_FAILED) return octet;
     if (p->rxmode == RX_DATA) {
         (void)sdet_tick(&p->sdet, x);
@@ -461,17 +416,11 @@ uint8_t p34d_tick(p34d_t *p, int16_t rxs)
             int32_t from = p->cfg.rtd + MS(EC_GUARD_MS);
             int32_t len = TRN1D_SYMS;
             if (n == 1) p->t_trn1d = p->now;
-            if (p->cfg.echo_delay < 0) {
-                /* first find out how late the echo is (ecdly.h), on the change
-                 * from sample to sample */
-                if (ecdly_measure(&p->ecd, (int32_t)n - from, rxs, 1)) ec_init(&p->ec);
-                from += ECDLY_SAMPLES;
-                len += from;
-            }
-            /* the caller is silent now: learn the echo of TRN1d */
-            if ((int32_t)n < from) p->ec_mu = -1;
-            else if ((int32_t)n < from + EC_FAST) p->ec_mu = 0;
-            else p->ec_mu = 3;
+            /* the caller is silent now: learn the echo of TRN1d; first find
+             * out how late it is (ecdly.h) when not known, on the change from
+             * sample to sample */
+            p->ec_mu = v34up_ec_schedule(&p->ec, &p->ecd, p->cfg.echo_delay < 0, 1, rxs, (int32_t)n, &from, EC_FAST, 0);
+            if (p->cfg.echo_delay < 0) len += from;
             if ((int32_t)n >= len) {
                 p->ec_mu = -1;
                 (void)v90tx_select(&p->tx, V90TX_JD);
@@ -489,7 +438,7 @@ uint8_t p34d_tick(p34d_t *p, int16_t rxs)
              * none was asked for) follows by itself */
             (void)v90tx_select(&p->tx, V90TX_JD_PRIME);
             enter(p, P34_DIL);
-        } else if (p->now - p->t_trn1d > MS(T_S_AFTER_JD) + p->cfg.rtd) {
+        } else if (clk_diff(p->now, p->t_trn1d) > MS(T_S_AFTER_JD) + p->cfg.rtd) {
             fail(p, P34_ERR_NO_S2);
         }
         break;
@@ -521,7 +470,7 @@ uint8_t p34d_tick(p34d_t *p, int16_t rxs)
             int32_t b10;
             /* measured now, at the end of TRN2d, not when CPt arrived: the
              * loops have had 0.3 s more to settle after the re-acquisition */
-            p->snr_db10 = probe_db10(65536, p->rx.mse > 0 ? p->rx.mse : 1);
+            p->snr_db10 = probe_db10(65536, p->up.rx.mse > 0 ? p->up.rx.mse : 1);
             b10 = (p->snr_db10 - 90) * 10 / 30;                         /* bits per symbol x 10 */
             int32_t rate = (int32_t)(((int64_t)p->cfg.sym_rate * b10) / 10);
             int drn = rate / 2400;
@@ -566,9 +515,9 @@ uint8_t p34d_tick(p34d_t *p, int16_t rxs)
 
     case P34_ED:
         if (sig == V90TX_DATA) p->tx_ready = 1;
-        if (p->tx_ready && p->rx_ready) {
-#ifdef V42_XID_TRACE
-            fprintf(stderr, "P34 data again (reneg %d), state %d lasted %d samples, up %d\n", p->in_reneg, (int)p->state, (int)p->t, (int)p->up_rate);
+        if (p->tx_ready && p->up.rx_ready) {
+#ifdef P34D_XID_TRACE
+            fprintf(stderr, "P34 data again (reneg %d), state %d lasted %lu samples, up %d\n", p->in_reneg, (int)p->state, (unsigned long)p->t, (int)p->up_rate);
 #endif
             p->in_reneg = 0; enter(p, P34_DATA); }
         else if (p->in_reneg && p->t > MS(T_RENEG_MS)) retrain(p, 1);
@@ -601,8 +550,8 @@ uint8_t p34d_tick(p34d_t *p, int16_t rxs)
         /* 9.6.1.2.2: after the S-to-S-bar transition, Rd. If the S-bar is
          * missed the caller is waiting for Rd all the same. */
         if (p->rxmode == RX_SEQ || p->t > MS(T_RENEG_S_MS)) {
-#ifdef V42_XID_TRACE
-            fprintf(stderr, "P34 reneg: %s after %d samples, Rd\n", p->rxmode == RX_SEQ ? "S-bar found" : "no S-bar", (int)p->t);
+#ifdef P34D_XID_TRACE
+            fprintf(stderr, "P34 reneg: %s after %lu samples, Rd\n", p->rxmode == RX_SEQ ? "S-bar found" : "no S-bar", (unsigned long)p->t);
 #endif
             start_rd(p);
         }

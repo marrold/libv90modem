@@ -4,23 +4,10 @@
  * serializer (Ie030002 DSP b54c-b589) and the published records of D-Modem
  * (https://github.com/D-Modem/D-Modem, docs/dsp/x2-details.md) and
  * courier-emu (https://github.com/cryan209/courier-emu). Facts only; no code
- * of either. The CRC is the register of V.34's INFO frames (info_crc). */
+ * of either. The CRC is the register of V.34's INFO frames (info_crc), a
+ * bit at a time: v90_crc_step(). */
 #include "x2rec.h"
-
-static uint16_t crc_bit(uint16_t c, int bit)
-{
-    int fb = (bit ^ c) & 1;
-    c >>= 1;
-    return fb ? (uint16_t)(c ^ 0x8408) : c;
-}
-
-uint16_t x2_crc16(const uint8_t *bits, int n)
-{
-    uint16_t c = 0xFFFF;
-    int k;
-    for (k = 0; k < n; k++) c = crc_bit(c, bits[k] & 1);
-    return c;
-}
+#include "../v90/v90_seq.h"
 
 int x2rec_build(const uint16_t *w, int nw, int ack, uint8_t *bits)
 {
@@ -34,7 +21,7 @@ int x2rec_build(const uint16_t *w, int nw, int ack, uint8_t *bits)
         for (k = 0; k < 16; k++) {
             int b = (v >> k) & 1;
             bits[n++] = (uint8_t)b;
-            c = crc_bit(c, b);
+            c = v90_crc_step(c, b);
         }
         bits[n++] = 0;
     }
@@ -54,7 +41,7 @@ int x2rec_parse(const uint8_t *bits, int n, uint16_t *w, int nw)
         for (k = 0; k < 16; k++) {
             int b = bits[at++] & 1;
             v = (uint16_t)(v | (unsigned)b << k);
-            c = crc_bit(c, b);
+            c = v90_crc_step(c, b);
         }
         if (bits[at++] != 0) return X2REC_BAD;
         w[i] = v;

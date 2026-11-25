@@ -221,7 +221,7 @@ int main(void)
     /* our cleardown */
     CHECK_EQ_I(answer_cleardown(&A), 0);
     for (t = 0; t < 2000 && A.phase != ANS_FAILED; t += 10) run(80);
-    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(A.cleared, 2); CHECK_EQ_I(A.connected, 0);
+    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(answer_end(&A), ANS_END_CLEARDOWN_OURS); CHECK_EQ_I(A.connected, 0);
     run(4000);
     CHECK_EQ_I(C.dx.state, DX_FAILED); CHECK_EQ_I(C.dx.error, DX_ERR_CLEARDOWN);
     CHECK_EQ_I(answer_snr_db10(&A), -1); CHECK_EQ_I(answer_rtd(&A), -1);
@@ -237,7 +237,7 @@ int main(void)
     data_ok("high carrier, filter 3, ceilings");
     CHECK_EQ_I(v34dx_cleardown(&C.dx), 0);
     for (t = 0; t < 2000 && A.phase != ANS_FAILED; t += 10) run(80);
-    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(A.cleared, 1); CHECK_EQ_I(A.connected, 0);
+    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(answer_end(&A), ANS_END_CLEARDOWN_FAR); CHECK_EQ_I(A.connected, 0);
 
     /* ---- a retrain after which the caller wants V.90: Phase 3 of V.90 begins ---- */
     start(ALL, 0, 0, 0, 0, 0, 0);
@@ -256,7 +256,7 @@ int main(void)
     L.c.mute_ca_from = (int)L.n; L.c.mute_ca_to = 0x7fffffff;
     for (t = 0; t < 30000 && A.phase != ANS_FAILED; t += 10) run(80);
     printf("  caller's signal lost in data mode: over after %ld ms, %d retrain(s)\n", t, A.retrains);
-    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(A.connected, 0); CHECK_EQ_I(A.cleared, 0);
+    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(A.connected, 0); CHECK(answer_end(&A) != ANS_END_CLEARDOWN_FAR && answer_end(&A) != ANS_END_CLEARDOWN_OURS);
     CHECK(t < 12000);
 
     /* ---- V.34 not offered here: INFO1a's choice cannot be served ---- */

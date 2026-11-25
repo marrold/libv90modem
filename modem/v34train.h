@@ -6,25 +6,28 @@
 #define V90D_MODEM_V34TRAIN_H
 #include <stdint.h>
 #include "qamrx.h"
+#include "../v34/v34.h"
 
-#define V34_PP_LEN 288          /* six periods of 48 symbols */
 #define V34_S_LEN 128
 #define V34_SBAR_LEN 16
 
-/* PP(i), i = 0..287 (same power as the 4-point signals) */
+/* PP(i), i = 0..V34_PP_LEN - 1 (same power as the 4-point signals): the
+ * sequence of v34_pp_phase(), in QRX_REF units (not a multiple of
+ * v34_pp_point()'s Q14 values) */
 void v34_pp(int i, int32_t *re, int32_t *im);
 /* S: n-th symbol of a run of `len` symbols ending on point 0 rotated +90 deg;
- * S-bar: n-th symbol, starting on point 0 rotated 180 deg */
+ * S-bar: n-th symbol, starting on point 0 rotated 180 deg (v34_s_point() and
+ * v34_sbar_point() in QRX_REF units) */
 void v34_s(int n, int len, int32_t *re, int32_t *im);
 void v34_sbar(int n, int32_t *re, int32_t *im);
 
-/* self-synchronising scrambler, clause 7/V.34 */
-typedef struct { uint32_t sr; int tap; } v34scr_t;
-#define V34T_GPC 18              /* 1 + x^-18 + x^-23, call modem / digital modem */
-#define V34T_GPA 5               /* 1 + x^-5 + x^-23, answer modem / analogue modem */
-void v34scr_init(v34scr_t *s, int poly);
-int  v34scr_put(v34scr_t *s, int bit);
-int  v34scr_get(v34scr_t *s, int bit);
+/* self-synchronising scrambler, clause 7/V.34: v34.h's */
+typedef v34_scr_t v34scr_t;
+#define V34T_GPC V34_GPC         /* 1 + x^-18 + x^-23, call modem / digital modem */
+#define V34T_GPA V34_GPA         /* 1 + x^-5 + x^-23, answer modem / analogue modem */
+static inline void v34scr_init(v34scr_t *s, int poly) { v34_scr_init(s, poly); }
+static inline int  v34scr_put(v34scr_t *s, int bit) { return v34_scramble(s, bit); }
+static inline int  v34scr_get(v34scr_t *s, int bit) { return v34_descramble(s, bit); }
 
 /* 4-point TRN: scrambled ones, two bits per symbol */
 typedef struct { v34scr_t scr; } v34trn_t;
@@ -58,6 +61,13 @@ void sdet_init(sdet_t *d, int sym_rate, int car_num, int car_den);
 int  sdet_tick(sdet_t *d, int16_t x);
 #define SDET_DELAY(d) (((d)->len * 3) / 4)
 #define SDET_PRESENT 80             /* samples of tone = "S detected" */
+/* S heard in data mode before the V.34 decoder holds four symbols of it (its
+ * carrier line can build up early; the newest two inputs look like S's
+ * points, v34_rx_s_begins): data decoding goes on for up to this many
+ * samples more (9 symbols or more), until v34_rx_s_run() finds S. The
+ * decoder delivers what it decided 48 symbols back, data still. Anything
+ * else heard as S (noise) is taken at once, as before */
+#define SDET_RUN_WAIT 32
 
 /* ---- re-acquisition on a later S, equaliser kept ----
  * After a silence the far transmitter's symbol clock has drifted and its

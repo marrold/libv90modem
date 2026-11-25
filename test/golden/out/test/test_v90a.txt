@@ -1,0 +1,30 @@
+a call, 2 km, +30 ppm, echo -10 dB, noise -75 dBm0 (downstream) / -70 dBm0 (upstream)
+  state 3, error 0; data at 6849 ms: down 48000, up 28800 bit/s, SNR 54.8 dB
+  INFO1a 1835 ms, Sd-bar 3603, Jd 4489, Jd' 4535, DIL ended 5444, Ri 5514, Ri-bar 5669, MP 6574, Ed 6812
+  canceller after MD: 73.3 dB; DIL: 8 per interval and Ucode, robbed 000000, deviation 0.0 %
+  CPt: K 16 (29333 bit/s), z 64.0; CP: K 30, z 12.9; TRN2d frames 1200 (0 wrong); B1d wrong bits 0
+  constellations in CPt / CP as sent: 6 / 6
+  4 s of data: down 191988 bits, 0 check failures; up 115200 bits, 0 failures
+a rate renegotiation begun by the digital modem
+  the stream's break: 12 check failures (the 23-bit check across the gap)
+  state 3, renegotiations 1, digital 11; then 2 s: 96012 bits down, 0 new failures
+cleardown by us
+  ours 5 (error 12) after 726 ms; digital 17 (error 10)
+cleardown by the digital modem
+  ours 5 (error 11) after 99 ms
+  downstream: 14868 bits sent, 0 not received
+our cleardown, answered by a retrain of the digital modem's (R3)
+  ours 5 (error 12) after 653 ms; Phase 2 entered 0; digital in Phase 2 1
+a retrain's Phase 2 bounded: 30000 ms (spec D5)
+  ours 5 (error 16)
+a server's long TRN1d, Jd at its end
+  TRN1d 4000 ms: Jd 4000 ms into it; ours 3 (error 0), Jd read 4028 ms after the end of Ja, Jd' 46 ms after that; digital 10
+  TRN1d 4100 ms: Jd 4100 ms into it; ours 3 (error 0), Jd read 4127 ms after the end of Ja, Jd' 46 ms after that; digital 10
+  TRN1d 4600 ms: Jd -1 ms into it; ours 5 (error 4), Jd read -1 ms after the end of Ja, Jd' -1 ms after that; digital 3
+time-outs: the digital modem silent from
+  the start of Phase 3 (no Sd): 2000 ms from Ja    ended 5, error 2, 2000 ms after Ja
+  TRN1d learnt (no Jd): 4500 ms from Ja's end      ended 5, error 4, 4500 ms after the end of Ja
+  Jd' (no DIL)                                     ended 5, error 6, 916 ms after the silence
+  Ri-bar (no MP): 15 s from INFO1a                 ended 5, error 8, 15028 ms after INFO1a
+  data mode: carrier lost                          ended 5, error 13, 593 ms after the silence
+v90a: 75 checks, 0 failures

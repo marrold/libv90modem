@@ -1,0 +1,28 @@
+recording: companded receive, 124960 samples
+answer tone at 5.547 s in the recording; the modem starts 0.200 s before it
+  5.347 s  modem phase V8 (V.34 engine state 0 error 0)
+  5.347 s    V.8 state 0
+  5.347 s    V.42 state -1, retrains 0, p34 state 0
+  5.347 s    modem connected 0 moving 0 retraining 0
+  5.547 s    V.8 state 1
+  7.203 s    V.8 state 2
+  CM heard: call function 6, modes 0x141a (3 octets), pcm absent 0x00, protocol 0x01, access absent 0x00
+  JM sent : call function 6, modes 0x101a (3 octets), pcm absent 0x00, protocol 0x01, access absent 0x00
+  7.809 s    V.8 state 3
+  7.885 s  modem phase V34 (V.34 engine state 0 error 0)
+  7.885 s    V.34 state 0 (error 0), rates tx 0 rx 0
+  9.783 s    V.34 state 2 (error 0), rates tx 0 rx 0
+ 11.360 s    V.34 state 3 (error 0), rates tx 0 rx 0
+ 11.455 s    V.34 state 4 (error 0), rates tx 0 rx 0
+ 13.415 s    V.34 state 5 (error 0), rates tx 0 rx 0
+ 13.860 s    V.34 state 6 (error 0), rates tx 0 rx 0
+ 15.432 s    caller's MP: type 1, max ca 12 ac 13, aux 0, trellis 0, nonlinear 1, shaping 0, rates 3fff, asym 1, h (-110,-144) (79,128) (-75,-59)
+              our cfg: symbol rate 3200, tx carrier 4/7, rx carrier 4/7, tx pre-emphasis 1
+ 15.441 s    V.34 state 7 (error 0), rates tx 31200 rx 28800
+          V.34 B1 good: 92 errors in 1152 bits, mse 62
+ 15.604 s    V.42 state 0, retrains 0, p34 state 0
+ 15.604 s    modem connected 1 moving 1 retraining 0
+ 15.604 s    V.34 state 8 (error 0), rates tx 31200 rx 28800
+modulation 5, 31200 bit/s down, 28800 up, SNR 30.2 dB, round trip 185, echo delay -1, 0 retrains, 0 renegotiations; 432 bits received
+  second 15: 1365 samples differ
+124960 samples; after the answer our transmit differs from the recording in 1365 (first at 15.445 s)

@@ -4,7 +4,9 @@
  *
  * A record: 17 ones and a zero (the sync); each 16-bit word LSB first,
  * followed by a zero; then the CRC-16 of the word bits alone (not the
- * zeros), LSB first. The caller pads a record to its frames. */
+ * zeros), LSB first: info_crc()'s CRC-16 (register from FFFF, polynomial
+ * 0x8408 reflected, no final inversion; bit 0 sent first). The caller pads
+ * a record to its frames. */
 #ifndef V90D_MODEM_X2REC_H
 #define V90D_MODEM_X2REC_H
 #include <stdint.h>
@@ -13,10 +15,6 @@
 #define X2REC_BITS(nw) (X2REC_SYNC_BITS + 17 * (nw) + 16)
 #define X2REC_SHORT 0       /* x2rec_parse: fewer bits than the record needs */
 #define X2REC_BAD (-1)      /* x2rec_parse: sync, a separator or the CRC wrong */
-
-/* CRC-16 of n bits: register from FFFF, polynomial 0x8408 reflected (x^16 +
- * x^12 + x^5 + 1), no final inversion; bit 0 of the result is sent first */
-uint16_t x2_crc16(const uint8_t *bits, int n);
 
 /* The record of nw words w into bits (X2REC_BITS(nw) of them), word 0's
  * bit 15 (the acknowledge) set when ack, cleared otherwise. Returns the

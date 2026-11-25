@@ -6,7 +6,7 @@
  * specification 10, 11) describe them. Facts only; no code of either. */
 #include "x2map.h"
 #include "x2tab.h"
-#include "v90_pcm.h"
+#include "../v90/v90_pcm.h"
 
 #define MD   5              /* signs per frame */
 
@@ -54,6 +54,22 @@ static int free_pos(const uint8_t lev[X2MAP_N])
     return f;
 }
 
+/* the bank's bits and lists for the fields as they are now */
+static void cache(x2map_t *m)
+{
+    int l;
+    m->c_index = m->index; m->c_pad_mode = m->pad_mode; m->c_levels_a = m->levels_a;
+    m->c_bits = 0;
+    if (!valid(m)) return;
+    m->c_bits = MD + (m->levels_a ? B_A : bank(m)->b);
+    for (l = 0; l < 2; l++) m->c_n[l] = x2map_list(m, l, &m->c_recv[l], &m->c_sent[l]);
+}
+
+static int cached(const x2map_t *m)
+{
+    return m->c_index == m->index && m->c_pad_mode == m->pad_mode && m->c_levels_a == m->levels_a;
+}
+
 void x2map_init(x2map_t *m, int index, int pad_mode, int levels_a)
 {
     m->index = index;
@@ -61,31 +77,46 @@ void x2map_init(x2map_t *m, int index, int pad_mode, int levels_a)
     m->levels_a = levels_a;
     m->last = 1;
     m->rds = 0;
+    cache(m);
 }
 
 int x2map_bits(const x2map_t *m)
 {
+    if (cached(m)) return m->c_bits;
     if (!valid(m)) return 0;
     return MD + (m->levels_a ? B_A : bank(m)->b);
 }
 
 void x2map_frame(x2map_t *m, const uint8_t *bits, uint8_t out[X2MAP_N])
 {
-    const uint8_t *rv[X2MAP_N], *sn[X2MAP_N];
     uint8_t lev[X2MAP_N], o[X2MAP_N];
     uint64_t x = 0;
     int32_t sum = 0;
-    int nb = x2map_bits(m), i, k, f, neg;
+    int nb, i, k, f, neg;
+    if (!cached(m)) cache(m);
+    nb = m->c_bits;
     if (!nb) {
         for (i = 0; i < X2MAP_N; i++) out[i] = 0xff;
         return;
     }
     /* B up to 37 bits: the number in 64 bits */
     for (k = 0; k < nb - MD; k++) x |= (uint64_t)(bits[MD + k] & 1) << k;
-    for (i = 0; i < X2MAP_N; i++) {
-        uint32_t n = (uint32_t)x2map_list(m, i, &rv[i], &sn[i]), d = (uint32_t)(x % n);
+    /* in 64 bits while x needs them (B > 32: the first one or two
+       positions), then in 32: the same digits */
+    for (i = 0; i < X2MAP_N && (x >> 32) != 0; i++) {
+        int l = i > 0;
+        uint32_t n = (uint32_t)m->c_n[l], d = (uint32_t)(x % n);
         x /= n;
-        lev[i] = rv[i][d]; o[i] = sn[i][d];
+        lev[i] = m->c_recv[l][d]; o[i] = m->c_sent[l][d];
+    }
+    {
+        uint32_t x32 = (uint32_t)x;
+        for (; i < X2MAP_N; i++) {
+            int l = i > 0;
+            uint32_t n = (uint32_t)m->c_n[l], d = x32 % n;
+            x32 /= n;
+            lev[i] = m->c_recv[l][d]; o[i] = m->c_sent[l][d];
+        }
     }
     f = free_pos(lev);
     for (i = 0, k = 0; i < X2MAP_N; i++) {

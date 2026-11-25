@@ -5,11 +5,14 @@
  * mu-law codec with our own echo, after the pad, and noise), and the
  * codewords the answering modem receives go to a file.
  *
- *   rec_k56 [SECONDS [PAD [FILE [RATE [RBS]]]]]   (defaults 40, 0, /dev/null, 13, 0)
+ *   rec_k56 [SECONDS [PAD [FILE [RATE [RBS]]]]] [heavy]   (defaults 40, 0, /dev/null, 13, 0)
  *
  * PAD in dB (0, 3, 6); RATE the downstream rate code the client asks for
  * (1: 32000, 13: 56000); RBS the robbed-bit pattern on the line (hex, bit k
- * for the samples whose count mod 6 is k).
+ * for the samples whose count mod 6 is k). heavy, anywhere among them (not
+ * counted as one of them): the client ignores our MP and sends x2's upstream
+ * (64 states, non-linear, expanded shaping; k56call_cfg.heavy_up), e.g.
+ * make cost-k56 K56_ARGS=heavy.
  *
  * Prints the transmit hash the bench compares with, and what the call did. */
 #include <string.h>
@@ -29,20 +32,28 @@ static int get(void *u) { prbs *p = ((void **)u)[0]; p->n++; return nx(p); }
 static void put(void *u, int b) { prbs *p = ((void **)u)[1]; p->n++; if (nx(p) != (b & 1)) p->bad++; }
 
 #define XD 4096
-int main(int argc, char **argv)
+int main(int argc0, char **argv0)
 {
     static answer_t a; static k56call_t k;
     static prbs dsrc, dsink, asrc, asink; static void *aio[2], *dio[2];
     static uint8_t down[XD]; static int16_t up[XD]; static double dl[XD];
-    int secs = argc > 1 ? atoi(argv[1]) : 40, pad = argc > 2 ? atoi(argv[2]) : 0;
-    int rate = argc > 4 ? atoi(argv[4]) : 13, rbs = argc > 5 ? (int)strtol(argv[5], NULL, 16) : 0;
-    int pad_mode = pad == 6 ? 2 : pad == 3 ? 1 : 0;
-    FILE *dump = fopen(argc > 3 ? argv[3] : "/dev/null", "wb");
+    char *argv[6];
+    int argc = 0, heavy = 0, i;
+    int secs, pad, rate, rbs, pad_mode;
+    FILE *dump;
     const int d_ac = 37, d_ca = 41;
     uint32_t hash = 2166136261u;
     answer_cfg ac; k56call_cfg kc; rng_t rng;
     uint8_t arx = 0xff;
     long n, data_at = -1;
+    for (i = 0; i < argc0; i++) {
+        if (i > 0 && strcmp(argv0[i], "heavy") == 0) heavy = 1;
+        else if (argc < 6) argv[argc++] = argv0[i];
+    }
+    secs = argc > 1 ? atoi(argv[1]) : 40; pad = argc > 2 ? atoi(argv[2]) : 0;
+    rate = argc > 4 ? atoi(argv[4]) : 13; rbs = argc > 5 ? (int)strtol(argv[5], NULL, 16) : 0;
+    pad_mode = pad == 6 ? 2 : pad == 3 ? 1 : 0;
+    dump = fopen(argc > 3 ? argv[3] : "/dev/null", "wb");
     if (!dump) { perror("rec_k56"); return 2; }
     memset(down, 0xff, sizeof down);
     rng_seed(&rng, 4242);
@@ -54,7 +65,7 @@ int main(int argc, char **argv)
     answer_init(&a, &ac);
     answer_v90_line(&a, -1, 0, 0);
     k56call_default(&kc, 3000);
-    kc.pad_mode = pad_mode; kc.rate = rate; kc.rbs = rbs & 0x3f;
+    kc.pad_mode = pad_mode; kc.rate = rate; kc.rbs = rbs & 0x3f; kc.heavy_up = heavy ? K56C_HEAVY_ALWAYS : K56C_HEAVY_NONE;
     kc.getbit = get; kc.putbit = put; kc.user = aio;
     k56call_init(&k, &kc);
     for (n = 0; n < 8000L * secs; n++) {

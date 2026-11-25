@@ -1,0 +1,19 @@
+k56tx
+  our MP and MP' equal the oracle's: yes
+  oracle: 13 of 13 cases equal to D-Modem's, segment by segment
+  TRN1B: 0 of 8448 magnitudes not 40 41 4b 4c 50 51 50 51 by 3 scrambled bits
+  Js: 4 words of 0x89b0, 0 bits wrong
+  pad 1: 0 of 4432 TRN2B / MP / MP' / E symbols off 35 4d 58 60
+  pad 1, renegotiation: 0 of 1432 MP / MP' / E symbols off 44 5d; E 24
+  silence 2: max(12288, J) rounded up to 8 at J 0 .. 13007
+  J with pad 3 refused: silence 2 still after 32000; a good J then ends it
+  grid: MP at 2048 .. 2071: 0 with the data off the grid of 24
+  renegotiation in mid-frame: R2 at the frame's end
+  TRN2A / MARK even signs off a model from the last E's bits, 1 / 2 bits a symbol: first renegotiation 510 / 0, second 0 / 513
+  TRN2A's even signs descrambled, not ones: call 0, first renegotiation 0, second 0
+  J in Js: silence 2 12288, TRN2B on pad 1's magnitudes (0 off)
+  renegotiation in TRN1A: R2 at once; TRN2A 2048, E 24
+  renegotiation in our MP: data after 1418 symbols, R2 after 1426
+  renegotiation in our MP': data after 714 symbols, R2 after 722
+  renegotiation in our E: data after 10 symbols, R2 after 18
+k56tx: 110 checks, 0 failures

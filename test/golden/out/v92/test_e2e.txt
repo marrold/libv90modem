@@ -1,0 +1,9 @@
+  4G = 105, mean square of G*v = 0.9953, rms u = 3079, rms x = 2360
+  no noise: max |channel output - u(n)| = 0.325 linear units
+  sigma 40, 16 states: bit errors 5386 hard, 54 trellis of 216000
+  sigma 40, 32 states: bit errors 5330 hard, 0 trellis of 216000
+  sigma 40, 64 states: bit errors 5620 hard, 0 trellis of 216000
+  sigma 55, 16 states: bit errors 16843 hard, 854 trellis of 216000
+  sigma 55, 32 states: bit errors 17585 hard, 305 trellis of 216000
+  sigma 55, 64 states: bit errors 17561 hard, 202 trellis of 216000
+test_e2e: 258 checks, 0 failures

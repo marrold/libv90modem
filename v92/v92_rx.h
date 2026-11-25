@@ -55,7 +55,10 @@ int  v92_p6_tick(v92_p6_t *d, int16_t x, int32_t floor_rms);
 
 typedef struct {
     int16_t  rb[256];           /* received samples, by k & 255 */
-    int16_t  sb[256];           /* symbols (V92_SYM_UNIT = LU), by m & 255 */
+    int16_t  sb[256];           /* symbols (V92_SYM_UNIT = LU), by m & 255; in data
+                                   mode (v92_trn_store only) not read here: the V.92
+                                   answerer keeps the baseline of each sample in it,
+                                   by k & 255, and v92_trn_resume fills it again */
     int16_t  qb[32];            /* equaliser input, by k & 31 */
     int32_t  k;                 /* samples taken */
     int32_t  mref;              /* reference symbols generated */

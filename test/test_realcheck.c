@@ -373,7 +373,7 @@ int main(void)
     static const int idx0[6] = { 0, 0, 0, 0, 0, 0 }, idx_x2[6] = { 0, 1, 2, 3, 4, 5 }, idx_f1[6] = { 0, 1, 2, 3, 4, 1 };
     static const int idx_cxu[6] = { 1, 1, 1, 1, 0, 0 }, idx_usru[6] = { 0, 1, 2, 2, 2, 2 };
     static const int h_v34a[6] = { -110, -144, 79, 128, -75, -59 }, h_x2b[6] = { 0, 0, 0, 0, 0, 0 };
-    if (load("test/data/realcheck.txt") < 0) { printf("realcheck: test/data/realcheck.txt not found\n"); CHECK(0); T_REPORT("realcheck"); }
+    if (load(TEST_DATA_DIR "/realcheck.txt") < 0) { printf("realcheck: %s not found\n", TEST_DATA_DIR "/realcheck.txt"); CHECK(0); T_REPORT("realcheck"); }
     printf("real callers' sequences: our parser, and our builders given what it read (%d extracts)\n", nfx);
     CHECK_EQ_I(nfx, 32);
 

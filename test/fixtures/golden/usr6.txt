@@ -1,0 +1,167 @@
+recording: 16-bit linear receive, 171680 samples
+answer tone at 5.660 s in the recording; the modem starts 0.200 s before it
+  5.460 s  modem phase V8 (V.34 engine state 0 error 0)
+  5.460 s    V.8 state 0
+  5.460 s    V.42 state -1, retrains 0, p34 state 0
+  5.460 s    modem connected 0 moving 0 retraining 0
+  5.660 s    V.8 state 1
+  7.673 s    V.8 state 2
+  CM heard: call function 6, modes 0x001a (3 octets), pcm 0x01, protocol absent 0x00, access 0x00
+  JM sent : call function 6, modes 0x001a (3 octets), pcm 0x02, protocol absent 0x00, access 0x04
+  8.546 s    V.8 state 3
+  8.621 s  modem phase P2 (V.34 engine state 0 error 0)
+  8.621 s    Phase 2 INFO0 (error 0)
+  8.737 s    Phase 2 WAIT_REV1 (error 0)
+  8.865 s    Phase 2 REPLY1 (error 0)
+  8.901 s    Phase 2 WAIT_REV2 (error 0)
+  8.979 s    Phase 2 PROBE_RX (error 0)
+  9.609 s    Phase 2 WAIT_REV3 (error 0)
+  9.744 s    Phase 2 REPLY3 (error 0)
+  9.783 s    Phase 2 L1 (error 0)
+  9.943 s    Phase 2 L2 (error 0)
+ 10.163 s    Phase 2 INFO1D (error 0)
+ 10.352 s    Phase 2 WAIT_INFO1A (error 0)
+ 10.503 s  modem phase P3X (V.34 engine state 0 error 0)
+ 10.503 s    V.92 heard: Ja 0 CPt 0 E1u 0 SUVu 0 CPu 0 ack 0 E2u 0; design 0 (0 steps); sending signal 0
+ 10.503 s    V.92 state 0 (error 0), 0 bit/s up, 0 down, PCM upstream offered; peak1 0, Jp frac 0
+ 10.625 s    V.92 state 2 (error 0), 0 bit/s up, 0 down, PCM upstream offered; peak1 0, Jp frac 0
+      v92   0.20 s state  2 (error 0)  line    2516 rms -> after the canceller    2516 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   0.40 s state  2 (error 0)  line    3072 rms -> after the canceller    3072 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   0.60 s state  2 (error 0)  line    3068 rms -> after the canceller    3068 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   0.80 s state  2 (error 0)  line    3094 rms -> after the canceller    3094 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   1.00 s state  2 (error 0)  line    3067 rms -> after the canceller    3067 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   1.20 s state  2 (error 0)  line    3086 rms -> after the canceller    3086 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   1.40 s state  2 (error 0)  line    3074 rms -> after the canceller    3074 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   1.60 s state  2 (error 0)  line    3078 rms -> after the canceller    3078 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   1.80 s state  2 (error 0)  line    3077 rms -> after the canceller    3077 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   2.00 s state  2 (error 0)  line    3064 rms -> after the canceller    3064 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   2.20 s state  2 (error 0)  line    3056 rms -> after the canceller    3056 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+ 12.793 s    V.92 heard: Ja 1 CPt 0 E1u 0 SUVu 0 CPu 0 ack 0 E2u 0; design 0 (0 steps); sending signal 0
+ 12.793 s    V.92 state 3 (error 0), 0 bit/s up, 0 down, PCM upstream offered; peak1 1280, Jp frac 0
+      v92   2.40 s state  3 (error 0)  line    2675 rms -> after the canceller    2675 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   2.60 s state  3 (error 0)  line     490 rms -> after the canceller     490 rms (0.0 dB), echo delay 0, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   2.80 s state  3 (error 0)  line     384 rms -> after the canceller     210 rms (-5.2 dB), echo delay 262, mu 0
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   3.00 s state  3 (error 0)  line     401 rms -> after the canceller      48 rms (-18.3 dB), echo delay 262, mu 0
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   3.20 s state  3 (error 0)  line     444 rms -> after the canceller      41 rms (-20.6 dB), echo delay 262, mu 3
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+ 13.733 s    V.92 state 4 (error 0), 0 bit/s up, 0 down, PCM upstream offered; peak1 1280, Jp frac 0
+      v92   3.40 s state  4 (error 0)  line     505 rms -> after the canceller      40 rms (-22.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   3.60 s state  4 (error 0)  line     423 rms -> after the canceller      36 rms (-21.3 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   3.80 s state  4 (error 0)  line     443 rms -> after the canceller      28 rms (-23.9 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   4.00 s state  4 (error 0)  line     417 rms -> after the canceller      33 rms (-22.1 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   4.20 s state  4 (error 0)  line     324 rms -> after the canceller      29 rms (-21.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   4.40 s state  4 (error 0)  line     559 rms -> after the canceller      45 rms (-21.9 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   4.60 s state  4 (error 0)  line     415 rms -> after the canceller      34 rms (-21.8 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   4.80 s state  4 (error 0)  line     472 rms -> after the canceller      36 rms (-22.4 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   5.00 s state  4 (error 0)  line     549 rms -> after the canceller      45 rms (-21.7 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   5.20 s state  4 (error 0)  line     444 rms -> after the canceller      36 rms (-21.7 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+ 15.807 s    V.92 state 5 (error 0), 0 bit/s up, 0 down, PCM upstream offered; peak1 1280, Jp frac 32768
+ 15.867 s    V.92 state 6 (error 0), 0 bit/s up, 0 down, PCM upstream offered; peak1 1280, Jp frac 32768
+      v92   5.40 s state  6 (error 0)  line    1741 rms -> after the canceller    1693 rms (-0.2 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   5.60 s state  6 (error 0)  line    3077 rms -> after the canceller    3062 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   5.80 s state  6 (error 0)  line    3055 rms -> after the canceller    3056 rms (0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   6.00 s state  6 (error 0)  line    3081 rms -> after the canceller    3083 rms (0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   6.20 s state  6 (error 0)  line    3057 rms -> after the canceller    3057 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   6.40 s state  6 (error 0)  line    3088 rms -> after the canceller    3089 rms (0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   6.60 s state  6 (error 0)  line    3046 rms -> after the canceller    3046 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   6.80 s state  6 (error 0)  line    3088 rms -> after the canceller    3087 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   7.00 s state  6 (error 0)  line    3078 rms -> after the canceller    3078 rms (0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   7.20 s state  6 (error 0)  line    3063 rms -> after the canceller    3049 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   7.40 s state  6 (error 0)  line    3086 rms -> after the canceller    3084 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   7.60 s state  6 (error 0)  line    3055 rms -> after the canceller    3057 rms (0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   7.80 s state  6 (error 0)  line    3067 rms -> after the canceller    3066 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   8.00 s state  6 (error 0)  line    3076 rms -> after the canceller    3076 rms (0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   8.20 s state  6 (error 0)  line    3065 rms -> after the canceller    3065 rms (0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+ 18.901 s    V.92 heard: Ja 1 CPt 1 E1u 0 SUVu 0 CPu 0 ack 0 E2u 0; design 0 (0 steps); sending signal 6
+      v92   8.40 s state  6 (error 0)  line    3091 rms -> after the canceller    3092 rms (0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+ 18.977 s    V.92 sending signal 7 (CPd is 0 bits)
+ 18.977 s    V.92 heard: Ja 1 CPt 1 E1u 1 SUVu 0 CPu 0 ack 0 E2u 0; design 0 (0 steps); sending signal 7
+ 18.977 s    V.92 state 7 (error 0), 0 bit/s up, 0 down, PCM upstream offered; peak1 1280, Jp frac 32768
+ 18.977 s    V.92 sending signal 8 (CPd is 0 bits)
+ 18.980 s    V.92 sending signal 13 (CPd is 0 bits)
+      v92   8.60 s state  7 (error 0)  line    3081 rms -> after the canceller    3075 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+ 19.277 s    V.92 heard: Ja 1 CPt 1 E1u 1 SUVu 0 CPu 0 ack 0 E2u 0; design 1 (1 steps); sending signal 13
+      v92   8.80 s state  7 (error 0)  line    3104 rms -> after the canceller    3101 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   9.00 s state  7 (error 0)  line    3082 rms -> after the canceller    3073 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   9.20 s state  7 (error 0)  line    3061 rms -> after the canceller    3047 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   9.40 s state  7 (error 0)  line    3122 rms -> after the canceller    3110 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   9.60 s state  7 (error 0)  line    3120 rms -> after the canceller    3112 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92   9.80 s state  7 (error 0)  line    3120 rms -> after the canceller    3107 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92  10.00 s state  7 (error 0)  line    3051 rms -> after the canceller    3041 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92  10.20 s state  7 (error 0)  line    3018 rms -> after the canceller    3001 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+      v92  10.40 s state  7 (error 0)  line    3061 rms -> after the canceller    3057 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+ 20.991 s    V.92 heard: Ja 1 CPt 1 E1u 1 SUVu 0 CPu 0 ack 0 E2u 0; design 2 (6856 steps); sending signal 13
+ 20.991 s    CPd designed: 32000 bit/s (drn 7), trellis 0, LC 125 (smallest point 128, largest 31748), M0 40, LZ2 128 LP1 64, 4G 96; 6856 steps; noise 823, quantiser quiet 0 / training 0, echo 448 (given 448), estimate residual 5952, rho 1.00, ISI -42.9 dB, x rms max 2778, power 0.84
+ 20.992 s    V.92 sending signal 22 (CPd is 5736 bits)
+ 21.049 s    V.92 heard: Ja 1 CPt 1 E1u 1 SUVu 1 CPu 0 ack 0 E2u 0; design 2 (6856 steps); sending signal 22
+ 21.050 s    V.92 sending signal 24 (CPd is 5736 bits)
+      v92  10.60 s state  7 (error 0)  line    3077 rms -> after the canceller    3067 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 0 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+ 21.127 s    V.92 heard: Ja 1 CPt 1 E1u 1 SUVu 1 CPu 1 ack 0 E2u 0; design 2 (6856 steps); sending signal 24
+ 21.230 s    V.92 sending signal 23 (CPd is 5736 bits)
+      v92  10.80 s state  7 (error 0)  line    3091 rms -> after the canceller    3075 rms (-0.0 dB), echo delay 262, mu -1
+          receiver: quality 0, bad frames 0, up 0 bit/s, down 54666 bit/s, renegotiations 0, rate drops 0, B1u level 0, quiet blocks 0
+ 21.349 s    V.92 heard: Ja 1 CPt 1 E1u 1 SUVu 1 CPu 1 ack 1 E2u 0; design 2 (6856 steps); sending signal 23
+ 21.349 s    V.92 state 8 (error 0), 0 bit/s up, 54666 down, PCM upstream offered; peak1 1280, Jp frac 32768
+ 21.349 s    V.92 sending signal 16 (CPd is 5736 bits)
+ 21.350 s    V.92 heard: Ja 1 CPt 1 E1u 1 SUVu 1 CPu 1 ack 1 E2u 1; design 2 (6856 steps); sending signal 16
+ 21.350 s    V.92 state 8 (error 0), 32000 bit/s up, 54666 down, PCM upstream offered; peak1 1280, Jp frac 32768
+ 21.350 s    V.92 sending signal 17 (CPd is 5736 bits)
+ 21.386 s    V.92 sending signal 18 (CPd is 5736 bits)
+ 21.445 s  modem phase V92 (V.34 engine state 0 error 0)
+ 21.445 s    V.42 state 0, retrains 0, p34 state 0
+ 21.445 s    modem connected 1 moving 1 retraining 0
+ 21.445 s    V.92 state 9 (error 0), 32000 bit/s up, 54666 down, PCM upstream offered; peak1 1280, Jp frac 32768
+modulation 7, 54666 bit/s down, 32000 up, SNR 59.2 dB, round trip 273, echo delay 262, 0 retrains, 0 renegotiations; 0 bits received
+171680 samples; after the answer our transmit differs from the recording in 0 (first at -0.000 s)

@@ -22,6 +22,13 @@ typedef struct {
      * v90 says); pcm_force: send that INFO1a whatever they say */
     int pcm_up, pcm_force;
     int sections, ltot_code, lmax_code, md_len;     /* Table 18 bits 12:24 */
+    /* misbehaving callers, for the Phase 2 bounds of the digital modem:
+     * info0_repeat: once INFO0 is exchanged, send INFO0a (acknowledged) this
+     * many times more before the Tone A reversal; -1 = for ever. no_rev2:
+     * never send the second Tone A reversal (the answer to the digital
+     * modem's Tone B reversal); keep Tone A and start again from INFO0 2500 ms
+     * later. 0 in both is the well-behaved caller. */
+    int info0_repeat, no_rev2;
 } p2a_cfg;
 
 typedef enum {
@@ -43,6 +50,8 @@ typedef struct {
     int32_t   rtd;
     int       tone_blocks;
     int32_t   done_at;
+    int       rep_left;     /* cfg.info0_repeat still to send */
+    int32_t   restart_at;   /* cfg.no_rev2: INFO0 again at this sample; 0 = none */
 } p2a_t;
 
 void    p2a_init(p2a_t *p, const p2a_cfg *cfg);

@@ -1,0 +1,6 @@
+  trn amp 4000 sigma 5 mu-law offset 0: cursor 26, estimate error max 4.1 rms 11.6 (peak 4000), residual rms 60.6, eq mse 0.0010
+  trn amp 4000 sigma 40 mu-law offset 3: cursor 29, estimate error max 3.8 rms 14.0 (peak 4000), residual rms 70.7, eq mse 0.0007
+  trn amp -1500 sigma 5 A-law offset -3: cursor 23, estimate error max 1.3 rms 4.3 (peak 1500), residual rms 24.3, eq mse 0.0008
+  trn amp 7000 sigma 20 A-law offset 2: cursor 28, estimate error max 5.7 rms 17.0 (peak 6300), residual rms 102.7, eq mse 0.0002
+  trn amp 2500 sigma 10 mu-law offset -2: cursor 24, estimate error max 2.9 rms 7.4 (peak 2250), residual rms 40.4, eq mse 0.0003
+rx: 25469 checks, 0 failures

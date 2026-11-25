@@ -34,6 +34,7 @@ typedef struct {
     int retrain;            /* both ends start in the retrain entry */
     int ans_back_ms;        /* the answerer, done, comes back with a retrain of its own after this */
     int ans_answers;        /* the answerer, done, answers our Tone B as a retrain (11.5.2.2) */
+    int ans_reinit;         /* the answerer starts over each time it leaves P2N_INFO0 */
     int seconds;
 } scen_t;
 
@@ -43,6 +44,7 @@ typedef struct {
     int l1_samples, l2_samples;
     double l1_pw, l2_pw;
     int a_restarts;         /* times the harness played the answerer's side of a retrain */
+    int tone_at;            /* when the caller ended its reading of L2 (Tone B: 11.2.1.1.5) */
 } run_t;
 
 static double lp[NLP];
@@ -122,9 +124,11 @@ static void run(const scen_t *s, run_t *r, const p2ans_cfg *ac, const p2call_cfg
         if (r->c.state == P2L_L1) { r->l1_samples++; r->l1_pw += (double)ctx * ctx; }
         if (r->c.state == P2L_L2) { r->l2_samples++; r->l2_pw += (double)ctx * ctx; }
         atx = p2ans_tick(&r->a, clip16(xa));
+        if (s->ans_reinit && r->a.state != P2N_INFO0) { p2ans_init(&r->a, ac); r->a_restarts++; }
         ctx = p2call_tick(&r->c, lrx[(i - s->io_rx + MAXD) % MAXD]);
         if (r->a.state == P2N_DONE && r->a_done_at < 0) r->a_done_at = i;
         if (r->c.state == P2L_DONE && r->c_done_at < 0) r->c_done_at = i;
+        if (r->c.state == P2L_WAIT_REV3 && !r->tone_at) r->tone_at = i;
         /* the answerer's side of a retrain after its Phase 2 was over: its
          * Phase 3 gave up by itself (Tone A after 70 ms of silence), or it
          * heard our Tone B for 50 ms (11.5.2.2: 70 ms of silence, Tone A) */
@@ -286,6 +290,13 @@ int main(void)
     CHECK_EQ_I(r.c.state, P2L_DONE); CHECK_EQ_I(r.a.state, P2N_DONE);
     CHECK_EQ_I(r.c.error, 0);
     CHECK(r.n < 8000 * 4);
+    /* 11.2.1.1.5 lets the call modem read L2 for up to 500 ms; we read it
+     * for no more than 300 ms from its start (the answerer's L2 began 10 ms
+     * before probe_from): a real modem whose tone came 92 to 103 ms after
+     * ours arrived ignored the reversal when we listened 460 ms (reported by
+     * an independent softmodem's live calls) */
+    printf("  p2call clean: Tone B %d ms after the start of the answerer's L2\n", (r.tone_at - (r.c.probe_from - 80)) / 8);
+    CHECK(r.tone_at - (r.c.probe_from - 80) <= 8 * 300);
     CHECK_EQ_I(r.c.n_info0c, 1); CHECK_EQ_I(r.a.n_info0a, 1);
     CHECK_EQ_I(r.c.retrains, 0); CHECK_EQ_I(r.c.restarts, 0); CHECK_EQ_I(r.c.rev3_timeouts, 0);
     CHECK_EQ_I(r.a.retrains, 0); CHECK_EQ_I(r.a.restarts, 0);
@@ -486,6 +497,17 @@ int main(void)
     CHECK_EQ_I(r.c.sym_rate, 3200);
     CHECK_EQ_I(r.c.info0a.c1664, 1);        /* the first Phase 2's */
 
+    /* ---- a retrain's Phase 2 bounded (spec D5): an answerer that keeps
+     * sending INFO0a sends us back to 11.2.1.1.1 each time, counted as a
+     * restart ---- */
+    clean(&s); s.retrain = 1; s.ans_reinit = 1; s.seconds = 120;
+    run(&s, &r, &ac, &cc);
+    printf("  p2call INFO0a for ever: state %d, error %d at %.2f s, restarts %d, INFO0c sent %d, answerer started %d times\n",
+           r.c.state, r.c.error, r.n / 8000.0, r.c.restarts, r.c.n_info0c, r.a_restarts);
+    CHECK_EQ_I(r.c.state, P2L_FAILED);
+    CHECK_EQ_I(r.c.error, P2L_ERR_REV);
+    CHECK(r.n <= 8000 * (4 * 8 + 1));
+
     /* ---- dead lines: give up with a reason ---- */
     clean(&s); s.g_ac = 0.0; s.seconds = 30;
     run(&s, &r, &ac, &cc);
@@ -495,6 +517,49 @@ int main(void)
     run(&s, &r, &ac, &cc);
     CHECK_EQ_I(r.c.state, P2L_FAILED); CHECK_EQ_I(r.c.error, P2L_ERR_REV);
     CHECK(r.n < 8000 * 25);
+
+    /* ---- the clock from L2 (calling B6): a strong L2 whose tones turn
+     * about a quarter turn per 20 ms block (far beyond 1000 ppm), so that
+     * ci is huge against cr: the clamp, not a 64-bit overflow ---- */
+    {
+        static proberx_t pr;
+        int m, sgn;
+        for (sgn = 1; sgn >= -1; sgn -= 2) {
+            memset(&pr, 0, sizeof pr);
+            pr.nblk = 50;
+            for (m = 1; m <= PROBE_NBIN; m++) {
+                if (!probe_has_tone(m)) continue;
+                pr.cr[m] = (int64_t)1 << 20;
+                pr.ci[m] = sgn * ((int64_t)1 << 41);
+                pr.pw[m] = ((int64_t)1 << 41) + ((int64_t)1 << 20);
+            }
+            CHECK(proberx_snr(&pr, 7) >= 200);
+            printf("  clock from a hostile L2 (ci %c2^41, cr 2^20): %d/256 ppm\n", sgn > 0 ? '+' : '-',
+                   (int)p2call_clock_q8(&pr));
+            CHECK_EQ_I(p2call_clock_q8(&pr), -sgn * 256000);    /* the +-1000 ppm clamp */
+        }
+        /* within the clamp, as before: one tone (1050 Hz) turning 1/476 rad per block, about 16 ppm */
+        memset(&pr, 0, sizeof pr);
+        pr.nblk = 50;
+        pr.cr[7] = (int64_t)1 << 30; pr.ci[7] = -((int64_t)1 << 30) / 476; pr.pw[7] = (int64_t)1 << 30;
+        printf("  clock from a tone at 1050 Hz, ci/cr -1/476: %d/256 ppm\n", (int)p2call_clock_q8(&pr));
+        CHECK_EQ_I(p2call_clock_q8(&pr), 4076);         /* 256e6 / (476 6 pi 7) */
+        /* right at the limit: num = 20 den with den at its largest (2^31 - 1
+         * after the scaling loop), the largest product the multiply takes
+         * (20 (2^31 - 1) 13581342, about 5.8e17); one step past it, the
+         * early clamp. 1050 Hz alone: num = 7 (ci >> 8), den = 49 (cr >> 8) */
+        for (sgn = 0; sgn <= 1; sgn++) {
+            const int64_t x = 43826196;                 /* 49 x <= 2^31 - 1 */
+            memset(&pr, 0, sizeof pr);
+            pr.nblk = 50;
+            pr.cr[7] = 256 * x; pr.ci[7] = 256 * 140 * x + 256 * sgn;
+            pr.pw[7] = pr.ci[7] + pr.cr[7] / 64;
+            CHECK(proberx_snr(&pr, 7) >= 200);
+            printf("  clock at the limit%s (ci/cr 140%s): %d/256 ppm\n", sgn ? ", one past" : "", sgn ? " + 1/x" : "",
+                   (int)p2call_clock_q8(&pr));
+            CHECK_EQ_I(p2call_clock_q8(&pr), -256000);
+        }
+    }
 
     T_REPORT("p2call");
 }

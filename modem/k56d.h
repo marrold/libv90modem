@@ -14,15 +14,21 @@
  *   k56tx, and TRN2B ends on the grid of 24 ->
  *   K56D_MP: our MP, MP', E; the client's MP', E, B1 ->
  *   K56D_DATA: k56enc frames down (B1 first), V.34 up (16 states, linear,
- *   minimum shaping: what our MP asked; GPC) through qamrx and v34/, as in
- *   x2d and p34d. The client's S here is its renegotiation ->
+ *   minimum shaping: what our MP asked; GPC) through v34up, as in
+ *   x2d and p34d. A client whose B1 fails under that is tried under x2's
+ *   configuration (64 states, non-linear, expanded shaping; up_hyp 1) on
+ *   its points kept from E on (ring), and goes on under it if B1 passes
+ *   there (k56d.c, "a client that ignores our MP"). The client's S here,
+ *   or from its B1 on (in K56D_MP: ours not yet out; then our R2 after our
+ *   first data frame), is its renegotiation ->
  *   K56D_RENEG ("Rate renegotiation"): our data stops at the frame's end,
  *   then R2, TRN2A 2048, MARK, TRN2B until its MP and the grid, MP and MP'
  *   at 1 bit a symbol, E 24 (k56tx_reneg); its S-bar, TRN, MP (4 points,
  *   V.34 11.6), MP', E; data again both ways (B1 first) at the rates of its
  *   new MP -> K56D_DATA. An MP with rate 0 both ways is V.34's cleardown
  *   (K56D_ERR_CLEARDOWN). We never start one (decision 13). The client's
- *   tone B (1200 Hz, more than 50 ms) here is its retrain ("Retrain") ->
+ *   tone B (1200 Hz, more than 50 ms) here or in its renegotiation is its
+ *   retrain ("Retrain") ->
  *   K56D_RETRAIN: silent; the owner goes on with V.34's Phase 2 of a
  *   retrain and a fresh k56d (decision 14). We never start one either.
  *
@@ -41,17 +47,18 @@
 #ifndef V90D_MODEM_K56D_H
 #define V90D_MODEM_K56D_H
 #include <stdint.h>
-#include "qamrx.h"
+#include "seqhunt.h"
 #include "ec.h"
 #include "ecdly.h"
 #include "tonedet.h"
-#include "v34train.h"
+#include "v34up.h"
 #include "v34mp.h"
 #include "k56tx.h"
-#include "../v34/v34.h"
 
 #define K56D_MAX_ECHO_DELAY 1919    /* the longest echo delay that can be given (as p34d) */
 #define K56D_FBUF 192               /* an MP (88 bits) and a next frame sync */
+#define K56D_RING 192               /* B1 (one data frame) and the Viterbi's delay, symbols */
+#define K56D_DRAIN 2                /* catchup: its S came while catching up */
 
 /* time limits, ms (each under 10 s) */
 #define K56D_T_S    3000    /* the end of our Js to the client's S */
@@ -82,8 +89,8 @@ typedef enum {
     K56D_MP,        /* our MP, MP', E until its E (and B1 both ways) */
     K56D_DATA,      /* data both ways */
     K56D_RENEG,     /* the client's renegotiation (k56 plan, Task 11) */
-    K56D_RETRAIN,   /* its tone B in data mode: the client's retrain; silent, the owner's
-                       Phase 2 next */
+    K56D_RETRAIN,   /* its tone B in data mode or its renegotiation: the client's
+                       retrain; silent, the owner's Phase 2 next */
     K56D_ENDED      /* silent; error says why */
 } k56d_state;
 
@@ -107,8 +114,8 @@ typedef struct {
     k56d_cfg   cfg;
     k56d_state state;
     int        error;
-    int32_t    now, t;              /* sample clock; samples in this state */
-    int32_t    t_mark;              /* a deadline's reference: when the current wait began */
+    uint32_t   now, t;              /* sample clock; samples in this state (modem/clock.h) */
+    uint32_t   t_mark;              /* a deadline's reference: when the current wait began (CLK_NONE: none) */
     int        car_num, car_den;
     /* transmit */
     k56tx_t    tx;
@@ -120,29 +127,32 @@ typedef struct {
     ecdly_t    ecd;                 /* what we sent; ecd.delay the echo delay in use */
     sdet_t     sdet;
     sres_t     sres;                /* its S out of data mode: a renegotiation */
-    tonedet_t  tone_b;              /* its tone B in data mode: a retrain */
-    qamrx_t    rx;
+    tonedet_t  tone_b;              /* its tone B in data mode or a renegotiation: a retrain */
+    v34up_t    up;                  /* the client's V.34: its Phase 3 and 4, its data */
     int        rxmode;
-    v34trn_t   ref;
-    v34_tdem_t tdem;
-    int64_t    zpw;                 /* smoothed |z|^2 */
-    int32_t    quiet;               /* symbols without signal in data mode */
-    int32_t    q_dead;
     /* J24, J', MP, E */
     uint32_t   jsr; int32_t jbits, j_at; int j_seen;
     int        got_j, got_jp;
     uint8_t    j_octet;
-    uint8_t    fbuf[K56D_FBUF]; int fn, ones;
+    uint8_t    fbuf[K56D_FBUF]; int fn; seqhunt_t sh;
     v34_mp_t   far_mp, cand; int cand_ok;
     int        got_mp, got_e;
     int        pad;                 /* from the J24: 0..2 */
     uint8_t    rbs;                 /* ... robbed symbols, bits 0-5 */
     int        rate;                /* the downstream rate code r, 1..13 */
-    /* data mode, upstream */
-    v34_params_t vpar;
-    v34_rx_t   vrx;
-    int32_t    vgain;
-    int        tx_ready, rx_ready;
+    /* data mode, upstream: B1's retry */
+    uint8_t    up_hyp;              /* the upstream's options: 0 ours (what our MP asked),
+                                       1 x2's (64 states, non-linear, expanded shaping) */
+    uint8_t    up_retried;          /* B1 failed under the first: the other one tried */
+    uint8_t    catchup;             /* decoding the stored points under the other;
+                                     * K56D_DRAIN: up to its S (a renegotiation) */
+    uint8_t    catch_odd;           /* catching up: 1 or 2 points this symbol period */
+    uint8_t    ring_full;           /* points lost: no retry */
+    uint16_t   ring_w, ring_r, ring_fill;   /* the ring's next write, next read, unread */
+    int16_t    ring[K56D_RING][2];  /* its points from E on (clipped, before v34_nl_decode),
+                                       while B1 is not decided or being caught up */
+    int32_t    eq_cr[QRX_NTAP], eq_ci[QRX_NTAP];  /* the equaliser at its E: back at a retry */
+    int        tx_ready;
     int        down_rate, up_rate;  /* bit/s */
 } k56d_t;
 

@@ -8,18 +8,9 @@
  * remainder so that a receiver running the same register over information +
  * CRC ends at zero. */
 #include "info.h"
+#include "../v90/v90_seq.h"     /* v90_crc: the one copy of the register */
 
-uint16_t info_crc(const uint8_t *bits, int n)
-{
-    uint16_t c = 0xFFFF;
-    int k;
-    for (k = 0; k < n; k++) {
-        int fb = (bits[k] ^ c) & 1;
-        c >>= 1;
-        if (fb) c ^= 0x8408;
-    }
-    return c;
-}
+uint16_t info_crc(const uint8_t *bits, int n) { return v90_crc(bits, n); }
 
 int info_check(const uint8_t *payload, int npayload)
 {
@@ -246,37 +237,4 @@ void info1a_parse(const uint8_t *payload, info1a_t *i)
 int info1a_kind(const info1a_t *i)
 {
     return !i->v90 ? INFO1A_V34 : i->pcm ? INFO1A_PCM : INFO1A_V90;
-}
-
-/* V.34 Table 15. INFO1c and V.90's INFO1d put the same fields in the same
- * bits; this is Table 15 as written. */
-int info1c_build(const info1c_t *i, uint8_t *bits)
-{
-    wr_t w; int k;
-    head(&w, bits);
-    put(&w, i->min_pwr_red, 3);                 /* 12:14 */
-    put(&w, i->add_pwr_red, 3);                 /* 15:17 */
-    put(&w, i->md_len, 7);                      /* 18:24 */
-    for (k = 0; k < 6; k++) {                   /* 25:33 for 2400 ... 70:78 for 3429 */
-        put(&w, i->sr[k].hi_carrier, 1);
-        put(&w, i->sr[k].preemph, 4);
-        put(&w, i->sr[k].max_rate, 4);
-    }
-    put(&w, (unsigned)i->freq_off & 0x3ff, 10); /* 79:88 */
-    return tail(&w);
-}
-
-void info1c_parse(const uint8_t *payload, info1c_t *i)
-{
-    rd_t r; int k;
-    r.b = payload; r.n = 0;
-    i->min_pwr_red = (uint8_t)get(&r, 3);
-    i->add_pwr_red = (uint8_t)get(&r, 3);
-    i->md_len = (uint8_t)get(&r, 7);
-    for (k = 0; k < 6; k++) {
-        i->sr[k].hi_carrier = (uint8_t)get(&r, 1);
-        i->sr[k].preemph = (uint8_t)get(&r, 4);
-        i->sr[k].max_rate = (uint8_t)get(&r, 4);
-    }
-    i->freq_off = sext10(get(&r, 10));
 }

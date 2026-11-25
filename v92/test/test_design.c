@@ -194,5 +194,64 @@ int main(void)
     v92_dsn_start(&d, &cfg);
     while ((r = v92_dsn_step(&d)) == 0) ;
     CHECK_EQ_I(r, V92_DSN_ERR_RATE);
+    /* An echo estimate past 96 * 65535 (linear A/D, whose divisor is 96;
+     * canceller taps at their limit, security pass M1): the noise term
+     * saturates, so the design is as hopeless as with a little less echo,
+     * and does not wrap to a quiet line and a dense constellation */
+    {
+        uint32_t er[2] = { 96u * 65535u, 96u * 65536u };
+        int i;
+        for (i = 0; i < 2; i++) {
+            memset(&cfg, 0, sizeof cfg);
+            cfg.h[V92_CH_LEAD] = 4000 * 256; cfg.noise = 9; cfg.q_quiet = 3; cfg.res = 600; cfg.q_trn = 300;
+            cfg.echo_rms = er[i]; cfg.rates = all; cfg.rx_linear = 1;
+            v92_dsn_start(&d, &cfg);
+            while ((r = v92_dsn_step(&d)) == 0) ;
+            CHECK_EQ_I(r, V92_DSN_ERR_RATE);
+        }
+    }
+    /* A channel estimate with a long low-pass tail (a ramp from 10^6 down
+     * to 0), the noise and training figures of an ordinary call: the
+     * design's vectors grow past 32 bits. It ends with an end code, in a
+     * bounded number of steps. */
+    {
+        static const int ramp[2][2] = { { 30, 40 }, { 40, V92_CH_NTAP - 40 } };
+        int i, j;
+        for (i = 0; i < 2; i++) {
+            memset(&cfg, 0, sizeof cfg);
+            for (j = 0; j < ramp[i][1]; j++)
+                cfg.h[ramp[i][0] + j] = 1000000 - j * (1000000 / ramp[i][1]);
+            cfg.noise = 9; cfg.q_quiet = 3; cfg.echo_rms = 400; cfg.res = 600; cfg.q_trn = 300;
+            cfg.ltot = 256; cfg.lmax = 192; cfg.rates = all;
+            v92_dsn_start(&d, &cfg);
+            while ((r = v92_dsn_step(&d)) == 0 && d.steps < 1000000) ;
+            printf("  ramp from tap %d, %d taps: end %d after %d steps\n", ramp[i][0], ramp[i][1], r, d.steps);
+            CHECK(r != 0);
+        }
+    }
+    /* The peak in the last tap, random ISI as large as the peak (run 2442
+     * of the audit's fuzz): the cursor sits so late that the feedback taps
+     * after it reach the end of g. The trials must not read past it. */
+    {
+        static const int32_t H[V92_CH_NTAP] = {
+            -11316, -827, -6630, -6585, 12144, 10072, -10678, 13411, 3390, 15179, -3871, -10771,
+            -8338, -9896, -7201, -15314, 1110, 7020, -8938, 8740, 11325, -2952, 11790, -11815,
+            12731, 7800, -12626, 7730, 5955, 8669, 16370, -6903, -896, 15523, -9902, -4835,
+            -2724, -9478, 5423, -3604, 5408, -13439, -2726, -15835, 15712, 9711, 517, -1343,
+            10280, 4272, 4376, -13017, -13208, 4724, 4665, -10847, -12879, 13555, 12147, -8989,
+            -865, -5183, -7258, 7522, -9162, -151, -675, 6496, -6431, -11635, -15396, -1920,
+            7203, -5311, -2389, 6239, -15240, -14550, 8694, 14355, -15454, 14785, -5315, 12465,
+            -16413, 5192, 1219, 8306, 10304, 1956, -13285, -5212, 11714, 9674, -2411, 16560,
+        };
+        memset(&cfg, 0, sizeof cfg);
+        memcpy(cfg.h, H, sizeof cfg.h);
+        cfg.alaw = 1; cfg.rx_linear = 1;
+        cfg.noise = 3176; cfg.q_quiet = 1067; cfg.echo_rms = 616; cfg.res = 61828; cfg.q_trn = 65775;
+        cfg.ltot = 320; cfg.lmax = 128; cfg.rates = all;
+        v92_dsn_start(&d, &cfg);
+        while ((r = v92_dsn_step(&d)) == 0 && d.steps < 1000000) ;
+        printf("  peak in the last tap: end %d after %d steps\n", r, d.steps);
+        CHECK(r != 0);
+    }
     T_REPORT("design");
 }

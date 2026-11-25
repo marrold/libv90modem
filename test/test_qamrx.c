@@ -111,6 +111,45 @@ static void run(const scen_t *s, res_t *o)
     o->freq_hz = (double)rx.freq / 4294967296.0 * s->sym_rate;
 }
 
+/* A hostile caller (security pass, I2): after S, audio that is loud or
+ * jumps (full-scale noise, a run of -32768, full-scale alternation,
+ * silence, 256 ms each) while the receiver trains on known points, as in
+ * training (mu 10) and in data mode (QRX_DENSE, mu 13). Before the fix the
+ * error, the tap products and the taps overflowed int32 and the mse went
+ * negative. Returns the number of symbols with a negative mse or an mse
+ * above its clamp (4, 6 dB); *cmax: the largest |tap| at the end. */
+static int hostile(int dense, int32_t *cmax)
+{
+    static qamrx_t rx;
+    uint32_t r = 1;
+    long i;
+    int k, bad = 0;
+    qamrx_init(&rx, 3200, 3, 5);
+    for (i = 0; i < 400; i++) (void)qamrx_tick(&rx, (int16_t)((i * 7919) % 4000 - 2000));
+    qamrx_sync(&rx, 0);
+    for (i = 0; i < 8000L * 20; i++) {
+        int16_t x;
+        r = r * 1664525u + 1013904223u;
+        switch ((i >> 11) & 3) {
+        case 0: x = (int16_t)(int32_t)(r >> 16) ; break;
+        case 1: x = -32768; break;
+        case 2: x = (int16_t)((i & 1) ? 32767 : -32768); break;
+        default: x = 0; break;
+        }
+        if (!qamrx_tick(&rx, x)) continue;
+        qamrx_update(&rx, (r & 1) ? QRX_REF : -QRX_REF, (r & 2) ? QRX_REF : -QRX_REF,
+                     QRX_EQ | QRX_CARRIER | QRX_TIMING | (dense ? QRX_DENSE : 0), dense ? 13 : 10);
+        if (rx.mse < 0 || rx.mse > 4 * 65536) bad++;
+    }
+    *cmax = 0;
+    for (k = 0; k < QRX_NTAP; k++) {
+        int32_t a = rx.cr[k] < 0 ? -rx.cr[k] : rx.cr[k], b = rx.ci[k] < 0 ? -rx.ci[k] : rx.ci[k];
+        if (a > *cmax) *cmax = a;
+        if (b > *cmax) *cmax = b;
+    }
+    return bad;
+}
+
 int main(void)
 {
     scen_t s; res_t o;
@@ -175,6 +214,16 @@ int main(void)
     CHECK_EQ_I(o.errors, 0);
     CHECK_NEAR(o.cen1 / 256.0, o.cen0 / 256.0, 0.5);
     CHECK_NEAR(o.freq_hz, -5.0, 0.5);
+
+    /* hostile audio after S: no overflow, the mse stays in range, the
+     * taps stay within their bound (2^30 and one stretch of updates) */
+    {
+        int32_t cmax;
+        CHECK_EQ_I(hostile(0, &cmax), 0);
+        CHECK(cmax <= (1 << 30) + (1 << 28));
+        CHECK_EQ_I(hostile(1, &cmax), 0);
+        CHECK(cmax <= (1 << 30) + (1 << 28));
+    }
 
     T_REPORT("qamrx");
 }

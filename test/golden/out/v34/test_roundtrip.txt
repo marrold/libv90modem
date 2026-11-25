@@ -1,0 +1,5 @@
+  round trip, 16 states: 130 (symbol rate, data rate, shaping) cases, 0 bit errors
+  round trip, 32 states: 23 cases, 0 bit errors
+  round trip, 64 states: 23 cases, 0 bit errors
+  nominal vs measured mean energy, 3000 and 3200 sym/s: worst deviation 0.79 %
+test_roundtrip: 1846 checks, 0 failures

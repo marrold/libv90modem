@@ -2,7 +2,7 @@
 #ifndef V92_TESTUTIL_H
 #define V92_TESTUTIL_H
 #include <string.h>
-#include "v92.h"
+#include "../v92.h"
 
 static inline uint32_t tu_lcg(uint32_t *s) { *s = *s * 1664525u + 1013904223u; return *s >> 8; }
 

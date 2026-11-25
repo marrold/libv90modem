@@ -78,59 +78,159 @@ void v42ec_cfg_default(v42ec_cfg_t *cfg, int originator)
     cfg->lapm.v44_p3_tx = cfg->lapm.v44_p3_rx = V44COMP_MAX_HISTORY < 4096 ? V44COMP_MAX_HISTORY : 4096;
 }
 
+/* --------------------------------------------- the compression procedures */
+/* What the endpoint asks of the procedure in use (comp_alg): one entry for
+ * V.42 bis and one for V.44, each on its member of the enc and dec unions */
+typedef struct {
+    int    (*enc_init)(v42ec_t *e);     /* C-INIT, our encoder, and its policy */
+    int    (*dec_init)(v42ec_t *e);     /* C-INIT, our decoder */
+    size_t (*encode)(v42ec_t *e, const uint8_t *in, size_t inlen,
+                     uint8_t *out, size_t outmax, size_t *outlen);
+    int    (*flush)(v42ec_t *e, uint8_t *out, size_t outmax, size_t *outlen);
+    size_t (*enc_pending)(const v42ec_t *e);
+    /* receive room a decode needs: V.42 bis one string (P2), V.44 any */
+    size_t (*dec_room)(const v42ec_t *e);
+    int    (*decode)(v42ec_t *e, const uint8_t *in, size_t inlen, size_t *used,
+                     uint8_t *out, size_t outmax, size_t *outlen);
+    int    (*dec_pending)(const v42ec_t *e);
+    void   (*enc_counts)(const v42ec_t *e, unsigned long *in, unsigned long *out);
+    void   (*dec_counts)(const v42ec_t *e, unsigned long *in, unsigned long *out);
+} comp_ops_t;
+
+/* V.42 bis */
+static int bis_enc_init(v42ec_t *e)
+{
+    if (v42comp_enc_init(&e->enc.bis, e->lapm.comp_n2, e->lapm.comp_n7) != 0) return -1;
+    v42comp_enc_policy(&e->enc.bis, e->cfg.comp_policy);
+    return 0;
+}
+static int bis_dec_init(v42ec_t *e)
+{
+    return v42comp_dec_init(&e->dec.bis, e->lapm.comp_n2, e->lapm.comp_n7);
+}
+static size_t bis_encode(v42ec_t *e, const uint8_t *in, size_t inlen, uint8_t *out, size_t outmax, size_t *outlen)
+{
+    return v42comp_encode(&e->enc.bis, in, inlen, out, outmax, outlen);
+}
+static int bis_flush(v42ec_t *e, uint8_t *out, size_t outmax, size_t *outlen)
+{
+    return v42comp_flush(&e->enc.bis, out, outmax, outlen);
+}
+static size_t bis_enc_pending(const v42ec_t *e) { return v42comp_enc_pending(&e->enc.bis); }
+static size_t bis_dec_room(const v42ec_t *e) { return e->dec.bis.d.n7; }
+static int bis_decode(v42ec_t *e, const uint8_t *in, size_t inlen, size_t *used,
+                      uint8_t *out, size_t outmax, size_t *outlen)
+{
+    return v42comp_decode(&e->dec.bis, in, inlen, used, out, outmax, outlen);
+}
+static int bis_dec_pending(const v42ec_t *e) { return v42comp_dec_pending(&e->dec.bis); }
+static void bis_enc_counts(const v42ec_t *e, unsigned long *in, unsigned long *out)
+{
+    *in = e->enc.bis.in_chars; *out = e->enc.bis.out_octets;
+}
+static void bis_dec_counts(const v42ec_t *e, unsigned long *in, unsigned long *out)
+{
+    *in = e->dec.bis.in_octets; *out = e->dec.bis.out_chars;
+}
+
+/* V.44 */
+static int v44_enc_init(v42ec_t *e)
+{
+    const v42lapm_t *l = &e->lapm;
+    if (v44comp_enc_init(&e->enc.v44, l->v44_n2_tx, l->v44_n7_tx, l->v44_n8_tx) != 0) return -1;
+    v44comp_enc_policy(&e->enc.v44, e->cfg.comp_policy);
+    return 0;
+}
+static int v44_dec_init(v42ec_t *e)
+{
+    const v42lapm_t *l = &e->lapm;
+    return v44comp_dec_init(&e->dec.v44, l->v44_n2_rx, l->v44_n7_rx, l->v44_n8_rx);
+}
+static size_t v44_encode(v42ec_t *e, const uint8_t *in, size_t inlen, uint8_t *out, size_t outmax, size_t *outlen)
+{
+    return v44comp_encode(&e->enc.v44, in, inlen, out, outmax, outlen);
+}
+static int v44_flush(v42ec_t *e, uint8_t *out, size_t outmax, size_t *outlen)
+{
+    return v44comp_flush(&e->enc.v44, out, outmax, outlen);
+}
+static size_t v44_enc_pending(const v42ec_t *e) { return v44comp_enc_pending(&e->enc.v44); }
+static size_t v44_dec_room(const v42ec_t *e) { (void)e; return 1; }
+static int v44_decode(v42ec_t *e, const uint8_t *in, size_t inlen, size_t *used,
+                      uint8_t *out, size_t outmax, size_t *outlen)
+{
+    return v44comp_decode(&e->dec.v44, in, inlen, used, out, outmax, outlen);
+}
+static int v44_dec_pending(const v42ec_t *e) { return v44comp_dec_pending(&e->dec.v44); }
+static void v44_enc_counts(const v42ec_t *e, unsigned long *in, unsigned long *out)
+{
+    *in = e->enc.v44.in_chars; *out = e->enc.v44.out_octets;
+}
+static void v44_dec_counts(const v42ec_t *e, unsigned long *in, unsigned long *out)
+{
+    *in = e->dec.v44.in_octets; *out = e->dec.v44.out_chars;
+}
+
+/* indexed by comp_alg - V42EC_COMP_V42BIS */
+static const comp_ops_t comp_ops[2] = {
+    { bis_enc_init, bis_dec_init, bis_encode, bis_flush, bis_enc_pending,
+      bis_dec_room, bis_decode, bis_dec_pending, bis_enc_counts, bis_dec_counts },
+    { v44_enc_init, v44_dec_init, v44_encode, v44_flush, v44_enc_pending,
+      v44_dec_room, v44_decode, v44_dec_pending, v44_enc_counts, v44_dec_counts }
+};
+typedef char comp_ops_rows[(V42EC_COMP_V44 - V42EC_COMP_V42BIS + 1
+                            == (int)(sizeof comp_ops / sizeof comp_ops[0])) ? 1 : -1];
+
+/* the procedure in use; only while comp_alg is not V42EC_COMP_NONE */
+static const comp_ops_t *ops(const v42ec_t *e)
+{
+    return &comp_ops[e->comp_alg - V42EC_COMP_V42BIS];
+}
+
 /* C-INIT of whichever procedure the XID exchange settled on (V.42 bis 5.2,
- * 5.3; V.44 7.5). LAPM never leaves both agreed. */
+ * 5.3; V.44 7.5). LAPM never leaves both agreed. A direction agreed but
+ * refused here (values past this build's arrays: v42ec_init keeps our
+ * proposals within them, so only a bug gets here) releases the link: the
+ * far end would compress, or expect compressed data, while we did not. */
 static void comp_init(v42ec_t *e)
 {
     const v42lapm_t *l = &e->lapm;
+    int tx = 0, rx = 0, bad = 0;
 
     e->comp_tx = e->comp_rx = 0;
     e->comp_alg = V42EC_COMP_NONE;
     e->enc_dirty = 0;
     if (l->v44_tx || l->v44_rx) {
         e->comp_alg = V42EC_COMP_V44;
-        if (l->v44_tx && v44comp_enc_init(&e->enc.v44, l->v44_n2_tx, l->v44_n7_tx, l->v44_n8_tx) == 0) {
-            v44comp_enc_policy(&e->enc.v44, e->cfg.comp_policy);
-            e->comp_tx = 1;
-        }
-        if (l->v44_rx && v44comp_dec_init(&e->dec.v44, l->v44_n2_rx, l->v44_n7_rx, l->v44_n8_rx) == 0)
-            e->comp_rx = 1;
+        tx = l->v44_tx; rx = l->v44_rx;
     } else if (l->comp_tx || l->comp_rx) {
         e->comp_alg = V42EC_COMP_V42BIS;
-        if (l->comp_tx && v42comp_enc_init(&e->enc.bis, l->comp_n2, l->comp_n7) == 0) {
-            v42comp_enc_policy(&e->enc.bis, e->cfg.comp_policy);
-            e->comp_tx = 1;
-        }
-        if (l->comp_rx && v42comp_dec_init(&e->dec.bis, l->comp_n2, l->comp_n7) == 0)
-            e->comp_rx = 1;
+        tx = l->comp_tx; rx = l->comp_rx;
+    }
+    if (tx) {
+        if (ops(e)->enc_init(e) == 0) e->comp_tx = 1;
+        else bad = 1;
+    }
+    if (rx) {
+        if (ops(e)->dec_init(e) == 0) e->comp_rx = 1;
+        else bad = 1;
+    }
+    if (bad) {
+        e->comp_tx = e->comp_rx = 0;
+        e->reason_override = V42EC_R_COMPRESSION;
+        v42lapm_release(&e->lapm);
     }
 }
 
 /* the encoder and decoder in use */
-static size_t enc_encode(v42ec_t *e, const uint8_t *in, size_t inlen, uint8_t *out, size_t outmax, size_t *outlen)
-{
-    return e->comp_alg == V42EC_COMP_V44 ? v44comp_encode(&e->enc.v44, in, inlen, out, outmax, outlen)
-                                         : v42comp_encode(&e->enc.bis, in, inlen, out, outmax, outlen);
-}
-
-static int enc_flush(v42ec_t *e, uint8_t *out, size_t outmax, size_t *outlen)
-{
-    return e->comp_alg == V42EC_COMP_V44 ? v44comp_flush(&e->enc.v44, out, outmax, outlen)
-                                         : v42comp_flush(&e->enc.bis, out, outmax, outlen);
-}
-
 static int enc_pending(const v42ec_t *e)
 {
-    if (!e->comp_tx) return 0;
-    return e->comp_alg == V42EC_COMP_V44 ? v44comp_enc_pending(&e->enc.v44) != 0
-                                         : v42comp_enc_pending(&e->enc.bis) != 0;
+    return e->comp_tx && ops(e)->enc_pending(e) != 0;
 }
 
 static int dec_pending(const v42ec_t *e)
 {
-    if (!e->comp_rx) return 0;
-    return e->comp_alg == V42EC_COMP_V44 ? v44comp_dec_pending(&e->dec.v44) != 0
-                                         : v42comp_dec_pending(&e->dec.bis) != 0;
+    return e->comp_rx && ops(e)->dec_pending(e) != 0;
 }
 
 static void finish(v42ec_t *e, int reason)
@@ -169,7 +269,8 @@ void v42ec_init(v42ec_t *e, const v42ec_cfg_t *cfg)
     memset(e, 0, sizeof *e);
     e->cfg = *cfg;
     e->cfg.originator = cfg->originator ? 1 : 0;
-    /* never propose more than the arrays of v44_comp.h hold */
+    /* never propose more than the arrays of v42_comp.h and v44_comp.h hold */
+    if (e->cfg.lapm.comp_p1 > V42COMP_MAX_CODEWORDS) e->cfg.lapm.comp_p1 = V42COMP_MAX_CODEWORDS;
     if (e->cfg.lapm.v44_p1_tx > V44COMP_MAX_CODEWORDS) e->cfg.lapm.v44_p1_tx = V44COMP_MAX_CODEWORDS;
     if (e->cfg.lapm.v44_p1_rx > V44COMP_MAX_CODEWORDS) e->cfg.lapm.v44_p1_rx = V44COMP_MAX_CODEWORDS;
     if (e->cfg.lapm.v44_p3_tx > V44COMP_MAX_HISTORY) e->cfg.lapm.v44_p3_tx = V44COMP_MAX_HISTORY;
@@ -207,13 +308,8 @@ static void drain_rx(v42ec_t *e)
             size_t used = 0, out = 0, max = room < sizeof tmp ? room : sizeof tmp;
             int rc;
             if (n == 0 && !dec_pending(e)) break;
-            if (e->comp_alg == V42EC_COMP_V44) {
-                if (room == 0) break;                   /* any room at all will do */
-                rc = v44comp_decode(&e->dec.v44, p, (size_t)n, &used, tmp, max, &out);
-            } else {
-                if (room < e->dec.bis.d.n7) break;      /* one string must fit */
-                rc = v42comp_decode(&e->dec.bis, p, (size_t)n, &used, tmp, max, &out);
-            }
+            if (room < ops(e)->dec_room(e)) break;
+            rc = ops(e)->decode(e, p, (size_t)n, &used, tmp, max, &out);
             ring_put(&e->rxr, tmp, out);
             if (used) v42lapm_rx_consume(&e->lapm, (int)used);
             if (rc != 0) {
@@ -309,7 +405,7 @@ static void feed_lapm(v42ec_t *e)
                 size_t avail, c;
                 const uint8_t *p = ring_peek(&e->txr, &avail);
                 if (avail > limit) avail = limit;
-                c = enc_encode(e, p, avail, info, (size_t)room, &n);
+                c = ops(e)->encode(e, p, avail, info, (size_t)room, &n);
                 if (c) e->enc_dirty = 1;
                 ring_drop(&e->txr, c);
                 limit -= c;
@@ -319,7 +415,7 @@ static void feed_lapm(v42ec_t *e)
             /* nothing more to send for now: C-FLUSH so the far end gets
              * every character already accepted (V.42 bis 7.9, V.44 7.13) */
             if (limit == 0 && e->enc_dirty && n < (size_t)room
-                && enc_flush(e, info, (size_t)room, &n))
+                && ops(e)->flush(e, info, (size_t)room, &n))
                 e->enc_dirty = 0;
         } else {
             if (limit > (size_t)room) limit = (size_t)room;
@@ -334,7 +430,9 @@ static void feed_lapm(v42ec_t *e)
         e->brk_tx_pend = 0;
 }
 
-static int hdlc_bit(v42ec_t *e)
+/* before a line bit, when the originator still waits for its first frame
+ * or the transmitter could take the next one */
+static void hdlc_next(v42ec_t *e)
 {
     if (e->orig_wait > 0 && (--e->orig_wait == 0 || e->hrx.flag_run >= FLAGS_SEEN)) {
         e->orig_wait = 0;
@@ -347,6 +445,11 @@ static int hdlc_bit(v42ec_t *e)
         n = v42lapm_tx_frame(&e->lapm, f, &fcs32);
         if (n > 0) v42hdlc_tx_frame(&e->htx, f, n, fcs32);
     }
+}
+
+static int hdlc_bit(v42ec_t *e)
+{
+    if (e->orig_wait > 0 || v42hdlc_tx_need_frame(&e->htx)) hdlc_next(e);
     return v42hdlc_tx_bit(&e->htx);
 }
 
@@ -417,6 +520,15 @@ void v42ec_rx_bit(v42ec_t *e, int bit)
     int r;
 
     bit = bit ? 1 : 0;
+    if (e->state != V42EC_DETECT && e->state != V42EC_ASYNC && e->state != V42EC_DISCONNECTED) {
+        /* HDLC alone: establishing, connected, releasing */
+        r = v42hdlc_rx_bit(&e->hrx, bit);
+        if (r > 0) {
+            v42lapm_rx_frame(&e->lapm, e->hrx.buf, r, e->hrx.last_fcs32);
+            sync(e);
+        }
+        return;
+    }
     switch (e->state) {
     case V42EC_DISCONNECTED:
         return;
@@ -430,7 +542,10 @@ void v42ec_rx_bit(v42ec_t *e, int bit)
         if (e->det_rx.last_char >= 0) async_char(e, e->det_rx.last_char);
         if (e->cfg.originator) {
             if (e->want_hdlc || e->want_async) return;
-            if (r == V42DET_ADP_V42) e->want_hdlc = 1;
+            /* an answerer without the detection phase (7.2.1) sends flags
+             * instead of the ADP: they too say it does LAPM */
+            v42hdlc_rx_bit(&e->hrx, bit);
+            if (r == V42DET_ADP_V42 || e->hrx.flag_run >= FLAGS_SEEN) e->want_hdlc = 1;
             else if (r == V42DET_ADP_NOEC) {
                 e->want_async = 1;
                 ring_reset(&e->rxr);
@@ -460,13 +575,6 @@ void v42ec_rx_bit(v42ec_t *e, int bit)
                 v42lapm_rx_frame(&e->lapm, e->hrx.buf, r, e->hrx.last_fcs32);
                 sync(e);
             }
-        }
-        return;
-    default:
-        r = v42hdlc_rx_bit(&e->hrx, bit);
-        if (r > 0) {
-            v42lapm_rx_frame(&e->lapm, e->hrx.buf, r, e->hrx.last_fcs32);
-            sync(e);
         }
         return;
     }
@@ -505,6 +613,7 @@ void v42ec_line_restored(v42ec_t *e)
 void v42ec_tick(v42ec_t *e, unsigned ms)
 {
     if (e->state == V42EC_DISCONNECTED || e->state == V42EC_ASYNC) return;
+    if (ms > 1000000u) ms = 1000000u;       /* as v42lapm_tick: past every timer, and an int */
 
     if (e->t400 >= 0) {
         e->t400 -= (int)ms;
@@ -585,6 +694,14 @@ void v42ec_release(v42ec_t *e)
     }
 }
 
+void v42ec_abort(v42ec_t *e)
+{
+    if (e->state == V42EC_DISCONNECTED) return;
+    v42lapm_abort(&e->lapm, V42LAPM_R_LOCAL);   /* only a UA or DM owed still goes */
+    e->orig_wait = 0;
+    finish(e, V42LAPM_R_LOCAL);
+}
+
 int v42ec_send_break(v42ec_t *e, int opt, int len10ms)
 {
     if (e->state != V42EC_CONNECTED || e->brk_tx_pend) return -1;
@@ -639,12 +756,9 @@ void v42ec_get_status(const v42ec_t *e, v42ec_status_t *st)
     st->rx_i = l->rx_i; st->rx_i_dropped = l->rx_i_dropped;
     st->tx_rej = l->tx_rej; st->rx_rej = l->rx_rej;
     st->t401_expiries = l->t401_expiries; st->violations = l->violations;
-    if (e->comp_alg == V42EC_COMP_V44) {
-        if (e->comp_tx) { st->comp_in = e->enc.v44.in_chars; st->comp_out = e->enc.v44.out_octets; }
-        if (e->comp_rx) { st->decomp_in = e->dec.v44.in_octets; st->decomp_out = e->dec.v44.out_chars; }
-    } else if (e->comp_alg == V42EC_COMP_V42BIS) {
-        if (e->comp_tx) { st->comp_in = e->enc.bis.in_chars; st->comp_out = e->enc.bis.out_octets; }
-        if (e->comp_rx) { st->decomp_in = e->dec.bis.in_octets; st->decomp_out = e->dec.bis.out_chars; }
+    if (e->comp_alg != V42EC_COMP_NONE) {
+        if (e->comp_tx) ops(e)->enc_counts(e, &st->comp_in, &st->comp_out);
+        if (e->comp_rx) ops(e)->dec_counts(e, &st->decomp_in, &st->decomp_out);
     }
     st->async_overruns = e->async_overruns; st->async_framing = e->async_framing;
 }

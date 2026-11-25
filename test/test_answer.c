@@ -4,16 +4,20 @@
 #include <string.h>
 #include "test.h"
 #include "../modem/answer.h"
+#include "../modem/ans_scheme.h"   /* ans_enter: a phase put in place by hand */
 #include "../modem/v14.h"
+#include "../modem/tonedet.h"
 #include "../sim/callpeer.h"
 #include "../sim/channel.h"
 #include "../sim/g711.h"
 
 #define FS 8000
+/* RMS on the 16-bit scale (0 dBm0 = 15770) */
+#define DBM0_18 1981
 
 typedef struct { int connected_at, modulation, bitrate, peer_rate, phase; char got_a[64], got_c[64]; int na, nc; } outcome;
 
-static void run(int use_v8, unsigned caller_modes, int caller2400, unsigned our_modes, int seconds, outcome *o)
+static void run(int use_v8, unsigned caller_modes, int caller2400, unsigned our_modes, int seconds, int level, outcome *o)
 {
     static const double one[1] = {1.0};
     static const char *msg_c = "caller says hello, 0123456789", *msg_a = "answerer replies: ~{}[] OK";
@@ -32,7 +36,7 @@ static void run(int use_v8, unsigned caller_modes, int caller2400, unsigned our_
     memset(&ac, 0, sizeof ac);
     ac.level = 3000; ac.modes = our_modes; ac.getbit = v14_getbit; ac.putbit = v14_putbit; ac.user = &dte;
     answer_init(&a, &ac);
-    callpeer_init(&c, use_v8, caller_modes, caller2400, 3000);
+    callpeer_init(&c, use_v8, caller_modes, caller2400, level);
     memset(o, 0, sizeof *o); o->connected_at = -1;
 
     for (n = 0; n < seconds * FS; n++) {
@@ -201,6 +205,107 @@ static void run_bell212(unsigned our_modes, int seconds, outcome *o)
     o->modulation = a.modulation; o->bitrate = a.bitrate; o->phase = a.phase;
 }
 
+/* A V.21 calling modem without V.8 (V.25 5, V.21 7 a)): once it has
+ * recognised the answer tone it answers with its mark, 980 Hz on channel
+ * No. 1, and waits for ours, 1650 Hz on channel No. 2, before data. As the
+ * three recorded callers (2026-11-23) it may send that mark during ANSam
+ * (mark_in_tone_ms after the tone began) or, after_tone_ms > 0, only once
+ * the tone has been gone that long. Level: the RMS of its signal. */
+typedef struct {
+    tonedet_t ans; v21mod_t mod; v21demod_t dem; arx_t uart; v14_t dte;
+    int32_t n, tone_at, tone_last, on_at; int mark_in_tone_ms, after_tone_ms, fbit, cd, on, carrier; int64_t thr;
+} v21c_t;
+
+#define ANS_2100 ((uint32_t)(((uint64_t)2100 << 32) / 8000))
+
+static void v21c_init(v21c_t *v, int mark_in_tone_ms, int after_tone_ms, int level)
+{
+    memset(v, 0, sizeof *v);
+    tonedet_init(&v->ans, ANS_2100);
+    v21mod_init(&v->mod, V21L_MARK, V21L_SPACE, 8000, 300, (int16_t)(level * 181 / 128));
+    v21demod_init(&v->dem, V21H_MARK, V21H_SPACE, 8000, 300);
+    arx_init(&v->uart, 8000, 300);
+    v14_init(&v->dte);
+    v->thr = v21demod_energy_of(&v->dem, 1200); v->fbit = 1;
+    v->mark_in_tone_ms = mark_in_tone_ms; v->after_tone_ms = after_tone_ms;
+    v->tone_at = v->tone_last = v->on_at = -1;
+}
+
+static int16_t v21c_tick(v21c_t *v, int16_t rx)
+{
+    int level, heard, c, i, done;
+    int16_t out;
+    v->n++;
+    if (!v->on) {
+        if (tonedet_tick(&v->ans, rx)) { if (v->tone_at < 0) v->tone_at = v->n; v->tone_last = v->n; }
+        if (v->tone_at >= 0 && (v->after_tone_ms > 0 ? v->n - v->tone_last >= v->after_tone_ms * 8
+                                                      : v->n - v->tone_at >= v->mark_in_tone_ms * 8)) {
+            v->on = 1; v->on_at = v->n;
+        }
+        return 0;
+    }
+    level = v21demod_tick(&v->dem, rx);
+    heard = v->dem.energy >= v->thr;
+    v->cd = heard ? v->cd + 1 : 0;
+    if (v->cd > 150 * 8) v->carrier = 1;
+    if (v->carrier) {
+        c = arx_tick(&v->uart, heard ? level : 1);
+        if (c >= 0) {
+            v14_putbit(&v->dte, 0);
+            for (i = 0; i < 8; i++) v14_putbit(&v->dte, (c >> i) & 1);
+            v14_putbit(&v->dte, 1);
+        }
+    }
+    out = v21mod_tick(&v->mod, v->fbit, &done);
+    if (done) v->fbit = v->carrier ? (v14_getbit(&v->dte) & 1) : 1;
+    return out;
+}
+
+/* o->connected_at; *mark_heard_at: where the caller's mark is first on the
+ * line in our V.22 wait (the later of its start and that wait's) */
+static void run_v21(unsigned our_modes, int mark_in_tone_ms, int after_tone_ms, int level, int seconds, outcome *o, int *mark_heard_at)
+{
+    static const double one[1] = {1.0};
+    static const char *msg_c = "caller says hello, 0123456789", *msg_a = "answerer replies: ~{}[] OK";
+    channel_cfg cfg; channel_t ch;
+    static answer_t a; static v21c_t c; static v14_t dte;
+    answer_cfg ac;
+    int16_t atx = 0, ctx = 0;
+    int n, sent = 0, v22_at = -1;
+
+    memset(&cfg, 0, sizeof cfg);
+    cfg.ds_noise_dbfs = -55.0; cfg.us_noise_dbfs = -55.0;
+    cfg.ds_taps = one; cfg.ds_ntaps = 1; cfg.us_taps = one; cfg.us_ntaps = 1;
+    cfg.echo_gain = 0.2; cfg.echo_delay = 21; cfg.full_scale = 32124.0; cfg.seed = 17;
+    channel_init(&ch, &cfg);
+    v14_init(&dte);
+    memset(&ac, 0, sizeof ac);
+    ac.level = 3000; ac.modes = our_modes; ac.getbit = v14_getbit; ac.putbit = v14_putbit; ac.user = &dte;
+    answer_init(&a, &ac);
+    v21c_init(&c, mark_in_tone_ms, after_tone_ms, level);
+    memset(o, 0, sizeof *o); o->connected_at = -1;
+    for (n = 0; n < seconds * FS; n++) {
+        double client_rx; uint8_t srv; int16_t t;
+        channel_tick(&ch, linear_to_ulaw(atx), (double)ctx, &client_rx, &srv);
+        t = answer_tick(&a, (int16_t)ulaw_to_linear(srv));
+        ctx = v21c_tick(&c, (int16_t)lround(client_rx));
+        atx = t;
+        if (v22_at < 0 && a.phase == ANS_V22) v22_at = n;
+        if (o->connected_at < 0 && a.connected && c.carrier) o->connected_at = n;
+        if (o->connected_at >= 0 && !sent && n > o->connected_at + FS / 2) {
+            v14_write(&c.dte, (const uint8_t *)msg_c, (int)strlen(msg_c));
+            v14_write(&dte, (const uint8_t *)msg_a, (int)strlen(msg_a));
+            sent = 1;
+        }
+        if (sent) {
+            o->na += v14_read(&dte, (uint8_t *)o->got_a + o->na, 63 - o->na);
+            o->nc += v14_read(&c.dte, (uint8_t *)o->got_c + o->nc, 63 - o->nc);
+        }
+    }
+    o->modulation = a.modulation; o->bitrate = a.bitrate; o->phase = a.phase;
+    *mark_heard_at = c.on_at < 0 ? -1 : c.on_at > v22_at ? c.on_at : v22_at;
+}
+
 int main(void)
 {
     outcome o;
@@ -208,34 +313,34 @@ int main(void)
     unsigned ours = V8_MOD_V22 | V8_MOD_V21 | ANS_MODE_BELL103 | ANS_MODE_BELL212A;
 
     /* 1. V.8 caller offering V.22bis: 2400 bit/s */
-    run(1, V8_MOD_V22 | V8_MOD_V21, 1, ours, 14, &o);
+    run(1, V8_MOD_V22 | V8_MOD_V21, 1, ours, 14, 3000, &o);
     printf("  answer: V.8 + V.22bis connected at %.2f s\n", o.connected_at / 8000.0);
     CHECK(o.connected_at > 0);
     CHECK_EQ_I(o.modulation, ANS_MOD_V22BIS); CHECK_EQ_I(o.bitrate, 2400); CHECK_EQ_I(o.peer_rate, 2400);
     CHECK(!strcmp(o.got_a, msg_c)); CHECK(!strcmp(o.got_c, msg_a));
 
     /* 2. V.8 caller offering only V.21: 300 bit/s FSK */
-    run(1, V8_MOD_V21, 0, ours, 14, &o);
+    run(1, V8_MOD_V21, 0, ours, 14, 3000, &o);
     printf("  answer: V.8 + V.21 connected at %.2f s\n", o.connected_at / 8000.0);
     CHECK(o.connected_at > 0);
     CHECK_EQ_I(o.modulation, ANS_MOD_V21); CHECK_EQ_I(o.bitrate, 300);
     CHECK(!strcmp(o.got_a, msg_c)); CHECK(!strcmp(o.got_c, msg_a));
 
     /* 3. pre-V.8 V.22bis caller: ANSam runs out, then the legacy answer sequence */
-    run(0, 0, 1, ours, 16, &o);
+    run(0, 0, 1, ours, 16, 3000, &o);
     printf("  answer: legacy V.22bis connected at %.2f s\n", o.connected_at / 8000.0);
     CHECK(o.connected_at > 5 * FS);
     CHECK_EQ_I(o.modulation, ANS_MOD_V22BIS); CHECK_EQ_I(o.bitrate, 2400);
     CHECK(!strcmp(o.got_a, msg_c)); CHECK(!strcmp(o.got_c, msg_a));
 
     /* 4. pre-V.8 V.22 (1200) caller */
-    run(0, 0, 0, ours, 16, &o);
+    run(0, 0, 0, ours, 16, 3000, &o);
     CHECK(o.connected_at > 5 * FS);
     CHECK_EQ_I(o.modulation, ANS_MOD_V22); CHECK_EQ_I(o.bitrate, 1200);
     CHECK(!strcmp(o.got_a, msg_c)); CHECK(!strcmp(o.got_c, msg_a));
 
     /* 5. V.8 caller with nothing in common (V.32 only): clean failure */
-    run(1, V8_MOD_V32, 0, ours, 14, &o);
+    run(1, V8_MOD_V32, 0, ours, 14, 3000, &o);
     CHECK(o.connected_at < 0);
     CHECK_EQ_I(o.phase, ANS_FAILED);
 
@@ -271,6 +376,77 @@ int main(void)
     run_bell212(V8_MOD_V22 | V8_MOD_V21 | ANS_MODE_BELL103, 45, &o);
     CHECK(o.connected_at < 0);
     CHECK_EQ_I(o.modulation, ANS_MOD_NONE);
+
+    /* 10. a V.21 caller without V.8 (three ISP calls, 2026-11-23): it
+     * answers ANSam with its 980 Hz mark, sends no CM and waits for our
+     * 1650 Hz. Heard in the V.22 wait, V.21 within half a second of it;
+     * before, the mark held V.22's carrier detect on and the caller heard
+     * V.22 and the 2225 Hz tone until it gave up. First as recorded (the
+     * mark from 950 ms into ANSam), then a caller that waits for the end of
+     * the tone, at -18 dBm0, the level of the recorded ones. */
+    {
+        int mark_at;
+        run_v21(ours, 950, 0, 3000, 14, &o, &mark_at);
+        printf("  answer: V.21 caller (mark during ANSam) connected at %.2f s, %.2f s after its mark in the V.22 wait, \"%s\" / \"%s\"\n",
+               o.connected_at / 8000.0, (o.connected_at - mark_at) / 8000.0, o.got_a, o.got_c);
+        CHECK(o.connected_at > 0); CHECK(mark_at > 0);
+        CHECK(o.connected_at - mark_at <= FS / 2);
+        CHECK_EQ_I(o.modulation, ANS_MOD_V21); CHECK_EQ_I(o.bitrate, 300); CHECK_EQ_I(o.phase, ANS_V21);
+        CHECK(!strcmp(o.got_a, msg_c)); CHECK(!strcmp(o.got_c, msg_a));
+
+        run_v21(ours, 0, 1000, DBM0_18, 16, &o, &mark_at);
+        printf("  answer: V.21 caller (mark after the tone, -18 dBm0) connected at %.2f s, %.2f s after its mark\n",
+               o.connected_at / 8000.0, (o.connected_at - mark_at) / 8000.0);
+        CHECK(o.connected_at > 0); CHECK(mark_at > 0);
+        CHECK(o.connected_at - mark_at <= FS / 2);
+        CHECK_EQ_I(o.modulation, ANS_MOD_V21); CHECK_EQ_I(o.bitrate, 300);
+        CHECK(!strcmp(o.got_a, msg_c)); CHECK(!strcmp(o.got_c, msg_a));
+
+        /* 11. V.21 not offered: that caller is never answered in V.21 */
+        run_v21(ours & ~V8_MOD_V21, 950, 0, 3000, 40, &o, &mark_at);
+        CHECK(o.connected_at < 0);
+        CHECK_EQ_I(o.modulation, ANS_MOD_NONE); CHECK_EQ_I(o.phase, ANS_FAILED);
+    }
+
+    /* 12. V.22bis and V.22 callers without V.8 at -18 dBm0: as before, the
+     * 980 Hz watch takes neither for a V.21 caller */
+    run(0, 0, 1, ours, 16, DBM0_18, &o);
+    printf("  answer: legacy V.22bis at -18 dBm0 connected at %.2f s\n", o.connected_at / 8000.0);
+    CHECK(o.connected_at > 5 * FS);
+    CHECK_EQ_I(o.modulation, ANS_MOD_V22BIS); CHECK_EQ_I(o.bitrate, 2400);
+    CHECK(!strcmp(o.got_a, msg_c)); CHECK(!strcmp(o.got_c, msg_a));
+    run(0, 0, 0, ours, 16, DBM0_18, &o);
+    printf("  answer: legacy V.22 at -18 dBm0 connected at %.2f s\n", o.connected_at / 8000.0);
+    CHECK(o.connected_at > 5 * FS);
+    CHECK_EQ_I(o.modulation, ANS_MOD_V22); CHECK_EQ_I(o.bitrate, 1200);
+    CHECK(!strcmp(o.got_a, msg_c)); CHECK(!strcmp(o.got_c, msg_a));
+
+    /* 13. nobody there and white noise at -30 dBm0 (above V.22's carrier
+     * threshold): no V.21 caller is heard in it. V.22 waits to its end. */
+    {
+        static const double one[1] = {1.0};
+        channel_cfg cfg; channel_t ch; static answer_t a; static v14_t dte; answer_cfg ac;
+        int16_t atx = 0; int n, ever = 0, v21 = 0;
+        memset(&cfg, 0, sizeof cfg);
+        cfg.ds_noise_dbfs = -60.0; cfg.us_noise_dbfs = -30.0 - 3.17;
+        cfg.ds_taps = one; cfg.ds_ntaps = 1; cfg.us_taps = one; cfg.us_ntaps = 1;
+        cfg.echo_gain = 0.2; cfg.echo_delay = 21; cfg.full_scale = 32124.0; cfg.seed = 5;
+        channel_init(&ch, &cfg);
+        v14_init(&dte);
+        memset(&ac, 0, sizeof ac);
+        ac.level = 3000; ac.modes = ours; ac.getbit = v14_getbit; ac.putbit = v14_putbit; ac.user = &dte;
+        answer_init(&a, &ac);
+        for (n = 0; n < 45 * FS && a.phase != ANS_FAILED; n++) {
+            double crx; uint8_t srv;
+            channel_tick(&ch, linear_to_ulaw(atx), 0.0, &crx, &srv);
+            atx = answer_tick(&a, (int16_t)ulaw_to_linear(srv));
+            if (a.connected) ever = 1;
+            if (a.phase == ANS_V21) v21 = 1;
+        }
+        printf("  answer: noise at -30 dBm0: gave up after %.1f s, V.21 tried %d\n", n / 8000.0, v21);
+        CHECK(!ever); CHECK(!v21);
+        CHECK_EQ_I(a.phase, ANS_FAILED);
+    }
 
     /* nobody there, but a hybrid that returns a fifth of our own signal: the
      * V.21 fall-back must not take the echo of its 1650 Hz channel for a
@@ -344,6 +520,59 @@ int main(void)
         CHECK(!strcmp(got, "before the retrainand after it"));
         printf("  answer: our retrain never answered: call given up %.1f s after it was asked for\n", t_fail < 0 ? -1.0 : (t_fail - t_dead - 400) / 8000.0);
         CHECK(t_fail > 0); CHECK_EQ_I(a.phase, ANS_FAILED); CHECK(!a.connected);
+    }
+
+    /* The backstop of the start-up phases (spec D5): no phase before data
+     * mode lasts longer than its budget, whatever its engine does. Each
+     * engine is put in place by hand and its clock moved on. */
+    {
+        static answer_t a; static v14_t dte; answer_cfg ac; v34ans_cfg vc; int k, conn;
+        memset(&ac, 0, sizeof ac);
+        ac.level = 3000; ac.modes = ANS_MODE_V90 | V8_MOD_V34 | V8_MOD_V22 | V8_MOD_V21;
+        ac.getbit = v14_getbit; ac.putbit = v14_putbit; ac.user = &dte;
+        v14_init(&dte);
+        /* V.90 Phases 3 and 4: 60 s */
+        answer_init(&a, &ac);
+        p2d_init(&a.p2, &a.p2cfg);
+        a.p2.state = P2D_DONE; a.p2.mode = P2D_MODE_V90; a.p2.info1a.v90 = 1; a.p2.info1a.up_sr = 4;
+        ans_enter(&a, ANS_P2); a.t = 0;
+        (void)answer_tick(&a, 0);
+        CHECK_EQ_I(a.phase, ANS_P3); CHECK_EQ_I(a.t_phase, 0);
+        a.t_phase = 60000 * 8 - 1;
+        (void)answer_tick(&a, 0);
+        CHECK_EQ_I(a.phase, ANS_P3);
+        (void)answer_tick(&a, 0);
+        CHECK_EQ_I(a.phase, ANS_FAILED); CHECK_EQ_I(answer_end(&a), ANS_END_FAILED);
+        /* V.34's Phase 2, a sub-state of ANS_V34: 30 s; in a connected call
+         * (a retrain's Phase 2) the retrain failed */
+        for (conn = 0; conn < 2; conn++) {
+            answer_init(&a, &ac);
+            memset(&vc, 0, sizeof vc);
+            vc.level = 3000; vc.law = 1; vc.getbit = v14_getbit; vc.putbit = v14_putbit; vc.user = &dte;
+            v34ans_init(&a.v34, &vc);
+            ans_enter(&a, ANS_V34); a.t = 0; a.connected = conn;
+            (void)answer_tick(&a, 0);
+            CHECK_EQ_I(a.phase, ANS_V34); CHECK_EQ_I(a.v34.state, V34A_PHASE2);
+            a.t_phase = 30000 * 8 - 1;
+            (void)answer_tick(&a, 0);
+            CHECK_EQ_I(a.phase, ANS_V34);
+            (void)answer_tick(&a, 0);
+            CHECK_EQ_I(a.phase, ANS_FAILED);
+            CHECK_EQ_I(answer_end(&a), conn ? ANS_END_RETRAIN_FAILED : ANS_END_FAILED);
+        }
+        /* outside its Phase 2 ANS_V34 has no budget (the 70 ms before a
+         * retrain's Phase 2 here), and the clock starts again where that
+         * Phase 2 begins */
+        answer_init(&a, &ac);
+        v34ans_init(&a.v34, &vc);
+        a.v34.state = V34A_RETRAIN; a.v34.t = 0; a.v34.have0c = 1;
+        ans_enter(&a, ANS_V34); a.t = 0; a.connected = 1;
+        a.t_phase = 100000 * 8;
+        for (k = 0; k < 8 * 70 && a.v34.state == V34A_RETRAIN; k++) (void)answer_tick(&a, 0);
+        CHECK_EQ_I(a.phase, ANS_V34); CHECK_EQ_I(a.v34.state, V34A_PHASE2);
+        CHECK(a.t_phase < 8);
+        for (k = 0; k < 8 * 100; k++) (void)answer_tick(&a, 0);
+        CHECK_EQ_I(a.phase, ANS_V34); CHECK_EQ_I(a.v34.state, V34A_PHASE2);
     }
 
     T_REPORT("answer");

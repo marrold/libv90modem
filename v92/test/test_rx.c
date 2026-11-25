@@ -65,6 +65,27 @@ static void test_p6(int su, double amp, int alaw)
     CHECK_EQ_I(on_at_end, 0);
 }
 
+/* Ru at full scale, straight into the detector: + at hi, - at lo (32767 and
+ * -32767, or -32768: the products of the correlations must not overflow) */
+static void test_p6_full(int16_t hi, int16_t lo)
+{
+    v92_p6_t d;
+    int n, first_on = -1, nrev = 0, rev_at = 0;
+    v92_p6_init(&d);
+    for (n = -200; n < 384 + 24 + 300; n++) {
+        int16_t x = 0;
+        int r;
+        if (n >= 0 && n < 384 + 24)
+            x = V92_UP_SIGN(v92_ru_sbit((unsigned)n, n >= 384)) > 0 ? hi : lo;
+        r = v92_p6_tick(&d, x, 20);
+        if ((r & V92_P6_ON) && first_on < 0) first_on = n;
+        if (r & V92_P6_REV) { if (nrev == 0) rev_at = n; nrev++; }
+    }
+    CHECK(first_on >= 20 && first_on < 90);
+    CHECK_EQ_I(nrev, 1);
+    CHECK_NEAR(rev_at, 384 + V92_P6_REV_LAG, 2);
+}
+
 static void test_p6_quiet(void)
 {
     v92_p6_t d;
@@ -174,6 +195,7 @@ static void test_dead(void)
 int main(void)
 {
     test_p6(0, 4000, 0); test_p6(1, 4000, 0); test_p6(0, -900, 1); test_p6(1, 12000, 1);
+    test_p6_full(32767, -32767); test_p6_full(32767, -32768);
     test_p6_quiet();
     test_trn(C1, 10, 2, 4000, 5, 0, 0);
     test_trn(C1, 10, 2, 4000, 40, 0, 3);

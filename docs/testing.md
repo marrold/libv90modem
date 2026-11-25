@@ -13,12 +13,27 @@ The host suite:
   printing `name: N checks, 0 failures`; then `ALL TESTS PASS`;
 - `test/api/test_api.c`, the public API against the static library as it
   is installed (only `v90m_*` visible), with a simulated caller from the
-  development archive;
+  development archive; `test/api/test_ec_fields.c`, the V.42 endpoint's
+  field lists (`api/v90modem_fields.h`: range check, configuration in,
+  defaults and status out) against the code they replaced, at and around
+  every field's bounds;
 - `examples/call_loop` (a caller and an answerer back to back through the
   public API);
 - the real-modem fixtures through `v90m-replay` (below);
 - `check-symbols`: the static library defines only `v90m_*` (its
   internals renamed `v90m__i_*`) and the compiler's helpers;
+- `check-version`: the Makefile's `VERSION` is the header's
+  `V90M_VERSION_*`, README's "This is X" and the `.so` names of
+  [getting-started.md](getting-started.md) (`version: 0.6.1 everywhere`);
+- `check-soname`: the shared library's SONAME is
+  `libv90modem.so.MAJOR.MINOR` while MAJOR is 0 (`soname:
+  libv90modem.so.0.6`);
+- `check-headers`: every header under `api/`, `modem/`, `v34/`, `v90/`,
+  `v92/`, `v32/`, `v42/` and `include/` compiles alone with only `-I. -Iinclude`
+  (each includes what it uses, by a path relative to itself);
+- `check-diag-names`: every error an engine's header defines has its name
+  in `v90m_err_name` (`tools/check-diag-names.sh`, with `test_diag
+  --names`; `diag names: 117, each engine error named`);
 - the tests of the subdirectories `v34`, `v90`, `v92`, `v42` and `v32`.
 
 It ends with `ALL HOST CHECKS PASS`. The simulated peers and channels are
@@ -28,6 +43,74 @@ downstream as an analogue modem's A/D has it) and `test/v90link.h` (a
 whole line between the library's analogue and digital modems). They may
 use knowledge a real modem does not have: they are a test reference, not
 code to ship (`DESIGN.md`, 5).
+
+## `make verify` and `make verify-phase`
+
+Two commands prove that a change did what it says and nothing else.
+
+**`make verify`** (`tools/verify.sh`) runs before every commit, some 6 to
+7 minutes on 16 threads. Seven stages run at once, each in a build tree of
+its own, each printing one line; then `VERIFY PASS (S s)`, or `VERIFY
+FAILED` and the end of each failed stage's log (`build/verify/log/`):
+
+| stage | what it proves |
+|---|---|
+| host | `make check`, then every program's output against its golden file (`tools/golden.sh check`) and the split programs' cases against the whole (`tools/split-check.sh`) |
+| replay | the replay proof (below) |
+| bench | the benches' transmit and received-bit hashes against `test/golden/bench.txt` (`tools/bench-hashes.sh`) |
+| ubsan | `make check-ubsan`, the fixtures included |
+| armv7hf | the short suite cross-built for armv7hf (musl) under qemu, less `tools/ports-slow.txt`, against the host's short set built with `-DTEST_FORCE_SHORT` (`tools/short-cmp.sh`) |
+| bigend | the same short suite for aarch64be (big-endian, musl) against the same host set |
+| fixed | `check-fixed` and `check-symbols` |
+
+`A7` and `BE` name the armv7hf and aarch64be compilers (default: Bootlin's
+under `../toolchains`), `RECS` the recordings.
+
+**Golden files.** `test/golden/out/<dir>/<program>.txt` holds what each
+test program printed (140 programs), filtered by `tools/out-filter.sh` (no
+CPU or wall time, no structure sizes). `make golden` runs `make check` and
+compares; `make golden-record` writes them. The rule: a golden file is
+re-recorded only when a change explains it, and the commit lists each
+file re-recorded and why. A change that should alter no output (a
+refactor, a faster form of the same arithmetic) re-records nothing; a new
+program's own golden file is not a re-record.
+
+**The replay proof** (`tools/replay-proof.sh`, `make replay-proof`). The
+106 recordings of real calls (private, never in the repository: `RECS`,
+their names and hashes in `test/golden/recordings.sha256`) go through
+`v90m-replay` in six flag sets (none, `-9`, `-x`, `-x -9`, `-k`, `-k -9`):
+636 runs, whose trace, decided bits and exit code are hashed against
+`test/golden/replay.sha256`. `check` compares, `record` writes the
+manifest, `diff REF` replays with this tree and with the tool built from a
+git REF and prints the start of each trace that differs: that is how a
+release says which recorded calls it changes, and why
+(`docs/history/audit-0.6.md`, "Replay proof against v0.5.0").
+`V90M_NO_RECS=1` skips it (the CI has no recordings).
+
+**Split programs.** On ARM the slowest programs (`SPLIT_TESTS` in the
+Makefile: `test_p34`, `test_orig_v92`, `test_orig_seeds`,
+`test_orig_bell`) run case by case in parallel (`prog --cases` says how
+many, `prog N` runs one). `tools/split-check.sh` proves that the cases,
+one after another, print what the whole program prints.
+
+**`make verify-phase`** (`tools/verify-phase.sh`) is the release proof,
+hours long: the armv5 (uClibc, the box's ABI) suite, the port matrix
+(below; the whole suites on host gcc, armv5, s390x and riscv64, QUICK on
+the rest, every target gating), the armv7hf short suite in full, the
+benches' hashes on the host against qemu, the CRd scan of the recordings
+(`make crd-scan`), and the `cost-*` counts into `build/costs.txt`; then
+`VERIFY-PHASE PASS`. Its figures go into the release's history file
+(`docs/history/audit-0.6.md` for 0.6.0).
+
+## The CI
+
+`.github/workflows/ci.yml`, on every push and pull request: host gcc and
+clang (`make check`, the golden files, the bench hashes, an install and the
+example built with pkg-config), `check-ubsan`, armv7hf under qemu against
+the host's short set, s390x (big-endian) under qemu the same way, and a
+win32 (mingw) build. Nightly, on tags and by hand: the ARMv5 suite under
+qemu. The replay proof is skipped there (`V90M_NO_RECS=1`): the recordings
+are private, so `make verify` on a machine that has them is the gate.
 
 ## `make check-arm`
 
@@ -84,7 +167,8 @@ little-endian, 32- and 64-bit. The cross compilers are Bootlin's
 "stable-2023.08-1" toolchains under `TOOLCHAINS` (default `../toolchains`);
 a target whose compiler or runner is missing is reported and skipped. The
 matrix builds every target with `-DTEST_FULL`, so the whole tests run
-everywhere; 32-bit x86 (i686, win32) builds with `-msse2 -mfpmath=sse`.
+everywhere; 32-bit x86 (i686, win32) builds with `-msse2 -mfpmath=sse`,
+m68k with `-fno-omit-frame-pointer` (below).
 
 **"Identical output"** means each program's output byte for byte, but for
 the lines that measure the host and not the modem: CPU and wall time, and
@@ -107,15 +191,16 @@ Settings (environment):
 | `COMPARE_ONLY=1` | compare what an earlier run left in `OUT`, run nothing |
 | `TOOLCHAINS` | where the cross compilers are |
 
-**m68k.** On m68k-uclibc under qemu-m68k twelve programs fail, every one
-built on the V.34 receiver core (`modem/qamrx`). The evidence points at the
-emulator, not the code: the same binary fails differently when qemu is
-told to translate one instruction per block; `qamrx.c` alone at `-O1`
-passes, and so does the same code built and run for the 68060; clang's
-UBSan and MSan report nothing there; and the fifteen other targets print
-what the host prints.
-There is no m68k hardware here to settle it
-(`docs/history/PROGRESS.md`, ports-2).
+**m68k.** m68k-uclibc is a target like the others: its programs must print
+what the host prints. Until 0.6.0 twelve programs built on the V.34
+receiver core (`modem/qamrx`) failed there, which was put down to
+qemu-m68k. It was the compiler: GCC 12.3 for m68k, with the frame pointer
+omitted (-O1 and up), reads an incoming argument 8 bytes off around a
+64-bit division (`docs/history/PROGRESS.md`, "m68k"). The two places in
+the tree are written so that it compiles them right, and the matrix
+builds m68k with `-fno-omit-frame-pointer` in case new code meets it.
+qemu-m68k's 64-bit multiply and divide agree with a reference written
+from the 68040 manual on 300,000 random operand sets.
 
 ## Other checks
 
@@ -194,7 +279,7 @@ recorded call into the answering modem and reports what it made of it,
 phase by phase:
 
 ```
-v90m-replay [-a] [-9] [-x] [-k] [-u BPS] [-d BPS] [-l DBM0] [-e SAMPLES] [-P CODE] RECORDING
+v90m-replay [-a] [-9] [-x] [-k] [-B] [-M] [-F] [-u BPS] [-d BPS] [-l DBM0 | -r RMS] [-e SAMPLES] [-P CODE] [-s SAMPLE] [-b FILE] RECORDING
 ```
 
 | | |
@@ -203,10 +288,16 @@ v90m-replay [-a] [-9] [-x] [-k] [-u BPS] [-d BPS] [-l DBM0] [-e SAMPLES] [-P COD
 | `-9` | V.92 offered (PCM upstream up to 48000 bit/s unless `-u`) |
 | `-x` | x2 offered (`V90M_MOD_X2`) |
 | `-k` | K56flex offered (`V90M_MOD_K56`): V.8bis first; the recording is lined up with our answer tone after it |
+| `-B` | Bell 103 and Bell 212A offered too (`V90M_MOD_BELL103`, `V90M_MOD_BELL212A`), as a host may offer them (nsdiald's sidecar: `bell103`, `bell212`); without them a caller without V.8 hears no 2225 Hz from us 4 s into the V.22 wait |
+| `-M` | in data mode transmit mark only (binary 1) in place of what the V.42 endpoint sends: "differs in 0" then proves the recording modem sent nothing but mark |
+| `-F` | print the caller's V.42 frames, found in the bits the V.42 endpoint receives: a line each with the time, length, address, control, type (`SABME`, `UA`, `I N(S) N(R)`, `RR`, `XID`, ...) and whether its FCS (16 or 32 bits) held; their count at the end |
 | `-u`, `-d BPS` | upstream / downstream rate ceilings |
-| `-l DBM0` | transmit level (default -12) |
+| `-l DBM0` | transmit level (default -12), to 0.01 dB |
+| `-r RMS` | transmit level as the rms itself, 1..16384 (`v90m_cfg.tx_level`): the level a recording's sidecar gives (nsdiald's `tx_level_rms`), which no `-l` may reach exactly; of `-l` and `-r` the last one given holds |
 | `-e SAMPLES` | the echo delay, as the recording modem was told (default: measured) |
 | `-P CODE` | INFO0d maximum power code, 1..31 (default 23) |
+| `-s SAMPLE` | start the modem at this sample of the recording (0-based), for a recording that begins at the answer tone; times stay the recording's |
+| `-b FILE` | the bits the V.90 / V.34 receiver decided (default `bits.txt`) |
 
 The modem must be set up as the recording modem was: what it hears holds
 the echo of what that modem sent. The last line counts the samples where

@@ -1,23 +1,11 @@
 /* V.34 Phase 2, answer modem. See p2ans.h and V.34 11.2.1.2. */
 #include <string.h>
 #include "p2ans.h"
+#include "p2common.h"
 
-#define MS(x) ((x) * 8)
-#define TONE_SEEN 160           /* 20 ms of steady carrier = tone detected */
-#define TURN 320                /* the 40 ms turn-round */
-#define TAIL 80                 /* 10 ms of tone after a reversal */
-#define PROBE_BLOCKS 23         /* 460 ms of L2 analysed (not to exceed 500 ms) */
 #define TX_FLUSH 60             /* samples from the start of the last bit to its end on the line */
 #define TX_DECAY 80             /* the shaped carrier-off ramp */
 #define P2N_FLOOR_DB10 360      /* signal-dependent noise assumed: 36 dB below the signal */
-
-/* V.34 Tables 1 and 2 */
-static const int16_t SR[6] = { 2400, 2743, 2800, 3000, 3200, 3429 };
-static const int8_t CAR[6][2][2] = {     /* [index][low / high] = { d, e } */
-    { {2, 3}, {3, 4} }, { {3, 5}, {2, 3} }, { {3, 5}, {2, 3} },
-    { {3, 5}, {2, 3} }, { {4, 7}, {3, 5} }, { {4, 7}, {4, 7} } };
-/* highest data rate of Table 8 per symbol rate, in units of 2400 bit/s */
-static const int8_t TOP[6] = { 9, 10, 10, 12, 13, 14 };
 
 /* x2's marker (docs/history/x2-facts.md "Phase 2 marker"): a 7-bit INFO
  * frame, 2 + 35 + 4 bits (RE (D-Modem); the 2 + 12 + 7 + 16 + 4 layout RE
@@ -59,12 +47,12 @@ int p2ans_k56_nudge(int off)
     return off > 0 ? off - 1 : off + 1;
 }
 
-int v34_symbol_rate(int idx) { return idx >= 0 && idx <= 5 ? SR[idx] : 0; }
+int v34_symbol_rate(int idx) { return idx >= 0 && idx <= 5 ? p2_sr[idx] : 0; }
 
 void v34_carrier(int idx, int hi, int *num, int *den)
 {
     if (idx < 0 || idx > 5) idx = 0;
-    *num = CAR[idx][hi ? 1 : 0][0]; *den = CAR[idx][hi ? 1 : 0][1];
+    *num = p2_car[idx][hi ? 1 : 0][0]; *den = p2_car[idx][hi ? 1 : 0][1];
 }
 
 static void go(p2ans_t *p, p2ans_state s) { p->state = s; p->t = 0; }
@@ -166,6 +154,7 @@ static void self_retrain(p2ans_t *p, int why)
     p->x2_hunt = 0;                 /* the marker comes in the first Phase 2 only */
     if (p->retrains >= P2N_MAX_RETRAINS) { fail(p, why); return; }
     p->retrains++;
+    p->t_x = 0;                     /* a new exchange */
     dpsktx_off(&p->tx);
     p->probing = 0;
     go(p, P2N_RT_SILENCE);
@@ -175,6 +164,7 @@ static void self_retrain(p2ans_t *p, int why)
 static void restart_tones(p2ans_t *p)
 {
     p->restarts++;
+    p->t_x = 0;                     /* counted: the exchange begins again */
     p->probing = 0;
     dpsktx_on(&p->tx);
     /* (L2 unanswered comes 760 ms after our L1 began, before the marker's
@@ -182,16 +172,6 @@ static void restart_tones(p2ans_t *p)
     if (p->x2_until < 0) dpskrx_expect(&p->rx, INFO_PAYLOAD(INFO0A_BITS));
     p->tone_since = -1;
     go(p, P2N_INFO0);
-}
-
-/* 10^(d/100) for d in 0.1 dB, 0..600: 2^(d * 0.0332193) */
-static uint32_t db10_lin(int d)
-{
-    static const uint16_t frac[9] = { 32768, 35734, 38968, 42495, 46341, 50535, 55109, 60097, 65535 };
-    int32_t e = d * 2177;                   /* log2 in Q16: 0.0332193 * 65536 */
-    int n = e >> 16, i = (e >> 13) & 7, f = e & 0x1fff;
-    uint32_t m = (uint32_t)frac[i] + (uint32_t)(((int32_t)(frac[i + 1] - frac[i]) * f) >> 13);    /* 2^frac, Q15 */
-    return n >= 15 ? m << (n - 15) : m >> (15 - n);
 }
 
 /* What a linear equaliser makes of the band lo..hi Hz, from the per-tone
@@ -252,14 +232,14 @@ static int decide(p2ans_t *p)
         for (c = 0; c < 2; c++) {
             int v;
             if (!hi_ok[c]) continue;
-            v = band_snr(p, SR[k] * CAR[k][c][0] / CAR[k][c][1], SR[k]);
+            v = band_snr(p, p2_sr[k] * p2_car[k][c][0] / p2_car[k][c][1], p2_sr[k]);
             /* the high carrier must be better by 1 dB to be chosen */
             if (snr < 0 || v > snr + 10) { snr = v; hi = c; }
         }
         /* 9 dB for the first bit, 3 dB for each further bit per symbol */
-        fine = (int)((int64_t)(snr - 90) * SR[k] * 16 / (30 * 2400));
+        fine = (int)((int64_t)(snr - 90) * p2_sr[k] * 16 / (30 * 2400));
         rate = fine >> 4;
-        top = TOP[k] < cap ? TOP[k] : cap;
+        top = p2_top[k] < cap ? p2_top[k] : cap;
         if (p->cfg.max_rate && top > p->cfg.max_rate / 2400) top = p->cfg.max_rate / 2400;
         if (rate > top) rate = top;
         if (rate < 1) rate = 1;
@@ -274,7 +254,7 @@ static int decide(p2ans_t *p)
     }
     if (best < 0) return -1;
 
-    p->sym_idx = best; p->sym_rate = SR[best];
+    p->sym_idx = best; p->sym_rate = p2_sr[best];
     p->rx_hi_carrier = best_hi; p->rx_snr_db10 = best_snr;
     p->tx_hi_carrier = p->info1c.sr[best].hi_carrier;
     p->tx_preemph = p->info1c.sr[best].preemph > 10 ? 0 : p->info1c.sr[best].preemph;
@@ -306,22 +286,15 @@ static int decide(p2ans_t *p)
     return 0;
 }
 
-/* a tone (bin m) standing out of our own probing echo for two blocks running */
-static int tone_under_probe(p2ans_t *p, int16_t x, int m)
-{
-    proberx_tick(&p->prx, x);
-    if (p->prx.n != 0) return p->tone_blocks >= 2;
-    {
-        int lvl = proberx_last(&p->prx, m), ref = proberx_last(&p->prx, 6);
-        if (lvl > 30 && lvl > 4 * ref) p->tone_blocks++; else p->tone_blocks = 0;
-    }
-    return p->tone_blocks >= 2;
-}
-
 int16_t p2ans_tick(p2ans_t *p, int16_t x)
 {
     int ev = dpskrx_tick(&p->rx, x);
     int32_t out;
+    int live = p->state != P2N_DONE && p->state != P2N_FAILED && p->state != P2N_X2 && p->state != P2N_K56;
+
+    /* the exchange as a whole (spec D5): a repeated INFO0c takes
+     * WAIT_BREV1 back to INFO0, whose own limit starts again */
+    if (live && p->t_x >= MS(P2N_EXCHANGE_MS)) fail(p, P2N_ERR_TIME);
 
     /* x2: from our L1 until the caller's L1 / L2 are analysed (or Tone A
      * again after an unanswered L2). The frames the receiver finds meanwhile
@@ -402,12 +375,13 @@ int16_t p2ans_tick(p2ans_t *p, int16_t x)
         break;
 
     case P2N_L1:
-        (void)tone_under_probe(p, x, 8);
+        (void)tone_under_probe(&p->prx, &p->tone_blocks, x, 8);
+        /* one sample longer than P2D_L1's: kept (p2common.h) */
         if (p->t >= MS(160)) { p->probing = 2; p->tone_blocks = 0; go(p, P2N_L2); }
         break;
 
     case P2N_L2:
-        if (tone_under_probe(p, x, 8)) {            /* 11.2.1.2.6 */
+        if (tone_under_probe(&p->prx, &p->tone_blocks, x, 8)) {            /* 11.2.1.2.6 */
             p->probing = 0;
             p->tone_b_at = p->now;
             dpsktx_on(&p->tx);
@@ -491,5 +465,6 @@ int16_t p2ans_tick(p2ans_t *p, int16_t x)
     if (out > 32767) out = 32767;
     if (out < -32768) out = -32768;
     p->now++; p->t++;
+    if (live) p->t_x++;
     return (int16_t)out;
 }

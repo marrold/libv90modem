@@ -74,6 +74,56 @@ int main(void)
         CHECK(10 * log10(pfar / perr) > 22.0);
     }
 
+    /* a hostile caller (security pass, I1): it picks a small UINFO, so our
+     * TRN1d is +-64, and sends a full-scale copy of it while it should be
+     * silent. NLMS drives the canceller toward an echo gain of 512, which
+     * Q24 taps cannot hold: they saturate at the largest gain (128), and
+     * never wrap (signed overflow before the fix). Both the update in
+     * ec_tick and ec_adapt (two cancellers in a row). */
+    {
+        uint32_t r = 1;
+        int wrapped = 0, pass;
+        for (pass = 0; pass < 2; pass++) {
+            ec_init(&ec);
+            for (i = 0; i < 4800; i++) {
+                int16_t sg;
+                r = r * 1664525u + 1013904223u;
+                sg = (int16_t)((r >> 31) ? -1 : 1);
+                if (pass == 0) (void)ec_tick(&ec, (int16_t)(64 * sg), (int16_t)(32767 * sg), i < 3000 ? 0 : 3);
+                else ec_adapt(&ec, ec_tick(&ec, (int16_t)(64 * sg), (int16_t)(32767 * sg), -1), i < 3000 ? 0 : 3);
+                if (i >= 200 && ec.h[0] <= 0) wrapped++;
+            }
+            CHECK_EQ_I(ec.h[0], INT32_MAX);
+        }
+        CHECK_EQ_I(wrapped, 0);
+    }
+
+    /* such taps, then a loud transmit: trained on a quiet DC (+27, energy
+     * just over 2^16) against a full-scale one, the taps sum to a gain of
+     * about 1200; frozen while our transmit goes to full scale, the
+     * estimate reaches about 2^25, and the error at the next adaptation
+     * is past 2^23, where err * 2^40 would leave int64 (signed overflow
+     * before; UBSan). Then it adapts on, both ways in: the taps stay in
+     * range and fall back toward the silent line. */
+    {
+        int64_t hsum = 0;
+        int16_t out;
+        int pass;
+        for (pass = 0; pass < 2; pass++) {
+            ec_init(&ec);
+            for (i = 0; i < 3000; i++) (void)ec_tick(&ec, 27, 32767, 0);
+            for (i = 0, hsum = 0; i < EC_NTAP; i++) hsum += ec.h[i];
+            CHECK(hsum > (int64_t)1000 << 24);      /* a gain over 1000 */
+            for (i = 0; i < EC_NTAP; i++) (void)ec_tick(&ec, 32767, 0, -1);
+            if (pass == 0) out = ec_tick(&ec, 32767, 0, 0);
+            else { out = ec_tick(&ec, 32767, 0, -1); ec_adapt(&ec, -33554432, 0); }
+            CHECK_EQ_I(out, -32768);
+            for (i = 0; i < 2000; i++) (void)ec_tick(&ec, 32767, 0, 0);
+            for (i = 0, hsum = 0; i < EC_NTAP; i++) hsum += ec.h[i];
+            CHECK(hsum < (int64_t)1 << 24 && hsum > -((int64_t)1 << 24));  /* |gain| under 1 */
+        }
+    }
+
     /* silence in, silence out, no blow-up when the transmit history is empty */
     ec_init(&ec);
     for (i = 0; i < 500; i++) CHECK_EQ_I(ec_tick(&ec, 0, 0, 2) == 0, 1);

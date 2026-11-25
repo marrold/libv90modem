@@ -1,21 +1,24 @@
 /* V.32bis coding: scramblers (4), differential and trellis encoding and
  * signal mapping (2.3), rate sequences (5.3). */
 #include "v32_priv.h"
+#include "v34.h"
 
-/* reg bit 0 = the most recent scrambled bit, so x^-n is bit n-1 */
-int v32_scramble(v32_scr_t *s, int answer, int di)
+/* the scrambler of V.34 clause 7 (v34.h), the same polynomials: GPA
+ * (1 + x^-5 + x^-23) for the answering modem, GPC (1 + x^-18 + x^-23) for
+ * the calling one; reg bit 0 = the most recent bit, x^-n is bit n-1 */
+static int scr(v32_scr_t *s, int answer, int bit, int descramble)
 {
-    int ds = (di ^ (int)(s->reg >> (answer ? 4 : 17)) ^ (int)(s->reg >> 22)) & 1;
-    s->reg = (s->reg << 1) | (uint32_t)ds;
-    return ds;
+    v34_scr_t t;
+    int out;
+    v34_scr_init(&t, answer ? V34_GPA : V34_GPC);
+    t.sr = s->reg;
+    out = descramble ? v34_descramble(&t, bit) : v34_scramble(&t, bit);
+    s->reg = t.sr;
+    return out;
 }
 
-int v32_descramble(v32_scr_t *s, int answer, int ds)
-{
-    int dout = (ds ^ (int)(s->reg >> (answer ? 4 : 17)) ^ (int)(s->reg >> 22)) & 1;
-    s->reg = (s->reg << 1) | (uint32_t)(ds & 1);
-    return dout;
-}
+int v32_scramble(v32_scr_t *s, int answer, int di) { return scr(s, answer, di, 0); }
+int v32_descramble(v32_scr_t *s, int answer, int ds) { return scr(s, answer, ds, 1); }
 
 /* Figure 2-5: A 00, B 01, C 11, D 10 */
 const uint8_t v32_abcd_label[4] = { 0, 1, 3, 2 };
@@ -100,15 +103,4 @@ unsigned v32_word_rates(uint16_t w)
     if (w & (1u << 5))  r |= V32_R12000;
     if (w & (1u << 3))  r |= V32_R14400;
     return r;
-}
-
-uint32_t v32_isqrt64(uint64_t v)
-{
-    uint64_t r = 0, b = (uint64_t)1 << 62;
-    while (b > v) b >>= 2;
-    while (b) {
-        if (v >= r + b) { v -= r + b; r = (r >> 1) + b; } else r >>= 1;
-        b >>= 2;
-    }
-    return (uint32_t)r;
 }

@@ -16,6 +16,12 @@
 #include "line34.h"
 #include "../modem/orig.h"
 #include "../modem/answer.h"
+/* the old cleared flag, from the end reason: 1 the caller's cleardown, 2 ours */
+static int cleared_of(const answer_t *a)
+{
+    int e = answer_end(a);
+    return e == ANS_END_CLEARDOWN_FAR ? 1 : e == ANS_END_CLEARDOWN_OURS ? 2 : 0;
+}
 
 static answer_t A; static orig_t O; static line34_t L; static bend_t UA, UO;
 static int a_mute;
@@ -28,7 +34,7 @@ static int16_t o_tick(void *u, int16_t rx) { return orig_tick((orig_t *)u, rx); 
 static void start(const line34_cfg *lc, int max_tx, int max_rx, int echo_delay)
 {
     answer_cfg ac; orig_cfg oc;
-    bend_init(&UA, &A.v34.dx, 0xACE1, 0xBEEF1); bend_init(&UO, &O.v34.dx, 0xBEEF1, 0xACE1);
+    bend_init(&UA, &A.v34.dx, 0xACE1, 0xBEEF1); bend_init(&UO, &O.e.v34.dx, 0xBEEF1, 0xACE1);
     memset(&ac, 0, sizeof ac);
     ac.level = 3000; ac.modes = MODES; ac.getbit = bend_get; ac.putbit = bend_put; ac.user = &UA;
     answer_init(&A, &ac);
@@ -49,8 +55,8 @@ static void run(long samples)
         /* a retrain starts the engines afresh: the data sequences start afresh with them */
         if (A.v34.dx.tx_starts == 0) UA.seen_tx = 0;
         if (A.v34.dx.rx_starts == 0) UA.seen_rx = 0;
-        if (O.v34.dx.tx_starts == 0) UO.seen_tx = 0;
-        if (O.v34.dx.rx_starts == 0) UO.seen_rx = 0;
+        if (O.e.v34.dx.tx_starts == 0) UO.seen_tx = 0;
+        if (O.e.v34.dx.rx_starts == 0) UO.seen_rx = 0;
     }
 }
 
@@ -72,7 +78,7 @@ static void sinks_reset(void) { UA.sink.n = UA.sink.errs = UO.sink.n = UO.sink.e
 static void report(const char *what)
 {
     printf("  %-34s %d sym/s  C->A %5d bit/s %7ld bits %ld err  A->C %5d bit/s %7ld bits %ld err  SNR %.1f dB, rtd %d\n",
-           what, O.v34.dx.cfg.sym_rate, O.bitrate, UA.sink.n, UA.sink.errs, O.rx_bitrate, UO.sink.n, UO.sink.errs,
+           what, O.e.v34.dx.cfg.sym_rate, O.bitrate, UA.sink.n, UA.sink.errs, O.rx_bitrate, UO.sink.n, UO.sink.errs,
            orig_snr_db10(&O) / 10.0, orig_rtd(&O));
 }
 
@@ -97,14 +103,14 @@ static int call_up(const char *what, const line34_cfg *lc, int max_tx, int max_r
     CHECK_EQ_I(O.phase, ORIG_V34); CHECK_EQ_I(O.modulation, ORIG_MOD_V34); CHECK_EQ_I(O.used_v8, 1);
     CHECK_EQ_I(A.phase, ANS_V34); CHECK_EQ_I(A.modulation, ANS_MOD_V34);
     CHECK_EQ_I(O.bitrate, A.rx_bitrate); CHECK_EQ_I(O.rx_bitrate, A.bitrate);
-    CHECK_EQ_I(O.bitrate, O.v34.dx.tx_rate); CHECK_EQ_I(O.rx_bitrate, O.v34.dx.rx_rate);
+    CHECK_EQ_I(O.bitrate, O.e.v34.dx.tx_rate); CHECK_EQ_I(O.rx_bitrate, O.e.v34.dx.rx_rate);
     CHECK(O.bitrate >= min_rate); CHECK(O.rx_bitrate >= min_rate);
     CHECK_EQ_I(orig_retraining(&O), 0); CHECK_EQ_I(orig_retrains(&O), 0);
     /* Phase 2 agreed: one symbol rate; what our INFO1c asked of the answerer is what it does */
-    CHECK_EQ_I(O.v34.p2.sym_rate, A.v34.p2.sym_rate);
-    CHECK_EQ_I(A.v34.dx.cfg.tx_preemph, O.v34.p2.info1c.sr[O.v34.p2.sym_idx].preemph);
-    CHECK_EQ_I(A.v34.dx.cfg.tx_pwr_red, O.v34.p2.info1c.min_pwr_red);
-    CHECK_EQ_I(A.v34.p2.rx_hi_carrier, O.v34.p2.tx_hi_carrier); CHECK_EQ_I(A.v34.p2.tx_hi_carrier, O.v34.p2.rx_hi_carrier);
+    CHECK_EQ_I(O.e.v34.p2.sym_rate, A.v34.p2.sym_rate);
+    CHECK_EQ_I(A.v34.dx.cfg.tx_preemph, O.e.v34.p2.info1c.sr[O.e.v34.p2.sym_idx].preemph);
+    CHECK_EQ_I(A.v34.dx.cfg.tx_pwr_red, O.e.v34.p2.info1c.min_pwr_red);
+    CHECK_EQ_I(A.v34.p2.rx_hi_carrier, O.e.v34.p2.tx_hi_carrier); CHECK_EQ_I(A.v34.p2.tx_hi_carrier, O.e.v34.p2.rx_hi_carrier);
     data_ok(4);
     report(what);
     return 1;
@@ -133,7 +139,7 @@ int main(void)
     /* ---- the best the line gives ---- */
     if (call_up("good line, no codec", &good, 0, 0, 28800)) {
         good_tx = O.bitrate; good_rx = O.rx_bitrate;
-        CHECK_EQ_I(O.v34.dx.cfg.sym_rate, 3200);
+        CHECK_EQ_I(O.e.v34.dx.cfg.sym_rate, 3200);
         /* 31200 is the most the V.34 engine (v34dx) takes from any line in
          * the library's tests; what we receive from modem/answer stops at
          * 28800, because its V.34 sends G.711 codec values always (as
@@ -145,7 +151,7 @@ int main(void)
          * adds; the answerer measures the same loop */
         CHECK(orig_rtd(&O) >= 320 && orig_rtd(&O) < 400);
         CHECK_NEAR(orig_rtd(&O), answer_rtd(&A), 4);
-        CHECK_EQ_I(O.v34.p2.retrains, 0); CHECK_EQ_I(O.v34.p2.restarts, 0);
+        CHECK_EQ_I(O.e.v34.p2.retrains, 0); CHECK_EQ_I(O.e.v34.p2.restarts, 0);
     } else good_tx = good_rx = 31200;
 
     /* ---- retrain begun by the caller (11.5.1.1), then by the answerer (11.5.1.2) ---- */
@@ -160,9 +166,9 @@ int main(void)
         CHECK_EQ_I(to_data(25000), 1);
         printf("  retrain begun by the %s: data again %.1f s later;", k ? "answerer" : "caller", (L.n - t0) / 8000.0);
         CHECK_EQ_I(orig_retraining(&O), 0);
-        CHECK_EQ_I(orig_retrains(&O), 1); CHECK_EQ_I(O.v34.retrains_ours, k ? 0 : 1);
+        CHECK_EQ_I(orig_retrains(&O), 1); CHECK_EQ_I(O.e.v34.retrains_ours, k ? 0 : 1);
         CHECK_EQ_I(A.retrains, 1); CHECK_EQ_I(A.v34.retrains_ours, k ? 1 : 0);
-        CHECK_EQ_I(O.v34.connects, 2);
+        CHECK_EQ_I(O.e.v34.connects, 2);
         CHECK(O.bitrate >= 21600 && O.rx_bitrate >= 21600);
         CHECK_EQ_I(O.bitrate, A.rx_bitrate); CHECK_EQ_I(O.rx_bitrate, A.bitrate);
         data_ok(4);
@@ -185,15 +191,15 @@ int main(void)
         CHECK_EQ_I(orig_moving(&O), 0); CHECK_EQ_I(orig_retraining(&O), 0);
         CHECK_EQ_I(to_data(4000), 1);
         CHECK_EQ_I(O.bitrate, 14400); CHECK_EQ_I(A.rx_bitrate, 14400);
-        CHECK_EQ_I(O.v34.dx.n_reneg, 2); CHECK_EQ_I(orig_retrains(&O), 0);
+        CHECK_EQ_I(O.e.v34.dx.n_reneg, 2); CHECK_EQ_I(orig_retrains(&O), 0);
         data_ok(3);
         report("after the answerer's (14400 out)");
         /* ---- cleardown (11.7) begun by the caller ---- */
         CHECK_EQ_I(orig_cleardown(&O), 0);
         for (t = 0; t < 2000 && (O.phase != ORIG_FAILED || A.phase != ANS_FAILED); t += 10) run(80);
-        printf("  our cleardown: over in %ld ms; answerer cleared %d\n", t, A.cleared);
+        printf("  our cleardown: over in %ld ms; answerer cleared %d\n", t, cleared_of(&A));
         CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_HANGUP); CHECK_EQ_I(O.connected, 0);
-        CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(A.cleared, 1);
+        CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(answer_end(&A), ANS_END_CLEARDOWN_FAR);
         CHECK(t < 1000);
         CHECK_EQ_I(orig_tick(&O, 0), 0);
     }
@@ -203,7 +209,7 @@ int main(void)
         for (t = 0; t < 2000 && (O.phase != ORIG_FAILED || A.phase != ANS_FAILED); t += 10) run(80);
         printf("  the answerer's cleardown: over in %ld ms\n", t);
         CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_CLEARDOWN);
-        CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(A.cleared, 2);
+        CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(answer_end(&A), ANS_END_CLEARDOWN_OURS);
     }
     /* ---- the answerer goes away in data mode ---- */
     if (call_up("good line, the answerer goes away", &good, 0, 0, 28800)) {
@@ -214,16 +220,79 @@ int main(void)
         CHECK(t < 15000);
     }
 
+    /* ---- a retrain's Phase 2 bounded (spec D5): V34O_RT_P2_MS from its start ---- */
+    if (call_up("good line, a retrain's Phase 2 bounded", &good, 0, 0, 28800)) {
+        CHECK_EQ_I(orig_retrain(&O), 0);
+        for (t = 0; t < 2000 && O.e.v34.state != V34O_PHASE2; t++) run(8);
+        CHECK_EQ_I(O.e.v34.state, V34O_PHASE2);
+        CHECK(O.e.v34.t < 100);                   /* the clock began with Phase 2 */
+        /* its clock 1 sample short of the limit; two ticks of the caller's
+         * own (the line and the answerer are no party to this) */
+        O.e.v34.t = 8 * V34O_RT_P2_MS - 1;
+        (void)orig_tick(&O, 0);
+        CHECK_EQ_I(O.e.v34.state, V34O_PHASE2); CHECK_EQ_I(O.phase, ORIG_V34);
+        (void)orig_tick(&O, 0);
+        printf("  a retrain's Phase 2 for %d s: v34orig %d (error %d), orig end %d\n", V34O_RT_P2_MS / 1000, O.e.v34.state, O.e.v34.error, O.end);
+        CHECK_EQ_I(O.e.v34.state, V34O_ENDED); CHECK_EQ_I(O.e.v34.error, V34O_ERR_RETRAINS);
+        CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_RETRAIN);
+    }
+
+    /* ---- a retrain's Phase 2 that fails (p2call's own limits: its restarts,
+     * an INFO0a repeated for ever) ends the call as a failed retrain ---- */
+    if (call_up("good line, a retrain's Phase 2 fails", &good, 0, 0, 28800)) {
+        CHECK_EQ_I(orig_retrain(&O), 0);
+        for (t = 0; t < 2000 && O.e.v34.state != V34O_PHASE2; t++) run(8);
+        CHECK_EQ_I(O.e.v34.state, V34O_PHASE2);
+        O.e.v34.p2.state = P2L_FAILED; O.e.v34.p2.error = P2L_ERR_REV;   /* (as at the fifth restart) */
+        (void)orig_tick(&O, 0);
+        printf("  a retrain's Phase 2 failed: v34orig %d (error %d), orig end %d\n", O.e.v34.state, O.e.v34.error, O.end);
+        CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_RETRAIN);
+    }
+
+    /* ---- a retrain that fails in Phases 3 / 4 (its training, or the
+     * carrier lost in it) ends the call as a failed retrain, as the
+     * answering side's does (spec D3) ---- */
+    for (k = 0; k < 2; k++) {
+        if (!call_up(k ? "good line, a retrain's carrier lost" : "good line, a retrain's training fails", &good, 0, 0, 28800)) continue;
+        CHECK_EQ_I(orig_retrain(&O), 0);
+        for (t = 0; t < 5000 && O.e.v34.state != V34O_TRAINING; t++) run(8);
+        CHECK_EQ_I(O.e.v34.state, V34O_TRAINING); CHECK_EQ_I(O.connected, 1);
+        O.e.v34.dx.state = DX_FAILED; O.e.v34.dx.error = k ? DX_ERR_CARRIER : DX_ERR_B1;
+        (void)orig_tick(&O, 0);
+        printf("  a retrain's Phases 3 / 4 failed (dx error %d): v34orig %d (error %d), orig end %d\n", O.e.v34.dx.error,
+               O.e.v34.state, O.e.v34.error, O.end);
+        CHECK_EQ_I(O.e.v34.error, V34O_ERR_RETRAINS);
+        CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_RETRAIN);
+    }
+
+    /* ---- our cleardown is not turned into a retrain: the far modem begins
+     * one on the same sample (its retrain tone heard during our cleardown),
+     * the cleardown ends as one; the caller's (k = 0), the answerer's ---- */
+    for (k = 0; k < 2; k++) {
+        if (!call_up(k ? "good line, the answerer clears, retrain" : "good line, we clear, retrain", &good, 0, 0, 28800)) continue;
+        if (k == 0) { CHECK_EQ_I(orig_cleardown(&O), 0); CHECK_EQ_I(answer_retrain(&A), 0); }
+        else { CHECK_EQ_I(answer_cleardown(&A), 0); CHECK_EQ_I(orig_retrain(&O), 0); }
+        for (t = 0; t < 3000 && (k ? A.phase != ANS_FAILED : O.phase != ORIG_FAILED); t += 10) run(80);
+        if (k == 0) {
+            printf("  our cleardown, the answerer's retrain: over in %ld ms, orig end %d, %d retrain(s)\n", t, O.end, O.e.v34.retrains);
+            CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_HANGUP); CHECK_EQ_I(O.e.v34.retrains, 0);
+        } else {
+            printf("  the answerer's cleardown, our retrain: over in %ld ms, answer end %d, %d retrain(s)\n", t, answer_end(&A), A.v34.retrains);
+            CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(answer_end(&A), ANS_END_CLEARDOWN_OURS); CHECK_EQ_I(A.v34.retrains, 0);
+        }
+        CHECK(t < 1000);
+    }
+
     /* ---- the answerer goes away in training: retrains (11.3.2.1), then the end ---- */
     start(&good, 0, 0, 0);
-    while (L.n < 8000L * 30 && O.v34.state != V34O_TRAINING) run(8);
-    CHECK_EQ_I(O.v34.state, V34O_TRAINING);
+    while (L.n < 8000L * 30 && O.e.v34.state != V34O_TRAINING) run(8);
+    CHECK_EQ_I(O.e.v34.state, V34O_TRAINING);
     a_mute = 1;
     for (t = 0; t < 60000 && O.phase != ORIG_FAILED; t += 10) run(80);
-    printf("  answerer gone in training: over after %.1f s, %d retrain(s); Phase 2 error %d\n", t / 1000.0, O.v34.retrains, O.v34.p2.error);
+    printf("  answerer gone in training: over after %.1f s, %d retrain(s); Phase 2 error %d\n", t / 1000.0, O.e.v34.retrains, O.e.v34.p2.error);
     CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_NO_CARRIER); CHECK_EQ_I(O.connected, 0);
-    CHECK(O.v34.retrains >= 1);
-    CHECK_EQ_I(O.v34.error, V34O_ERR_PHASE2); CHECK_EQ_I(O.v34.p2.error, P2L_ERR_REV);
+    CHECK(O.e.v34.retrains >= 1);
+    CHECK_EQ_I(O.e.v34.error, V34O_ERR_PHASE2); CHECK_EQ_I(O.e.v34.p2.error, P2L_ERR_REV);
 
     /* ---- ceilings: what we send, what we receive ---- */
     start(&good, 14400, 9600, 0);
@@ -236,7 +305,7 @@ int main(void)
     start(&good, 0, 0, -1);
     CHECK_EQ_I(to_data(30000), 1);
     CHECK(O.bitrate >= 28800 && O.rx_bitrate >= 28800);
-    CHECK(O.v34.dx.ecd.delay >= 0 && O.v34.dx.ecd.delay <= 4);
+    CHECK(O.e.v34.dx.ecd.delay >= 0 && O.e.v34.dx.ecd.delay <= 4);
     data_ok(3);
     report("own echo delay found");
 
@@ -250,7 +319,7 @@ int main(void)
             sprintf(name, "noise %d dB down", snr[k]);
             if (!call_up(name, &lc, 0, 0, k ? 7200 : 14400)) continue;
             CHECK(O.bitrate + O.rx_bitrate < last);
-            CHECK(O.v34.p2.info1c.sr[4].max_rate < 12);
+            CHECK(O.e.v34.p2.info1c.sr[4].max_rate < 12);
             last = O.bitrate + O.rx_bitrate;
         }
         /* an echo from the far hybrid as well: the answerer's receiver
@@ -261,7 +330,7 @@ int main(void)
         if (call_up("long loop (13 dB down at 3 kHz)", &lc, 0, 0, 9600)) {
             CHECK(O.bitrate < good_tx); CHECK(O.rx_bitrate < good_rx);
             /* the slope: pre-emphasis asked of the answerer (it was checked to do as asked above) */
-            CHECK(O.v34.p2.info1c.sr[O.v34.p2.sym_idx].preemph > 0);
+            CHECK(O.e.v34.p2.info1c.sr[O.e.v34.p2.sym_idx].preemph > 0);
         }
     }
 

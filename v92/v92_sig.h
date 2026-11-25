@@ -26,7 +26,7 @@
 #ifndef V90D_V92_SIG_H
 #define V90D_V92_SIG_H
 #include "v92.h"
-#include "v90_scr.h"
+#include "../v90/v90_scr.h"
 
 /* +1 / -1 for a line bit */
 #define V92_UP_SIGN(sbit)  ((sbit) ? -1 : 1)     /* 8.5.7 */

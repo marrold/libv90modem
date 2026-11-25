@@ -174,8 +174,8 @@ int main(void)
     /* the answerer retrains (V.22bis 6.4): we follow, and data goes on */
     v22m_retrain(&A.v22);
     run(MS(3000));
-    printf("    after a retrain started by the answerer: ours %d, theirs %d; moving %d\n", O.v22.retrains, A.v22.retrains, orig_moving(&O));
-    CHECK(O.v22.retrains >= 1);
+    printf("    after a retrain started by the answerer: ours %d, theirs %d; moving %d\n", O.e.leg.v22.retrains, A.v22.retrains, orig_moving(&O));
+    CHECK(O.e.leg.v22.retrains >= 1);
     CHECK(orig_moving(&O));
     exchange("after the retrain", 2000);
     /* the answerer goes away: the carrier is lost */

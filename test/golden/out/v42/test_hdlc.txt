@@ -1,0 +1,2 @@
+  random bits after ones: 1 of 200000 taken (0 with a LAPM address)
+test_hdlc: 4314 checks, 0 failures

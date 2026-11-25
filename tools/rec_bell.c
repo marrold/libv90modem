@@ -2,7 +2,9 @@
  * the library's caller (orig, Bell only) against the library's answerer
  * (V.22, V.21, Bell 103 and Bell 212A on) over sim/v32line (10 dB loss,
  * echoes, -45 dBm0 noise, 1 Hz, 50 ppm), until SECONDS seconds after data
- * mode. rig/bench_bell replays it into the caller alone. Host only.
+ * mode. The answerer's terminal sends a sentence over and over, so that the
+ * caller receives characters (Bell 103 hands on only characters, not the
+ * idle marks). rig/bench_bell replays it into the caller alone. Host only.
  *
  *   rec_bell 103|212 SECONDS OUT
  *
@@ -23,9 +25,13 @@ static orig_t O;
 static v32line_t L;
 static v14_t a_dte;
 static uint32_t gen = 0x1234567u;
+static const char text[] = "the quick brown fox jumps over the lazy dog. ";
 
-/* the caller's data: the same sequence rig/bench_bell sends */
-static int get(void *u) { (void)u; gen = gen * 1103515245u + 12345u; return (int)((gen >> 16) & 1); }
+/* the caller's data, as rig/bench_bell sends it: the first 300 data bits
+ * are marks (an idle start-stop line: a Bell 103 answerer connects on
+ * 200 ms of the caller's mark), then pseudo-random */
+static int nget;
+static int get(void *u) { (void)u; if (nget < 300) { nget++; return 1; } gen = gen * 1103515245u + 12345u; return (int)((gen >> 16) & 1); }
 static void put(void *u, int bit) { (void)u; (void)bit; }
 static double peer(void *u, double rx)
 {
@@ -61,6 +67,7 @@ int main(int argc, char **argv)
     fwrite("BELL0001", 1, 8, f); put32(f, oc.modes); put32(f, 0);
     for (n = 0; n < end; n++) {
         fputc(rx & 0xff, f); fputc(((uint16_t)rx >> 8) & 0xff, f);
+        if (v14_tx_pending(&a_dte) < 64) v14_write(&a_dte, (const uint8_t *)text, (int)sizeof text - 1);
         rx = v32line_tick(&L, orig_tick(&O, rx), peer, NULL);
         if (t_data < 0 && orig_moving(&O)) { t_data = n + 1; end = t_data + atol(argv[2]) * 8000L; }
         if (O.phase == ORIG_FAILED) break;

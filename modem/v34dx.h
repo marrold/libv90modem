@@ -13,7 +13,7 @@
  *     selects V.34 in INFO1a, V.90 9.2.1.1.8, and it is the test peer.)
  *
  * One linear sample in, one out, at 8 kHz. Fixed-point, no allocation.
- * Transmitter: v34/ (bits to points) and v34mod; receiver: ec, qamrx, v34/.
+ * Transmitter: v34/ (bits to points) and v34mod; receiver: ec, v34up.
  *
  * The far receiver gets what it asks for: carrier, pre-emphasis and power
  * reduction (INFO1), 4 or 16-point TRN / MP / E (its J), trellis code,
@@ -23,11 +23,11 @@
 #ifndef V90D_MODEM_V34DX_H
 #define V90D_MODEM_V34DX_H
 #include <stdint.h>
-#include "qamrx.h"
+#include "seqhunt.h"
 #include "ec.h"
 #include "ecdly.h"
 #include "tonedet.h"
-#include "v34train.h"
+#include "v34up.h"
 #include "v34mod.h"
 #include "v34mp.h"
 #include "../v34/v34.h"
@@ -104,13 +104,14 @@ typedef struct {
     v34dx_cfg   cfg;
     v34dx_state state;
     int         error;
-    int32_t     now, t;             /* sample clock; samples in this state */
+    uint32_t    now, t;             /* sample clock; samples in this state (modem/clock.h) */
     int         retrain_ours;       /* DX_RETRAIN: we asked for it */
-    int32_t     t_neg;              /* when Phase 4 or the rate renegotiation began */
+    uint32_t    t_neg;              /* when Phase 4 or the rate renegotiation began */
     /* ---- transmit ---- */
     v34mod_t    mod;
     int         txsig; int32_t txn; /* signal and symbol index in it */
-    int         tx_next;            /* leave J / TRN at the next chance */
+    int         tx_next;            /* leave J / TRN at the next chance; data at the end of its
+                                       mapping frame (a renegotiation's or cleardown's S) */
     int         phase4;             /* S-bar is followed by TRN, not PP */
     int         tx_pts; int32_t tx_g;   /* TRN / MP / E: 4 or 16 points, and their gain */
     int32_t     trn_syms, trn4_syms;
@@ -122,7 +123,7 @@ typedef struct {
     int         mp_sent, mpa_sent;
     v34_params_t tpar; v34_tx_t vtx; int32_t tx_dg;
     uint32_t    tx_count[DXS_N];    /* symbols sent of each signal so far */
-    int32_t     tx_first[DXS_N];    /* sample clock at the first / at the latest start */
+    uint32_t    tx_first[DXS_N];    /* sample clock at the first / at the latest start */
     /* ---- echo ---- */
     ec_t        ec, fec;            /* near; far (round trip later), when far_on */
     int         ec_mu, far_on;
@@ -131,28 +132,24 @@ typedef struct {
     int32_t     pw_in, pw_res;      /* smoothed power into and out of the cancellers */
     /* ---- receive ---- */
     sdet_t      sdet;
-    qamrx_t     rx;
-    int         rxmode;
-    v34trn_t    ref;
-    v34_tdem_t  tdem;
+    v34up_t     up;                 /* the receiver; up.rx_ready: data */
     sres_t      sres;
+    int         rxmode;
     int         md_done; int32_t md_wait;
-    int64_t     zpw; int32_t quiet;
     int         rx16;               /* 16-point decisions */
     /* sequences */
     uint16_t    jsr; int32_t jbits, j_at; int j_type;
     int         seq_j, seq_mp;
-    int         got_j, got_jp, far_16pt; int32_t t_jp;
-    uint8_t     fbuf[DX_FBUF]; int fn, ones;
+    int         got_j, got_jp, far_16pt; uint32_t t_jp;
+    uint8_t     fbuf[DX_FBUF]; int fn; seqhunt_t sh;
     v34_mp_t    far_mp, cand; int cand_ok;
     int         got_far_mp, got_far_mpa, got_e, far_clear;
     int32_t     snr_db10;           /* receiver SNR when our MP was made, 0.1 dB */
     int         line_n;             /* what that allows, units of 2400 bit/s */
     /* data mode */
-    v34_params_t rpar; v34_rx_t vrx; int32_t rx_dg;
     int         rates_done;
     int         tx_rate, rx_rate;   /* bit/s */
-    int         tx_ready, rx_ready;
+    int         tx_ready;
     int         in_reneg, clearing;
     int         n_reneg;            /* rate renegotiations completed */
     int         tx_starts, rx_starts;   /* times data mode began in each direction: the first
@@ -160,7 +157,6 @@ typedef struct {
                                        the first bit of that stretch of data */
     /* the far modem's retrain tone, 10 ms blocks */
     tonedet_t   tone;               /* the far modem's retrain tone */
-    int32_t     mse_limit, q_bad, q_dead;
     int         rate_drops;
 } v34dx_t;
 

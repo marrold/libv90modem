@@ -1,0 +1,4 @@
+  3200 clean: S detector 0.2 samples off, mse -43.4 dB after PP + 512 TRN, -inf dB after 2000 more, 0 errors
+  3000 clean: S detector 0.3 samples off, mse -26.8 dB after PP + 512 TRN, -inf dB after 2000 more, 0 errors
+  3200 weak, 28 dB, tilt: S detector -0.8 samples off, mse -20.9 dB after PP + 512 TRN, -28.2 dB after 2000 more, 0 errors
+v34train: 48 checks, 0 failures

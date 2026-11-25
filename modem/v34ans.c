@@ -52,12 +52,6 @@ void v34ans_dx_cfg(const p2ans_t *p2, const v34ans_cfg *cfg, v34dx_cfg *dx)
     dx->max_rx_rate = cfg->max_rx_rate;
     dx->max_tx_rate = cfg->max_tx_rate;
     dx->getbit = cfg->getbit; dx->putbit = cfg->putbit; dx->user = cfg->user;
-#ifdef V34X     /* bring-up experiment (live/v34x.sh): ask the caller for what it asks of us */
-    dx->ask_nonlinear = (V34X) & 1;
-    if ((V34X) & 2) { dx->ask_h[0][0] = 79; dx->ask_h[0][1] = -215; dx->ask_h[1][0] = 55; dx->ask_h[1][1] = 54; dx->ask_h[2][0] = -73; dx->ask_h[2][1] = -18; }
-    if ((V34X) & 4) dx->ask_shaping = 1;
-    if ((V34X) & 8) dx->ask_trellis = 1;
-#endif
 }
 
 int16_t v34ans_tick(v34ans_t *a, int16_t rx)

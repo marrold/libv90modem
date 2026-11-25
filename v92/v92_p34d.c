@@ -1,7 +1,9 @@
 /* V.92 Phases 3 and 4 with PCM upstream, digital modem. See v92_p34d.h. */
 #include <string.h>
 #include "v92_p34d.h"
+#include "clock.h"
 #include "v90_pcm.h"
+#include "fixmath.h"
 
 #define MS(ms) ((int32_t)(ms) * 8)
 
@@ -17,7 +19,6 @@
 #define RENEG_TRN2D    48       /* data frames of TRN2d in a rate renegotiation */
 #define RENEG_REFINE   600
 #define RD_UNITS       64       /* Rd for 384 T */
-#define CLEAR_CPDS     4        /* CPd sequences with drn = 0 before we go silent */
 #define RU_FLOOR       24       /* linear RMS below which Ru / Su are not looked for */
 #define DOWN_RMS       5600     /* downstream data power assumed for the echo: -9 dBm0 */
 
@@ -28,17 +29,32 @@
 #define T_TRAIN_MS     8000     /* 9.5.2.1.11: CPt within 5000 ms of Su-bar */
 #define T_PHASE4_MS    20000    /* 9.6.1.2.1: B1u within 20 s (+ 6 round trips) */
 #define T_RENEG_MS     8000
+/* our cleardown from its start, the caller there or not. What a caller that
+ * follows the text may take: our Rd and its Ru, about 0.1 s; TRN2u up to
+ * 16008 T, 2.0 s (9.8.2.2.3, 9.8.2.1.2); SUVu, our CPd, its acknowledge and
+ * two round trips: some 2.5 s in all. Under the 4 s T21.1 set; with a
+ * caller that acknowledges at once some 0.3 to 0.4 s (simulation). */
+#define T_CLEAR_MS     3500
 #define BASE_MAX_Q4    (1024 << 4)  /* the baseline is followed this far from zero, linear units Q4 */
 #define SUVD_HOLD_MS   2500     /* SUVd at the latest so long into Phase 4, the design done or not */
 #define T_PACE_MS      2500     /* more for each sample the design waits between steps */
 
+#define RENEG_DROP     2        /* reneg_ours: ours, to drop the upstream rate */
+
+#define UP_UNITY       16384    /* up_scale of a caller at the level designed for */
+
 #define CD_BLOCK       80       /* carrier watch: 10 ms */
 #define CD_BLOCKS      50       /* about half a second without signal in data mode */
 #define CD_SHIFT       6        /* "without": 18 dB under the power of B1u */
+#define CD_LINE_SHIFT  5        /* the line's squares are summed >> 5: 80 of 2^30 fit 32 bits */
+#define LINE_IDLE      8        /* |line| up to this is the idle code (A-law 0xD5, 0x55: +-8; mu-law: 0) */
+#define LINE_IDLE_RUN  24       /* ... for 4 periods of Ru: nobody sends Ru, whatever the detector reads */
 
 static void fail(v92d_t *p, int err)
 {
-    p->state = V92D_FAILED; p->error = err; p->t = 0;
+    /* the host has asked to hang up: however the call ends now, it is our
+     * cleardown */
+    p->state = V92D_FAILED; p->error = p->clearing ? V92D_ERR_HANGUP : err; p->t = 0;
     p->tx_ready = p->rx_ready = 0; p->rx_on = 0; p->trn_on = 0;
     (void)v90tx_select(&p->tx, V90TX_SILENCE);
 }
@@ -49,22 +65,12 @@ static int32_t pace_ms(const v92d_t *p) { return p->cfg.dsn_pace > 1 ? (int32_t)
 
 static void retrain(v92d_t *p, int ours)
 {
+    /* the host has asked to hang up: whatever goes wrong now ends the call */
+    if (p->clearing) { fail(p, V92D_ERR_HANGUP); return; }
     p->tx_ready = p->rx_ready = 0; p->rx_on = 0; p->trn_on = 0;
     p->retrain_ours = ours; p->up_floor = 0;
     (void)v90tx_select(&p->tx, V90TX_SILENCE);
     enter(p, V92D_RETRAIN);
-}
-
-static uint32_t isqrt64(uint64_t v)
-{
-    uint64_t r = 0, b = (uint64_t)1 << 62;
-    while (b > v) b >>= 2;
-    while (b) {
-        if (v >= r + b) { v -= r + b; r = (r >> 1) + b; }
-        else r >>= 1;
-        b >>= 2;
-    }
-    return (uint32_t)r;
 }
 
 int v92d_init(v92d_t *p, const v92d_cfg *cfg)
@@ -83,6 +89,7 @@ int v92d_init(v92d_t *p, const v92d_cfg *cfg)
     if (r != 0) { fail(p, V92D_ERR_UINFO); return -1; }
     if (cfg->echo_delay > V92D_MAX_ECHO_DELAY) { fail(p, V92D_ERR_UINFO); return -1; }
     ecdly_init(&p->ecd, cfg->echo_delay);
+    ecdly_near(&p->ecd, cfg->rtd);
     return 0;
 }
 
@@ -99,7 +106,7 @@ static void put_data(void *user, int bit)
                 /* the carrier watch's reference: the power B1u came with
                  * (which points the moduli use is not ours to guess) */
                 p->sig_ms = p->cd_n ? (uint32_t)(p->cd_acc / p->cd_n) : 0;
-                p->cd_acc = 0; p->cd_n = 0; p->cd_quiet = 0;
+                p->cd_acc = 0; p->cd_line = 0; p->cd_n = 0; p->cd_quiet = 0; p->cd_idle = 0;
                 p->rx_ready = 1;
             }
         }
@@ -110,12 +117,24 @@ static void put_data(void *user, int bit)
     }
 }
 
+/* CLK_REBASE_AT samples of the training receiver's clock (trn.k) in data
+ * mode: it, data_k and the symbol numbers counted on it back by CLK_REBASE
+ * (modem/clock.h), before a call of 2^31 samples (74.6 hours) takes them
+ * past INT32_MAX */
+static void rebase(v92d_t *p)
+{
+    p->trn.k -= CLK_REBASE; p->data_k -= CLK_REBASE;
+    p->trn.dec_m = clk_back(p->trn.dec_m);
+    p->m_b1u = clk_back(p->m_b1u); p->m_trn2u = clk_back(p->m_trn2u);
+    /* (trn.mref: v92_trn_resume sets it before the receiver decides again) */
+}
+
 /* E2u is over: symbol m is the first of B1u */
 static void upstream_start(v92d_t *p, int32_t m)
 {
     if (p->dsn_state != 2 || v92_dec_init(&p->dec, &p->cpd.map, put_data, p) != 0) { fail(p, V92D_ERR_B1); return; }
     v92_dec_any_start(&p->dec);
-    p->base_q4 = 0;
+    p->base_q4 = 0; p->up_scale = 0;
     p->m_b1u = m;
     p->data_k = m + p->dsn.dly;
     p->b1_left = (int32_t)V92_B1U_FRAMES * p->cpd.map.K; p->b1_bad = 0;
@@ -124,7 +143,7 @@ static void upstream_start(v92d_t *p, int32_t m)
     p->bad_seen = 0; p->q_bad = 0;
     p->rx_on = 1;
     p->trn_on = 2;
-    p->sig_ms = 0; p->cd_acc = 0; p->cd_n = 0; p->cd_quiet = 0;
+    p->sig_ms = 0; p->cd_acc = 0; p->cd_line = 0; p->cd_n = 0; p->cd_quiet = 0; p->cd_idle = 0;
 }
 
 /* The first data frame after E2u, sample by sample. A real analogue modem
@@ -152,13 +171,151 @@ static void b1u_lead(v92d_t *p, int16_t y)
     p->cd_acc = 0; p->cd_n = 0;
 }
 
+/* ---- the caller's gain in data mode ----
+ *
+ * The design builds the constellation for the power at which the caller
+ * sends TRN1u (8.8.3, reading 35), and the decoder slices on those points.
+ * Implementations differ on that reference: a caller whose data signal
+ * arrives some percent louder or weaker than designed is decided wrong at
+ * the larger points, and B1u fails. So the gain is measured on the first
+ * V92D_UP_EST symbols of B1u (v92d_up_scale). The points are G.711 levels,
+ * nearly the same set at any scale near the right one, so a
+ * decision-directed estimate stays where it starts; what tells the right
+ * scale is that nearly every symbol then sits on a point (within a quarter
+ * of the spacing).
+ *
+ *   1. At scale 1: if 7/8 of the symbols sit on a point, the scale is 1.
+ *      Simulated calls at the designed level score 131 to 144 of 144 and
+ *      stop here (one fit, some 14 k ARM instructions). Real ones need not:
+ *      of 26 recorded calls that reach B1u, 21 score under 126 (cxe 110,
+ *      h4 122, both calls that work at 1) and go on to 2 and 3, some 175 k
+ *      instructions in one tick.
+ *   2. The power of the symbols against what the design's trial of the
+ *      encoder gave (dsn.usum) puts the gain within some 15 %. The search
+ *      stays in the window 3/4 .. 4/3 of that start: G.711 is built in
+ *      octaves, and at twice or half the right scale many symbols sit on
+ *      points too (cxe: 128 at 2 against 110 at 1), so a scale is never
+ *      taken that the power does not allow.
+ *   3. In that window, 4 % apart on a third of the symbols, then 1 % apart
+ *      about the best on all of them, the scale where most symbols sit on
+ *      a point.
+ *   4. It is taken only if at least 3/4 of the symbols sit on a point there
+ *      (a caller off the level: 126 to 144 in simulation) and 1/8 more than
+ *      at scale 1 (usr3, a recorded call that fails its B1u at the designed
+ *      level: 67 at 1, the best 86). These rules, not step 1, are what keep
+ *      a real call at the designed level as it was: no recorded call takes
+ *      a scale.
+ *
+ * A scale of 1 changes nothing at all (up_in, base_step). Otherwise the
+ * decoder starts again on B1u from its first symbol, which the training
+ * receiver still holds. The fits slice the samples as received, without
+ * the baseline (base_q4), which has had only the first symbols to move. */
+
+/* the decoder's input for received sample s */
+static int32_t up_in(const v92d_t *p, int32_t s)
+{
+    if (p->up_scale == 0 || p->up_scale == UP_UNITY) return s;
+    return (s * p->up_scale + 8192) >> 14;
+}
+
+/* of every step-th of the V92D_UP_EST samples from k (data frame interval
+ * 0), the number within a quarter of the spacing of the nearest point once
+ * multiplied by c (Q14, at most 65535) */
+static int up_fit(const v92_map_t *m, const v92_trn_t *t, int32_t k, int32_t c, int step)
+{
+    int j, n = 0;
+    for (j = 0; j < V92D_UP_EST; j += step) {
+        int i = j % V92_DFRAME, lc = v92_lc(m, i), eta;
+        int32_t r = ((int32_t)v92_trn_sample(t, k + j) * c + 8192) >> 14, a, e, h;
+        eta = v92_slice(m, i, r);
+        a = v92_point(m, i, eta); e = r - a;
+        /* the spacing on the side of r; past an end point, the one inside */
+        if ((e > 0 && eta < lc - 1) || eta == -lc) h = v92_point(m, i, eta + 1) - a;
+        else h = a - v92_point(m, i, eta - 1);
+        if (4 * (e < 0 ? -e : e) < h) n++;
+    }
+    return n;
+}
+
+/* best of the scales c, c + c * inc / 1024, ... (n of them) that lie in
+ * lo .. hi, on every step-th sample; *fit = -1 if none does */
+static int32_t up_search(const v92_map_t *m, const v92_trn_t *t, int32_t k, int32_t c, int n,
+                         int32_t inc, int step, int32_t lo, int32_t hi, int *fit)
+{
+    int32_t best = UP_UNITY;
+    int q;
+    *fit = -1;
+    for (q = 0; q < n && c <= hi; q++, c += c * inc / 1024) {
+        int f;
+        if (c < lo) continue;
+        f = up_fit(m, t, k, c, step);
+        if (f > *fit) { *fit = f; best = c; }
+    }
+    return best;
+}
+
+int32_t v92d_up_scale(const v92_map_t *m, const v92_trn_t *t, int32_t k0, uint32_t eu2)
+{
+    uint64_t pw = 0, ex;
+    int32_t c, lo, hi, j;
+    int f1, fc, ff;
+
+    f1 = up_fit(m, t, k0, UP_UNITY, 1);
+    if (f1 >= V92D_UP_EST - V92D_UP_EST / 8) return UP_UNITY;
+    for (j = 0; j < V92D_UP_EST; j++) {
+        int32_t s = v92_trn_sample(t, k0 + j);
+        pw += (uint64_t)((int64_t)s * s);
+    }
+    ex = (uint64_t)eu2 * V92D_UP_EST;
+    while (ex >= ((uint64_t)1 << 34) || pw >= ((uint64_t)1 << 34)) { ex >>= 1; pw >>= 1; }
+    if (pw == 0 || ex == 0) return UP_UNITY;
+    c = (int32_t)isqrt_u64((ex << 28) / pw);                /* 1 / gain from the power, Q14 */
+    /* the window: 3/4 .. 4/3 of it, and a gain of 4 .. 1/4 */
+    if (c > 65535 + 65535 / 3 || c < 4096 - 4096 / 4) return UP_UNITY;
+    lo = c - c / 4; hi = c + c / 3;
+    if (lo < 4096) lo = 4096;
+    if (hi > 65535) hi = 65535;
+    /* 4 % apart on a third of the symbols; then 1 % apart about the best,
+     * on all */
+    c = up_search(m, t, k0, c - c / 4, 15, 41, 3, lo, hi, &fc);
+    if (fc < 0) return UP_UNITY;
+    c = up_search(m, t, k0, c - c * 3 / 100, 7, 10, 1, lo, hi, &ff);
+    if (ff < V92D_UP_EST * 3 / 4 || ff <= f1 + V92D_UP_EST / 8) return UP_UNITY;
+    return c;
+}
+
+/* V92D_UP_EST symbols of B1u are in from sample k0 on: measure, and if the
+ * caller is off the designed level start the decoder again from k0 */
+static void up_measure(v92d_t *p, int32_t k0)
+{
+    int32_t c;
+
+    p->up_scale = UP_UNITY;
+    if (p->trn.k - k0 > 255 || p->dsn.i <= 0) return;     /* (cannot happen) */
+    /* E[u^2] of the design's trial, linear^2 */
+    c = v92d_up_scale(&p->cpd.map, &p->trn, k0,
+                      (uint32_t)(((uint64_t)p->dsn.usum << 14) / (uint32_t)p->dsn.i));
+    if (c == UP_UNITY) return;
+    /* the caller is off the designed level: B1u again from its first symbol
+     * (and its leading data frames of Ki = 0 looked for again) */
+    if (p->trn.k - (k0 - V92_DFRAME * p->b1_leads) > 255) return;
+    if (v92_dec_init(&p->dec, &p->cpd.map, put_data, p) != 0) { fail(p, V92D_ERR_B1); return; }
+    v92_dec_any_start(&p->dec);
+    p->up_scale = c;
+    p->m_b1u -= V92_DFRAME * p->b1_leads;
+    p->data_k = p->m_b1u + p->dsn.dly;
+    p->base_q4 = 0;
+    p->b1_left = (int32_t)V92_B1U_FRAMES * p->cpd.map.K; p->b1_bad = 0;
+    p->b1_sym = 0; p->b1_zero = 0; p->b1_leads = 0;
+}
+
 /* ---- sequences: frame sync hunt, parse ---- */
 
 enum { W_JA, W_CPT, W_PH4 };
 
 static void seq_reset(v92d_t *p, int want)
 {
-    p->fn = 0; p->ones = 0; p->zeros = 0; p->want = want; p->after_seq = -1;
+    p->fn = 0; p->sh.ones = 0; p->zeros = 0; p->want = want; p->after_seq = -1;
 }
 
 static void on_cpt(v92d_t *p)
@@ -228,23 +385,21 @@ static void seq_bit(v92d_t *p, int bit, int32_t m, int last_of_symbol)
                 p->m_trn2u = m + 1;
             } else if (p->want == W_PH4) {
                 p->got_e2u = 1;
-                upstream_start(p, m + 1);
+                if (!p->clearing) upstream_start(p, m + 1);     /* (drn = 0: no data follows) */
             }
-            p->fn = 0; p->ones = 0;
+            p->fn = 0; p->sh.ones = 0;
             return;
         }
     }
     if (p->fn == 0) {
-        if (bit) { p->ones++; return; }
-        if (p->ones >= 17) { memset(p->fbuf, 1, 17); p->fbuf[17] = 0; p->fn = 18; }
-        p->ones = 0;
+        if (seqhunt_bit(&p->sh, bit)) { memset(p->fbuf, 1, 17); p->fbuf[17] = 0; p->fn = 18; }
         return;
     }
     p->fbuf[p->fn++] = (uint8_t)bit;
     {
         int r = seq_try(p);
-        if (r > 0) { p->fn = 0; p->ones = 0; p->after_seq = 0; }
-        else if (r < 0 || p->fn >= V92D_FBUF) { p->fn = 0; p->ones = 0; }
+        if (r > 0) { p->fn = 0; p->sh.ones = 0; p->after_seq = 0; }
+        else if (r < 0 || p->fn >= V92D_FBUF) { p->fn = 0; p->sh.ones = 0; }
     }
 }
 
@@ -369,7 +524,8 @@ static int32_t base_step(const v92d_t *p, int32_t e, int32_t tent)
     if (p->cfg.rx_linear) return (int32_t)st;
     i = p->dec.i_in == 0 ? V92_DFRAME - 1 : p->dec.i_in - 1;            /* the interval of tent */
     eta = v92_slice(m, i, tent); lc = v92_lc(m, i);
-    q = qvar(p, tent);
+    /* (the quantiser works on the received amplitude) */
+    q = qvar(p, p->up_scale == 0 || p->up_scale == UP_UNITY ? tent : tent * UP_UNITY / p->up_scale);
     if (e > 0) h = eta < lc - 1 ? (v92_point(m, i, eta + 1) - tent) / 2 : INT32_MAX;
     else h = eta > -lc ? (tent - v92_point(m, i, eta - 1)) / 2 : INT32_MAX;
     if (q > 2 * (uint64_t)nz) st = st * 2 * nz / q;
@@ -393,14 +549,16 @@ static void design_start(v92d_t *p)
     /* the echo in data mode: what the canceller's taps make of the assumed
      * downstream power, if that is more than TRN1d gave */
     for (j = 0; j < EC_NTAP; j++) { int64_t v = p->ec.h[j] >> 12; ge += v * v; }
-    pred = (uint32_t)(((uint64_t)isqrt64((uint64_t)ge) * (uint32_t)(p->cfg.down_rms > 0 ? p->cfg.down_rms : DOWN_RMS)) >> 12);
+    pred = (uint32_t)(((uint64_t)isqrt_u64((uint64_t)ge) * (uint32_t)(p->cfg.down_rms > 0 ? p->cfg.down_rms : DOWN_RMS)) >> 12);
     c.echo_rms = pred > p->echo_rms ? pred : p->echo_rms;
     c.res = p->trn.res; c.q_trn = p->q_trn;
     c.ltot = (uint16_t)p->cfg.ltot; c.lmax = (uint16_t)p->cfg.lmax;
     c.rates = p->ja.rates;
     c.max_rate = p->cfg.max_up_rate;
-    if (p->rate_drops && p->up_rate) {
-        int lim = p->up_rate - 4000 * p->rate_drops;
+    if (p->reneg_ours == RENEG_DROP && p->up_rate) {
+        /* our rate drop: one step below the rate in use (which carries the
+         * earlier drops already); other renegotiations have no such ceiling */
+        int lim = p->up_rate - 4000;
         if (!c.max_rate || lim < c.max_rate) c.max_rate = lim;
     }
     c.kappa_q4 = p->cfg.kappa_q4;
@@ -418,13 +576,61 @@ static void sel(v92d_t *p, v90tx_sig_t s)
 
 /* ---- rate renegotiation ---- */
 
+/* Ru heard in data mode: how many of the newest received samples (the
+ * decoder has them all) are Ru. Ru repeats every 6 samples and is its own
+ * inverse 3 later; what the channel makes of its start rises over some 15
+ * samples, so only the signs are compared (a sample too small to have one,
+ * an eighth of the level, passes): the run of samples whose sign is that 6
+ * before and the opposite of that 3 before, plus the 6 the first of them
+ * looks back on. Data passes a sample by chance one time in four, so the
+ * start comes out early by a sample or so. 0: none found. */
+static unsigned ru_run(const v92d_t *p)
+{
+    int32_t k = p->data_k - 1, a = 0, fl, i;
+#define RB(j) ((int32_t)v92_trn_sample(&p->trn, (j)))
+    for (i = 0; i < 12; i++) a += RB(k - i) < 0 ? -RB(k - i) : RB(k - i);
+    fl = a / 96;                                /* an eighth of the mean level */
+    if (fl < RU_FLOOR / 8) return 0;
+    for (i = 0; i < 240; i++) {
+        int32_t x0 = RB(k - i), x6 = RB(k - i - 6), x3 = RB(k - i - 3);
+        if (x0 > -fl && x0 < fl) continue;
+        if (!(x6 > -fl && x6 < fl) && (x0 > 0) != (x6 > 0)) break;
+        if (!(x3 > -fl && x3 < fl) && (x0 > 0) == (x3 > 0)) break;
+    }
+#undef RB
+    return i < 12 ? 0 : (unsigned)i + 6;
+}
+
+/* Ru in data mode: the data frames the decoder still holds that end at
+ * least a data frame before where Ru was found to begin go on (the start is
+ * found late by the channel's spread of Ru's beginning; no frame that could
+ * hold Ru is delivered); then no more data. What the caller's prefilter
+ * still held when Ru began never reached the line (V.92 begins Ru on a data
+ * frame boundary): that is lost. */
+static void ru_heard(v92d_t *p)
+{
+    if (p->rx_ready && p->rx_on && !p->cd_quiet) {
+        unsigned n = ru_run(p), j;
+        int32_t y[4 * V92_VIT_DEPTH + V92_TFRAME];
+        /* the decoder's inputs again, the newest first, each against the
+         * baseline it was taken with (Ru, decided as data before it was
+         * heard, has moved the baseline since by up to some 125) */
+        for (j = 0; j < sizeof y / sizeof y[0]; j++) {
+            int32_t k = p->data_k - 1 - (int32_t)j;
+            y[j] = up_in(p, v92_trn_sample(&p->trn, k)) - p->trn.sb[k & 255];
+        }
+        if (n > 0) v92_dec_flush_before(&p->dec, n + V92_DFRAME, y);
+    }
+    p->rx_ready = 0;
+}
+
 static void reneg_begin(v92d_t *p, int ours)
 {
     /* our own: what the caller sends until it has seen Rd is still data */
     p->tx_ready = 0; if (!ours) p->rx_ready = 0;
     p->in_reneg = 1; p->reneg_ours = ours; p->revs = 0;
     p->got_suvu = p->got_cpu = p->got_ack = p->got_e2u = 0;
-    p->cpd_sent = p->cpd_repeat = 0; p->t_cpd = 0;
+    p->cpd_sent = 0; p->t_cpd = 0;
     p->dsn_state = 0;
     if (ours) (void)v90tx_select(&p->tx, V90TX_RD);     /* on the next data frame boundary */
     enter(p, V92D_RENEG);
@@ -446,14 +652,33 @@ static void reneg_resume(v92d_t *p)
     seq_reset(p, W_PH4);
 }
 
-/* Loss of the upstream signal in data mode: far below what B1u brought, for
- * about half a second. One sample in; 1 = lost. */
-static int carrier_lost(v92d_t *p, int16_t x)
+/* A dead line (the caller has hung up, the network sends the idle code)
+ * leaves the canceller giving out its own estimate of our echo: as loud as
+ * the echo was, and as periodic as what we send (Rd has Ru's shape). The
+ * caller's signal has to be in the line itself as well as in what the
+ * canceller leaves of it.
+ *
+ * line_idle: one sample of the line; 1 = it has brought nothing but the idle
+ * code for LINE_IDLE_RUN samples, and what Ru the detector reads is ours. */
+static int line_idle(v92d_t *p, int16_t rxs)
 {
+    if (rxs < -LINE_IDLE || rxs > LINE_IDLE) p->cd_idle = 0;
+    else if (p->cd_idle < 255) p->cd_idle++;
+    return p->cd_idle >= LINE_IDLE_RUN;
+}
+
+/* Loss of the upstream signal in data mode: far below what B1u brought, in
+ * the line or after the canceller, for about half a second. One sample in:
+ * the line, what the canceller left; 1 = lost. */
+static int carrier_lost(v92d_t *p, int16_t rxs, int16_t x)
+{
+    uint64_t q = p->sig_ms >> CD_SHIFT, line;
     p->cd_acc += (int32_t)x * x;
+    p->cd_line += (uint32_t)((int32_t)rxs * rxs) >> CD_LINE_SHIFT;
     if (++p->cd_n < CD_BLOCK) return 0;
-    if ((uint64_t)(p->cd_acc / CD_BLOCK) < (p->sig_ms >> CD_SHIFT)) p->cd_quiet++; else p->cd_quiet = 0;
-    p->cd_acc = 0; p->cd_n = 0;
+    line = (uint64_t)p->cd_line << CD_LINE_SHIFT;
+    if ((uint64_t)p->cd_acc / CD_BLOCK < q || line / CD_BLOCK < q) p->cd_quiet++; else p->cd_quiet = 0;
+    p->cd_acc = 0; p->cd_line = 0; p->cd_n = 0;
     return p->cd_quiet >= CD_BLOCKS;
 }
 
@@ -547,8 +772,14 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
         v92_trn_store(&p->trn, x);
     }
     if (p->rx_on) {
+        int n = 0;
         if (p->b1_left > 0) { p->cd_acc += (int32_t)x * x; p->cd_n++; }
         while (p->rx_on && p->data_k < p->trn.k) {
+            /* the decoder started over on B1u (up_measure): two samples a
+             * tick until it is back, so no tick carries the lot. (Some
+             * 150 ticks, inside B1u: no Ru can come then, so ru_heard
+             * never reads behind a decoder that is catching up) */
+            if (p->up_scale && p->up_scale != UP_UNITY && n++ == 2) break;
 #ifdef P34D_TRACE
             v92d_trace_data(p, v92_trn_sample(&p->trn, p->data_k));
 #endif
@@ -561,14 +792,22 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
                  * the baseline by an eighth: slow against the symbols, fast
                  * against the wander; less where the error is the codec's
                  * quantiser or may be a wrong decision (base_step). */
-                int32_t y = (int32_t)v92_trn_sample(&p->trn, p->data_k++) - (p->base_q4 >> 4), tent;
+                int32_t y, tent;
+                /* the baseline this sample is taken against, kept for ru_heard
+                 * (trn.sb is free in data mode: v92_trn_resume fills it
+                 * again before the training receiver reads it) */
+                p->trn.sb[p->data_k & 255] = (int16_t)(p->base_q4 >> 4);
+                y = up_in(p, v92_trn_sample(&p->trn, p->data_k++)) - (p->base_q4 >> 4);
                 v92_dec_put(&p->dec, y, &tent);
                 p->base_q4 += base_step(p, y - tent, tent);
                 if (p->base_q4 > BASE_MAX_Q4) p->base_q4 = BASE_MAX_Q4;
                 if (p->base_q4 < -BASE_MAX_Q4) p->base_q4 = -BASE_MAX_Q4;
                 if (p->b1_sym >= 0) b1u_lead(p, (int16_t)(y > 32767 ? 32767 : y < -32767 ? -32767 : y));
+                if (!p->up_scale && p->b1_left > 0 && p->data_k - (p->m_b1u + p->dsn.dly) == V92D_UP_EST)
+                    up_measure(p, p->m_b1u + p->dsn.dly);
             }
         }
+        if (p->rx_on && p->trn_on == 2 && p->trn.k >= CLK_REBASE_AT) rebase(p);
         if (p->state >= V92D_RETRAIN) return octet;
     }
 
@@ -580,14 +819,14 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
             if (p->cfg.md_len > 0 && !p->revs) { p->revs = 1; enter(p, V92D_MD); break; }     /* 9.5.1.1.1 */
             p->trn_at = p->now - V92_P6_REV_LAG + 24 - TRN_LEAD;
             enter(p, V92D_TRN1U);
-        } else if (p->t > MS(T_RU_MS) + p->cfg.md_len * 276) {
+        } else if ((int64_t)p->t > MS(T_RU_MS) + p->cfg.md_len * 276) {
             fail(p, V92D_ERR_NO_RU);
         }
         break;
 
     case V92D_MD:
         /* Ru-bar ends 24 - LAG symbols from the reversal; then MD; listen again a little early */
-        if (p->t >= 20 + p->cfg.md_len * 276 - 48) { v92_p6_init(&p->p6); p->state = V92D_WAIT_RU; }
+        if ((int64_t)p->t >= 20 + p->cfg.md_len * 276 - 48) { v92_p6_init(&p->p6); p->state = V92D_WAIT_RU; }
         break;
 
     case V92D_TRN1U:
@@ -597,7 +836,7 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
             if (v90tx_load_dil(&p->tx, &p->ja.dil) != 0 || v90tx_set_jd(&p->tx, &p->jd) != 0) { fail(p, V92D_ERR_JA); break; }
             (void)v90tx_select(&p->tx, V90TX_SD);       /* 9.5.1.1.3; Sd-bar and TRN1d follow by themselves */
             enter(p, V92D_SD);
-        } else if (p->t > MS(T_JA_MS) + p->cfg.rtd) {
+        } else if ((int64_t)p->t > MS(T_JA_MS) + p->cfg.rtd) {
             fail(p, V92D_ERR_JA);
         }
         break;
@@ -629,7 +868,7 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
                 p->ec_mu = -1;
                 p->noise = (uint32_t)(p->nz_acc / p->nz_n);
                 p->q_quiet = (uint32_t)(p->nq_acc / p->nz_n);
-                p->echo_rms = isqrt64((uint64_t)(p->ne_acc / p->nz_n));
+                p->echo_rms = isqrt_u64((uint64_t)(p->ne_acc / p->nz_n));
                 (void)v90tx_select(&p->tx, V90TX_JD);                   /* 9.5.1.1.4 */
                 v92_p6_init(&p->p6); p->revs = 0;
                 enter(p, V92D_JD);
@@ -653,7 +892,7 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
             (void)v90tx_set_xseq(&p->tx, V90TX_XSEQ_JP, p->xjp, n);
             (void)v90tx_select(&p->tx, V90TX_JP);                       /* after the current Jd */
             enter(p, V92D_JP);
-        } else if (p->now - p->t_trn1d > MS(T_SU_MS) + p->cfg.rtd) {
+        } else if (clk_diff(p->now, p->t_trn1d) > MS(T_SU_MS) + p->cfg.rtd) {
             retrain(p, 1);                                              /* 9.5.1.2.2 */
         }
         break;
@@ -666,7 +905,7 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
             p->trn_at = p->now - V92_P6_REV_LAG + 24 - TRN_LEAD;
             p->got_cpt = p->got_e1u = p->ri_sent = 0;
             enter(p, V92D_TRAIN);
-        } else if (p->t > MS(T_SU_MS) + p->cfg.rtd) {
+        } else if ((int64_t)p->t > MS(T_SU_MS) + p->cfg.rtd) {
             retrain(p, 1);
         }
         break;
@@ -680,9 +919,9 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
         if (p->got_e1u) {
             if (p->ja.dil.n > 0) (void)v90tx_select(&p->tx, V90TX_RI_BAR);          /* 9.5.1.1.12 */
             p->got_suvu = p->got_cpu = p->got_ack = p->got_e2u = 0;
-            p->cpd_sent = p->cpd_repeat = 0; p->t_cpd = 0; p->dsn_state = 0;
+            p->cpd_sent = 0; p->t_cpd = 0; p->dsn_state = 0;
             enter(p, V92D_PH4);
-        } else if (p->t > MS(T_TRAIN_MS) + p->cfg.rtd) {
+        } else if ((int64_t)p->t > MS(T_TRAIN_MS) + p->cfg.rtd) {
             fail(p, V92D_ERR_CPT);
         }
         break;
@@ -704,13 +943,12 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
 #ifdef V92D_PROBE
                 probe_cpd(&p->cpd);
 #endif
-                if (p->clearing) p->cpd.drn = 0;
                 p->dsn_state = 2;
                 build_seqs(p);
                 if (p->state != V92D_PH4) break;
             }
         }
-        if (p->dsn_state != 2 && !p->clearing && !p->in_reneg && sig == V90TX_TRN2D
+        if (p->dsn_state != 2 && !p->in_reneg && sig == V90TX_TRN2D
             && v90tx_units(&p->tx) >= (uint32_t)TRN2D_FRAMES && p->t >= MS(SUVD_HOLD_MS)) {
             /* 9.6.1.1.1: TRN2d for at least 2040 T, then SUVd. The design may
              * take longer than a caller waits for SUVd (a U.S. Robotics 5686
@@ -719,36 +957,42 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
             sel(p, suvd);
         }
         if (p->dsn_state == 2) {
-            if (p->clearing) {
-                /* 9.11: CPd with drn = 0, then silence */
-                if (sig == V90TX_TRN2D) sel(p, V90TX_CPD);
-                else if (is_cpd && v90tx_units(&p->tx) >= CLEAR_CPDS) fail(p, V92D_ERR_HANGUP);
-            } else if (sig == V90TX_TRN2D) {
+            if (sig == V90TX_TRN2D) {
                 /* 9.6.1.1.1: TRN2d for at least 2040 T, then SUVd */
                 if (v90tx_units(&p->tx) >= (uint32_t)(p->in_reneg ? RENEG_TRN2D : TRN2D_FRAMES)) sel(p, suvd);
             } else if ((sig == V90TX_SUVD_ACK || sig == V90TX_CPD_ACK) && v90tx_units(&p->tx) >= 1
                        && (p->got_ack || p->got_e2u) && v90tx_pending(&p->tx) == V90TX_NONE) {
-                /* 9.6.1.1.4: Ed, then B1d and data by themselves */
+                /* 9.6.1.1.4: Ed, then B1d and data by themselves. In our
+                 * cleardown this is where it is done: the caller has
+                 * acknowledged our CPd with drn = 0 and has our SUVd', and
+                 * no data mode follows drn = 0 (9.11): silence, not Ed */
+                if (p->clearing) { fail(p, V92D_ERR_HANGUP); break; }
                 v90tx_set_getbit(&p->tx, p->cfg.getbit, p->cfg.user);
                 (void)v90tx_select(&p->tx, V90TX_ED);
                 enter(p, V92D_ED);
             } else if (is_suvd) {
-                if (p->cpd_sent == 1) { p->cpd_sent = 2; p->t_cpd = p->now; }       /* the single CPd is out */
+                if (p->cpd_sent == 1) { p->cpd_sent = 2; p->t_cpd = p->now; }       /* the CPd is out */
                 /* 9.6.1.1.2. The first CPd without the acknowledge bit, also when
                  * CPu is in already (SUVd went out before the design was done):
                  * a U.S. Robotics 5686 answered a first CPd that had the bit set
                  * with silence, seven calls of seven, and a plain one never. */
                 if (p->got_suvu && !p->cpd_sent) sel(p, V90TX_CPD);
-                else if (p->cpd_sent == 2 && !p->got_ack && !p->cpd_repeat
-                         && p->now - p->t_cpd > MS(100) + p->cfg.rtd + 1200) { p->cpd_repeat = 1; sel(p, cpd); }   /* 9.6.1.1.3 */
+                else if (p->cpd_sent == 2 && !p->got_ack
+                         && clk_diff(p->now, p->t_cpd) > MS(100) + p->cfg.rtd + 1200) sel(p, cpd);     /* 9.6.1.1.3 */
                 else if (sig != suvd) sel(p, suvd);                                 /* the acknowledge bit */
             } else if (is_cpd) {
-                if (!p->cpd_sent) p->cpd_sent = 1;
-                if (!p->cpd_repeat || p->got_ack) sel(p, suvd);                     /* a single CPd, then SUVd again */
-                else if (sig != cpd) sel(p, cpd);
+                /* one CPd at a time, then SUVd: a repeat of 9.6.1.1.3 too,
+                 * with SUVd between the copies until it is answered. That is
+                 * 9.6.1.1.2's single CPd followed by SUVd, once per copy
+                 * (9.6.1.1.3 says only "repeated CPd sequences", and Figures
+                 * 12 to 14 draw no repeat); an Agere engine cleared down on
+                 * CPds sent back to back */
+                p->cpd_sent = 1;
+                sel(p, suvd);
             }
         }
-        if (p->state == V92D_PH4 && p->t > MS(p->in_reneg ? T_RENEG_MS + pace_ms(p) : T_PHASE4_MS) + 6 * p->cfg.rtd) {
+        if (p->state == V92D_PH4 && p->clearing && clk_diff(p->now, p->t_clear) > MS(T_CLEAR_MS)) fail(p, V92D_ERR_HANGUP);
+        if (p->state == V92D_PH4 && (int64_t)p->t > MS(p->in_reneg ? T_RENEG_MS + pace_ms(p) : T_PHASE4_MS) + 6 * p->cfg.rtd) {
             if (p->in_reneg) retrain(p, 1); else fail(p, V92D_ERR_CPU);
         }
         break;
@@ -758,17 +1002,19 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
         if (sig == V90TX_DATA) p->tx_ready = 1;
         if (p->tx_ready && p->rx_ready) {
             if (p->in_reneg) { p->renegs++; p->in_reneg = 0; }
-            v92_p6_init(&p->p6);
+            v92_p6_init(&p->p6); p->cd_idle = 0;
             enter(p, V92D_DATA);
-        } else if (p->t > MS(p->in_reneg ? T_RENEG_MS + pace_ms(p) : T_PHASE4_MS) + 6 * p->cfg.rtd) {
+        } else if ((int64_t)p->t > MS(p->in_reneg ? T_RENEG_MS + pace_ms(p) : T_PHASE4_MS) + 6 * p->cfg.rtd) {
             if (p->in_reneg) retrain(p, 1); else fail(p, V92D_ERR_B1);
         }
         break;
 
     case V92D_DATA:
         /* 9.8.1.2.1: Ru in data mode */
-        if (v92_p6_tick(&p->p6, x, RU_FLOOR) & V92_P6_ON) { reneg_begin(p, 0); break; }
-        if (carrier_lost(p, x)) { fail(p, V92D_ERR_CARRIER); break; }
+        r = v92_p6_tick(&p->p6, x, RU_FLOOR);
+        if (line_idle(p, rxs)) r = 0;           /* our own echo on a dead line */
+        if (r & V92_P6_ON) { ru_heard(p); reneg_begin(p, 0); break; }
+        if (carrier_lost(p, rxs, x)) { fail(p, V92D_ERR_CARRIER); break; }
         /* is the line still good enough for the rate? */
         if ((p->t & 8191) == 0) {
             uint32_t nb = p->dec.bad_frames - p->bad_seen;
@@ -776,18 +1022,20 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
             p->q_bad = nb >= 4 ? p->q_bad + 1 : 0;
             if (p->q_bad >= 2) {
                 p->rate_drops++;
-                if (p->up_rate - 4000 * p->rate_drops < 24000) { retrain(p, 1); p->up_floor = 1; }
-                else reneg_begin(p, 1);
+                if (p->up_rate - 4000 < 24000) { retrain(p, 1); p->up_floor = 1; }
+                else reneg_begin(p, RENEG_DROP);
             }
         }
         break;
 
     case V92D_RENEG:
         /* until Ru-bar the caller sends data or Ru: a signal that dies away
-         * can look like the start of Ru to the detector */
-        if (!p->revs && carrier_lost(p, x)) { fail(p, V92D_ERR_CARRIER); break; }
+         * can look like the start of Ru to the detector (in our cleardown
+         * T_CLEAR_MS ends it in time, the caller there or not) */
+        if (!p->revs && !p->clearing && carrier_lost(p, rxs, x)) { fail(p, V92D_ERR_CARRIER); break; }
         r = v92_p6_tick(&p->p6, x, RU_FLOOR);
-        if (r) p->rx_ready = 0;                 /* Ru: no more data (the last 13 ms in the decoder are dropped) */
+        if (line_idle(p, rxs)) r = 0;           /* our own Rd, Rd-bar on a dead line */
+        if (r && p->rx_ready) ru_heard(p);     /* Ru: no more data (what came before it, whole) */
         if ((r & V92_P6_REV) && !p->revs) {
             p->revs = 1;
             reneg_resume(p);
@@ -796,7 +1044,17 @@ uint8_t v92d_tick(v92d_t *p, int16_t rxs)
         /* Rd for 384 T, then Rd-bar; TRN2d follows by itself */
         if (sig == V90TX_RD && v90tx_units(&p->tx) >= RD_UNITS && v90tx_pending(&p->tx) == V90TX_NONE)
             (void)v90tx_select(&p->tx, V90TX_RD_BAR);
-        if (p->revs && (sig == V90TX_RD_BAR || sig == V90TX_TRN2D)) enter(p, V92D_PH4);
+        if (p->clearing) {
+            /* 9.11: a rate renegotiation to send drn = 0. 9.8.1.1.2: TRN2d,
+             * then SUVd, whether the caller's Ru-bar came or not (a caller
+             * that no longer hears us sends none). With Ru-bar the receiver
+             * is on TRN2u and Phase 4 does the rest: on SUVu the CPd in use
+             * with drn = 0 (9.6.1.1.2), no design. Without, SUVd until
+             * T_CLEAR_MS. */
+            if (sig == V90TX_TRN2D && v90tx_units(&p->tx) >= RENEG_TRN2D) sel(p, V90TX_SUVD);
+            if (p->revs && (sig == V90TX_RD_BAR || sig == V90TX_TRN2D || sig == V90TX_SUVD)) enter(p, V92D_PH4);
+            else if (clk_diff(p->now, p->t_clear) > MS(T_CLEAR_MS)) fail(p, V92D_ERR_HANGUP);
+        } else if (p->revs && (sig == V90TX_RD_BAR || sig == V90TX_TRN2D)) enter(p, V92D_PH4);
         else if (p->t > MS(T_RENEG_MS)) retrain(p, 1);
         break;
 
@@ -816,14 +1074,19 @@ int v92d_renegotiate(v92d_t *p)
 int v92d_cleardown(v92d_t *p)
 {
     if (p->state != V92D_DATA) return -1;
-    p->clearing = 1;
     reneg_begin(p, 1);
+    /* the CPd in use, drn = 0 (9.11): CPd and CPd' with the bit, SUVd; no
+     * design (dsn_state 2: the CPd is ready) */
+    p->clearing = 1; p->t_clear = p->now;
+    p->cpd.drn = 0;
+    p->dsn_state = 2;
+    build_seqs(p);
     return 0;
 }
 
 int v92d_retrain(v92d_t *p)
 {
-    if (p->state != V92D_DATA && !p->in_reneg) return -1;
+    if ((p->state != V92D_DATA && !p->in_reneg) || p->clearing) return -1;
     retrain(p, 1);
     return 0;
 }

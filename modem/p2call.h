@@ -134,6 +134,10 @@ typedef struct {
 } p2call_t;
 
 void    p2call_init(p2call_t *p, const p2call_cfg *cfg);
+/* V.92: our clock against the network's from the digital modem's L2 (the
+ * probe's results r), 1/256 ppm, within +-1000 ppm; 0 when there is nothing
+ * to go on. Exported for the tests; p2call sets clk_ppm_q8 from it. */
+int32_t p2call_clock_q8(const proberx_t *r);
 /* Phase 2 of a retrain, after the 70 ms of silence (11.5.1.1, 11.5.1.2):
  * Tone B at once, no INFO0 exchange unless the answerer sends INFO0a.
  * info0a is the answerer's INFO0a of the first Phase 2. */

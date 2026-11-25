@@ -247,7 +247,7 @@ static void via_v8(void)
     t = to_data(20000);
     printf("  clean line: data at %.2f s, %d bit/s, modulation %d, V.8 %d, SNR %.1f dB, round trip %d samples; TRN: ours %u T, the answerer's %u T\n",
            t, O.bitrate, O.modulation, O.used_v8, orig_snr_db10(&O) / 10.0, orig_rtd(&O),
-           O.v32.seg_len[V32S_C_TRN], A.u.v32.seg_len[V32S_TRN1]);
+           O.e.leg.v32.seg_len[V32S_C_TRN], A.u.v32.seg_len[V32S_TRN1]);
     CHECK(t > 0);
     CHECK_EQ_I(O.phase, ORIG_V32);
     CHECK_EQ_I(O.modulation, ORIG_MOD_V32BIS); CHECK_EQ_I(O.bitrate, 14400); CHECK_EQ_I(O.used_v8, 1);
@@ -261,8 +261,8 @@ static void via_v8(void)
     run(MS(300));
     CHECK_EQ_I(orig_moving(&O), 0); CHECK_EQ_I(O.connected, 1);
     t = to_data(10000);
-    printf("    retrain started by the answerer: data again after %.2f s; ours %d, theirs %d\n", (now - t0) / (double)FS, O.v32.retrains, A.retrains);
-    CHECK(t > 0); CHECK_EQ_I(O.v32.retrains, 1); CHECK_EQ_I(A.retrains, 1);
+    printf("    retrain started by the answerer: data again after %.2f s; ours %d, theirs %d\n", (now - t0) / (double)FS, O.e.leg.v32.retrains, A.retrains);
+    CHECK(t > 0); CHECK_EQ_I(O.e.leg.v32.retrains, 1); CHECK_EQ_I(A.retrains, 1);
     data("after it", O.bitrate);
 
     /* ours */
@@ -271,8 +271,8 @@ static void via_v8(void)
     run(MS(300));
     CHECK_EQ_I(orig_moving(&O), 0); CHECK_EQ_I(O.connected, 1);
     t = to_data(10000);
-    printf("    retrain started by the caller: data again after %.2f s; ours %d, theirs %d\n", (now - t0) / (double)FS, O.v32.retrains, A.retrains);
-    CHECK(t > 0); CHECK_EQ_I(O.v32.retrains, 2); CHECK_EQ_I(A.retrains, 2);
+    printf("    retrain started by the caller: data again after %.2f s; ours %d, theirs %d\n", (now - t0) / (double)FS, O.e.leg.v32.retrains, A.retrains);
+    CHECK(t > 0); CHECK_EQ_I(O.e.leg.v32.retrains, 2); CHECK_EQ_I(A.retrains, 2);
     data("after it", O.bitrate);
 
     /* the answerer goes away */

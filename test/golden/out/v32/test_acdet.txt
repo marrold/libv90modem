@@ -1,0 +1,19 @@
+AC, CA, AC (-16 dBm0) with our own AA echo (-15 dBm0): reversals and their latency
+  latency from the pulse centre at the input: 19 to 21 samples, mean 20.0 (V32_AC_LAT 20)
+  our own AA -> CC at -6 dBm0 under AC: 0 reversal(s) counted (the sequencer blanks them)
+  AC at -40 dBm0: longest run 488 half symbols
+  AC at -52 dBm0: longest run 0
+  AC alone: pure for 521 half symbols
+not AC (with our own AA echo at -15 dBm0)
+  our AA alone: 0
+  1200 Hz at -10 dBm0: 0
+  1650 Hz at -10 dBm0: 0
+  1850 Hz at -10 dBm0: 0
+  2100 Hz at -10 dBm0: 0
+  2250 Hz at -10 dBm0: 0
+  2400 Hz at -10 dBm0: 0
+  3300 Hz at -10 dBm0: 17
+  14400 bit/s data: 6 (pure 0)
+  noise at -20 dBm0: 14
+  S alone: pure for 0
+test_acdet: 75 checks, 0 failures

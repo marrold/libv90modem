@@ -1,7 +1,8 @@
 /* v90d/v34 - framing (clause 8) and mapping (clause 9.2) parameters, shell
  * mapper tables (9.4), constellation membership and nominal energy. All of
- * this runs once at start-up; it uses 64-bit multiplies but no 64-bit
- * division. */
+ * this runs once at start-up; it uses 64-bit multiplies, and one 64-bit
+ * division: the nonlinear encoder's Phi (v34_nl_phi_q16, int64 by
+ * energy_q8) when cfg->nonlinear is set. */
 #include <string.h>
 #include "v34_priv.h"
 

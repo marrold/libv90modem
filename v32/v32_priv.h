@@ -10,7 +10,6 @@ extern const int32_t v32_tx_rms_q12;
 extern const int16_t v32_rxg[V32_RXP][V32_RXN][2];
 
 const int8_t (*v32_constel(int rate))[2];
-uint32_t v32_isqrt64(uint64_t v);
 
 /* Y1Y2 label of a synchronising state (Figure 2-5) and back */
 extern const uint8_t v32_abcd_label[4], v32_label_abcd[4];

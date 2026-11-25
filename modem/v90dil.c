@@ -3,6 +3,7 @@
 #include "v90dil.h"
 #include "v90_pcm.h"
 #include "v90_enc.h"
+#include "fixmath.h"
 
 #define YF 4                        /* V90ARX_YF */
 #define ACC_MAX 1024                /* symbols summed per interval and Ucode, at most */
@@ -22,15 +23,15 @@ void v90dil_design(v90_dil_t *d, int uinfo)
         if (i >= 3) d->tp[i >> 3] |= (uint8_t)(1u << (i & 7));
     }
     for (c = 0; c < 8; c++) { d->h[c] = 2; d->ref[c] = (uint8_t)(uinfo & 127); }
-    /* up by the even Ucodes, down by the odd ones (0 2 ... 118 119 117 ...
+    /* up by the even Ucodes, down by the odd ones (0 2 ... 100 99 97 ...
      * 1, then 0 again): no segment follows one much larger than itself. In
-     * the order 0 .. 119 the segment of Ucode 0 followed that of 119, and
+     * the order 0 .. 119 (the DIL of 0.5) the segment of Ucode 0 followed that of 119, and
      * what the equaliser leaves of fifteen symbols at the largest level (its
      * residual interference, deterministic in a pattern that repeats every
      * pass, so not averaged out) stood in the means of Ucodes 0 to 6 at up
      * to 160 units on a 0 km line, where their true levels are 0 to 50:
      * CP then took such a Ucode as its smallest point (docs/history/PROGRESS.md, robust) */
-    for (i = 0; i < V90DIL_NU; i++) d->train[i] = (uint8_t)(i < V90DIL_NU / 2 ? 2 * i : 2 * (V90DIL_NU - 1 - i) + 1);
+    for (i = 0; i < V90DIL_NU; i++) d->train[i] = (uint8_t)(i < (V90DIL_NU + 1) / 2 ? 2 * i : 2 * (V90DIL_NU - 1 - i) + 1);
 }
 
 void v90dil_cur_init(v90dil_cur_t *c) { c->seg = c->pos = 0; }
@@ -269,7 +270,8 @@ int v90dil_analyse_step(v90dil_an_t *an, v90dil_res_t *r)
         if (++an->s == 6) an->phase = AN_END;
         return 0;
     }
-    case AN_END:
+    case AN_END: {
+        int looked = 0;                 /* Ucodes from 64 up measured in all six */
         /* A robbed bit takes one interval in six away from the others: where the
          * others agree (their median), it stands off by more than a quarter of
          * the Ucode's step at many Ucodes (mu-law; with a pad in front the
@@ -279,6 +281,7 @@ int v90dil_analyse_step(v90dil_an_t *an, v90dil_res_t *r)
             int i, j, ok = 1;
             for (i = 0; i < 6; i++) { vv[i] = r->lv[i][u]; if (vv[i] < 0) ok = 0; }
             if (!ok) continue;
+            looked++;
             for (i = 1; i < 6; i++) for (j = i; j > 0 && vv[j - 1] > vv[j]; j--) { t = vv[j]; vv[j] = vv[j - 1]; vv[j - 1] = t; }
             med = (vv[2] + vv[3]) / 2;
             for (s = 0; s < 6; s++) {
@@ -287,7 +290,8 @@ int v90dil_analyse_step(v90dil_an_t *an, v90dil_res_t *r)
                 if (d > step / 4 && r->robbed[s] < 255) r->robbed[s]++;
             }
         }
-        for (s = 0; s < 6; s++) r->robbed[s] = (uint8_t)(r->robbed[s] >= 16);     /* a quarter of 64 Ucodes */
+        /* at a quarter of the Ucodes looked at (the DIL has 37 from 64 up) */
+        for (s = 0; s < 6; s++) r->robbed[s] = (uint8_t)(looked > 0 && 4 * r->robbed[s] >= looked);
         for (s = 0; s < 6; s++)
             for (u = 64; u < 128; u++) {
                 int32_t t = t1[u] * (1 << YF), e;
@@ -300,6 +304,7 @@ int v90dil_analyse_step(v90dil_an_t *an, v90dil_res_t *r)
             }
         an->phase = AN_DONE;
         return 1;
+    }
     default:
         return 1;
     }
@@ -395,14 +400,13 @@ static uint64_t pmean(const dsn_t *g, int s, int m)
 static int feasible(dsn_t *g, int K, int z_q4)
 {
     uint64_t prod = 1, need = (uint64_t)1 << K;
-    int s, j, m0 = 1;
+    int s, j, m0;
     for (s = 0; s < 6; s++) {
         int32_t d = (int32_t)(((int64_t)z_q4 * g->sig[s] + 8) >> 4);
         g->n[s] = (uint8_t)pick(g, s, d, g->pts[s]);
         if (g->n[s] == 0) return 0;
     }
     /* the least moduli with prod >= 2^K: start even, then where it costs least */
-    while ((uint64_t)1 << (6 * m0) < need && m0 < 128) m0++;     /* only a first guess, refined below */
     for (m0 = 1; m0 < 128; m0++) {
         uint64_t p = 1; int t;
         for (t = 0; t < 6; t++) p *= (uint64_t)(m0 + 1);
@@ -443,18 +447,6 @@ static int feasible(dsn_t *g, int K, int z_q4)
     return (uint64_t)g->power <= g->lim2;
 }
 
-static int32_t isqrt32(uint32_t v)
-{
-    uint32_t r = 0, b = 1u << 30;
-    while (b > v) b >>= 2;
-    while (b) {
-        if (v >= r + b) { v -= r + b; r = (r >> 1) + b; }
-        else r >>= 1;
-        b >>= 2;
-    }
-    return (int32_t)r;
-}
-
 enum { CP_K = 1, CP_Z, CP_FIN, CP_DONE };
 
 void v90dil_design_begin(v90dil_cpjob_t *j, const v90dil_res_t *res, const v90dil_req_t *req, v90_cp_t *cp, v90dil_choice_t *ch)
@@ -471,7 +463,7 @@ void v90dil_design_begin(v90dil_cpjob_t *j, const v90dil_res_t *res, const v90di
     /* Table 15 less 0.1 dB (a factor of 0.977 in power) */
     g->lim2 = (uint64_t)(lim * lim) * 977 / 1000;
     for (s = 0; s < 6; s++) {
-        g->sig[s] = isqrt32(req->sigma2_q8[s]);     /* units Q4 = Q YF */
+        g->sig[s] = (int32_t)isqrt_u64(req->sigma2_q8[s]);     /* units Q4 = Q YF */
         if (g->sig[s] < 16) g->sig[s] = 16;         /* not below one unit */
     }
     cp->is_cp = (uint8_t)(req->is_cp != 0);

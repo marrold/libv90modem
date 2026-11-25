@@ -1,0 +1,33 @@
+  good line, no codec                3200 sym/s  C->A 31200 bit/s  124800 bits 0 err  A->C 28800 bit/s  115200 bits 0 err  SNR 37.7 dB, rtd 371
+  realistic line (mu-law, -100 ppm, 1 Hz) 3200 sym/s  C->A 21600 bit/s   86400 bits 0 err  A->C 24000 bit/s   96000 bits 0 err  SNR 31.7 dB, rtd 404
+  retrain begun by the caller: data again 5.7 s later;  after our retrain                  3200 sym/s  C->A 24000 bit/s   95940 bits 0 err  A->C 24000 bit/s   96000 bits 0 err  SNR 31.3 dB, rtd 404
+  realistic line, again              3200 sym/s  C->A 21600 bit/s   86400 bits 0 err  A->C 24000 bit/s   96000 bits 0 err  SNR 31.7 dB, rtd 404
+  retrain begun by the answerer: data again 5.7 s later;  after the answerer's retrain       3200 sym/s  C->A 24000 bit/s   95940 bits 0 err  A->C 24000 bit/s   96000 bits 0 err  SNR 31.1 dB, rtd 404
+  good line, renegotiations          3200 sym/s  C->A 31200 bit/s  124800 bits 0 err  A->C 28800 bit/s  115200 bits 0 err  SNR 37.7 dB, rtd 371
+  after our renegotiation (16800 in) 3200 sym/s  C->A 31200 bit/s   93600 bits 0 err  A->C 16800 bit/s   50400 bits 0 err  SNR 38.1 dB, rtd 371
+  after the answerer's (14400 out)   3200 sym/s  C->A 14400 bit/s   43200 bits 0 err  A->C 16800 bit/s   50400 bits 0 err  SNR 37.7 dB, rtd 371
+  our cleardown: over in 260 ms; answerer cleared 1
+  good line, the answerer clears     3200 sym/s  C->A 31200 bit/s  124800 bits 0 err  A->C 28800 bit/s  115200 bits 0 err  SNR 37.7 dB, rtd 371
+  the answerer's cleardown: over in 260 ms
+  good line, the answerer goes away  3200 sym/s  C->A 31200 bit/s  124800 bits 0 err  A->C 28800 bit/s  115200 bits 0 err  SNR 37.7 dB, rtd 371
+  answerer gone: over after 550 ms, 0 retrain(s)
+  good line, a retrain's Phase 2 bounded 3200 sym/s  C->A 31200 bit/s  124800 bits 0 err  A->C 28800 bit/s  115200 bits 0 err  SNR 37.7 dB, rtd 371
+  a retrain's Phase 2 for 30 s: v34orig 5 (error 3), orig end 8
+  good line, a retrain's Phase 2 fails 3200 sym/s  C->A 31200 bit/s  124800 bits 0 err  A->C 28800 bit/s  115200 bits 0 err  SNR 37.7 dB, rtd 371
+  a retrain's Phase 2 failed: v34orig 5 (error 1), orig end 8
+  good line, a retrain's training fails 3200 sym/s  C->A 31200 bit/s  124800 bits 0 err  A->C 28800 bit/s  115200 bits 0 err  SNR 37.7 dB, rtd 371
+  a retrain's Phases 3 / 4 failed (dx error 4): v34orig 5 (error 3), orig end 8
+  good line, a retrain's carrier lost 3200 sym/s  C->A 31200 bit/s  124800 bits 0 err  A->C 28800 bit/s  115200 bits 0 err  SNR 37.7 dB, rtd 371
+  a retrain's Phases 3 / 4 failed (dx error 6): v34orig 5 (error 3), orig end 8
+  good line, we clear, retrain       3200 sym/s  C->A 31200 bit/s  124800 bits 0 err  A->C 28800 bit/s  115200 bits 0 err  SNR 37.7 dB, rtd 371
+  our cleardown, the answerer's retrain: over in 230 ms, orig end 7, 0 retrain(s)
+  good line, the answerer clears, retrain 3200 sym/s  C->A 31200 bit/s  124800 bits 0 err  A->C 28800 bit/s  115200 bits 0 err  SNR 37.7 dB, rtd 371
+  the answerer's cleardown, our retrain: over in 230 ms, answer end 4, 0 retrain(s)
+  answerer gone in training: over after 16.1 s, 1 retrain(s); Phase 2 error 2
+  ceilings 14400 out, 9600 in        3200 sym/s  C->A 14400 bit/s   43200 bits 0 err  A->C  9600 bit/s   28800 bits 0 err  SNR 37.7 dB, rtd 371
+  own echo delay found               3200 sym/s  C->A 31200 bit/s   93600 bits 0 err  A->C 28800 bit/s   86400 bits 0 err  SNR 38.1 dB, rtd 371
+  noise 30 dB down                   3200 sym/s  C->A 19200 bit/s   76800 bits 0 err  A->C 21600 bit/s   86400 bits 0 err  SNR 29.1 dB, rtd 371
+  noise 22 dB down                   3200 sym/s  C->A 12000 bit/s   48000 bits 0 err  A->C 12000 bit/s   48000 bits 0 err  SNR 20.8 dB, rtd 371
+  far echo 3 %, 40 ms late           3200 sym/s  C->A 16800 bit/s   67200 bits 0 err  A->C 28800 bit/s  115200 bits 0 err  SNR 38.1 dB, rtd 371
+  long loop (13 dB down at 3 kHz)    3200 sym/s  C->A 12000 bit/s   48000 bits 0 err  A->C 24000 bit/s   96000 bits 0 err  SNR 33.3 dB, rtd 373
+orig_v34: 547 checks, 0 failures

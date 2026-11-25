@@ -32,6 +32,7 @@ void p2a_init(p2a_t *p, const p2a_cfg *cfg)
     dpskrx_expect(&p->rx, INFO_PAYLOAD(INFO0D_BITS));
     probetx_init(&p->ptx, cfg->level);
     proberx_init(&p->prx);
+    p->rep_left = cfg->info0_repeat;
     send_info0a(p, 0);
 }
 
@@ -82,6 +83,11 @@ int16_t p2a_tick(p2a_t *p, int16_t x)
             if (p->resend || (!p->got0d && p->rx.steady >= MS(50))) {
                 send_info0a(p, p->got0d);
                 p->resend = 0;
+            } else if (p->got0d && p->rx.steady >= TONE_SEEN && p->now - p->tone_since >= MS(50) + 60
+                       && p->rep_left != 0) {
+                send_info0a(p, 1);          /* cfg.info0_repeat: INFO0a once more */
+                if (p->rep_left > 0) p->rep_left--;
+                p->t = 0;
             } else if (p->got0d && p->rx.steady >= TONE_SEEN && p->now - p->tone_since >= MS(50) + 60) {
                 dpsktx_reverse(&p->tx);
                 p->a_rev_line = p->now + DPSK_TX_DELAY;
@@ -92,11 +98,17 @@ int16_t p2a_tick(p2a_t *p, int16_t x)
         break;
 
     case P2A_WAIT_BREV1:
+        if (p->restart_at > 0) {            /* cfg.no_rev2: Tone A on, then INFO0 again */
+            if (p->now >= p->restart_at) { p->restart_at = 0; send_info0a(p, 1); go(p, P2A_INFO0); }
+            break;
+        }
         if (ev & DPSK_EV_FRAME) {           /* repeated INFO0d */
             info0d_parse(p->rx.frame, &p->info0d);
             p->resend = !p->info0d.ack;
             p->tone_since = p->now;
             go(p, P2A_INFO0);
+        } else if ((ev & DPSK_EV_REVERSAL) && p->cfg.no_rev2) {
+            p->restart_at = p->now + MS(2500);
         } else if (ev & DPSK_EV_REVERSAL) {
             p->rtd = p->now - DPSK_RX_REV_DELAY - p->a_rev_line - TURN;
             p->act_at = p->now - DPSK_RX_REV_DELAY + TURN - DPSK_TX_DELAY;

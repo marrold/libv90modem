@@ -14,7 +14,7 @@ analogue telephone adapter, from the ITU-T recommendations. The answering
 side has answered real modems there (see "Tried on real modems"); the
 calling side has not yet called one.
 
-**The API is not stable before version 1.0.** This is 0.5.0; what changed
+**The API is not stable before version 1.0.** This is 0.6.1; what changed
 from one version to the next is in `CHANGELOG.md`.
 
 ## How to use
@@ -220,8 +220,11 @@ said so. `OUT` must not be under /tmp. `QUICK="target ..."` skips the slow
 programs of `tools/ports-slow.txt` there, `SKIP="prog ..."` skips programs
 on every target but the reference. Last full run
 (`docs/history/PROGRESS.md`, ports-2): every target but m68k identical to
-host gcc; m68k fails in the V.34 receiver under qemu-m68k only, which looks
-like the emulator (no hardware to settle it).
+host gcc. m68k's failures were not qemu's: GCC 12.3 for m68k miscompiles
+two 64-bit divisions in the library (`docs/history/PROGRESS.md`, "m68k").
+They are now written so that it compiles them right, the matrix builds m68k
+with `-fno-omit-frame-pointer` as well, and m68k gates like every other
+target. On m68k with a gcc of your own, build with `-fno-omit-frame-pointer`.
 
 `make test-interop SPANDSP=PREFIX` runs V.8 and V.22bis (both roles)
 against spandsp (host only). `make bench-v90` replays a simulated V.90 call
@@ -233,38 +236,51 @@ calling side.
 ## Memory and CPU
 
 One modem, either role, takes `v90m_mem_size()` octets, at most
-`V90M_MEM_SIZE` (120 KiB) on every platform: 118824 on x86-64, 118512 on
-ARMv5 (the calling side's state is the larger; the answering side's alone
-is some 104 KiB). A V.42 endpoint takes at most `V90M_EC_MEM_SIZE` (50 KiB;
-49792 octets on x86-64), a start-stop framer `V90M_ASYNC_MEM_SIZE` (2 KiB;
-1064 octets). All three can
-live in memory of the caller's (`v90m_init`, `v90m_ec_init`,
-`v90m_async_init`); nothing is allocated after that.
+`V90M_MEM_SIZE` (108 KiB) on every platform: 106320 on x86-64, 106016 on
+ARMv5. The answering side's state sets it; the calling side's, whose
+modulations after V.8 share memory, is some 52 KiB, so making the calling
+side smaller no longer lowers `v90m_mem_size()`. A V.42 endpoint takes at
+most `V90M_EC_MEM_SIZE` (50 KiB; 49792 octets on x86-64), a start-stop
+framer `V90M_ASYNC_MEM_SIZE` (2 KiB; 1064 octets). All three can live in
+memory of the caller's (`v90m_init`, `v90m_ec_init`, `v90m_async_init`);
+nothing is allocated after that.
 
 CPU, as ARM instructions counted under qemu (ARMv5, gcc -O2; cycles on a
 real ARM926 have not been measured): the box v90d runs on, an ARM926EJ-S
-at 400 MHz, runs the answering modem's V.90 data mode at 32 % of its CPU,
-which makes it about 123 M counted instructions a second.
+at 400 MHz, runs the answering modem's V.90 data mode of 0.5.0 at 32 % of
+its CPU, which makes it about 122 M counted instructions a second. 0.6.0
+does the same arithmetic in fewer instructions, with output identical bit
+for bit (`docs/history/audit-0.6.md`):
 
-| | M instructions per second of line, data mode | heaviest single tick |
+| | M instructions per second of line, data mode (0.5.0 in brackets) | heaviest single tick, at 0.5.0 |
 |---|---|---|
-| answering, V.90 | 39.5 | 87 k |
-| calling, V.90 (0 / 100 ppm clock offset) | 54.6 / 58.8 | 98 k (start of Phase 2) |
-| calling, V.92 (0 / 100 ppm) | 69.4 / 73.9 | 98 k |
-| calling, Bell 103 / Bell 212A | 9.84 / 4.43 | 2.3 k / 2.8 k |
-| answering, x2 (32000 / 56000) | 81.9 / 83.7 | not measured |
-| answering, K56flex (56000) | 39.0 (V.90 38.9 the same way, `cost-k56`) | not measured |
+| answering, V.90 | 31.19 (39.20) | 87 k |
+| answering, V.34 | 33.42 (40.53) | not measured |
+| answering, x2 (32000) | 56.58 (82.57) | not measured |
+| answering, x2 with V.42 (our endpoint counted), 32000 / 56000: no compression; V.42bis; V.44 | 58.89 / 61.50; 69.24 / 77.19; 89.25 / 108.78 (text that compresses far beyond real traffic: a ceiling) | not measured |
+| answering, K56flex (56000) | 32.12 (39.27); a client that ignores our MP 58.60 (84.43) | not measured |
+| calling, V.90 (0 / 100 ppm clock offset) | 46.97 / 50.95 (55.11 / 59.31) | 98 k (start of Phase 2) |
+| calling, V.92 (0 / 100 ppm) | 62.12 / 66.52 (69.95 / 74.32) | 98 k |
+| calling, Bell 103 / Bell 212A | 9.88 / 4.66 (9.86 / 4.43) | 2.3 k / 2.8 k |
+| V.42 endpoint, 56 kbit/s both ways: none / V.42bis / V.44 | 5.21 / 9.08 / 9.48 (before the V.42 work: 7.96 / 11.81 / 12.19) | |
 
-x2 costs about twice V.90 (`make cost-x2`, which measures V.90 answering
-at 38.9 M the same way): the V.34 upstream the client dictates (64-state
-trellis, non-linear encoding, expanded shaping). One x2 call fits the box;
-two do not. K56flex costs the same as V.90 (`make cost-k56`, measured the
-same way: 39.0 M against 38.9 M), because it asks the client in its MP for
-the upstream V.90 has (16 states, linear, minimum shaping).
+The heaviest ticks were measured at 0.5.0 and not again; the changes of
+0.6.0 only made ticks cheaper.
+
+x2 costs about 1.8 times V.90 (`make cost-x2`, which measures V.90
+answering the same way): the V.34 upstream the client dictates (64-state
+trellis, non-linear encoding, expanded shaping). One x2 call fits the box, with V.42bis too (77.19 M at
+56000); two do not (2 x 77.19 = 154.37 M of about 122 M; even without
+compression 2 x 61.50 = 123.0 M). K56flex
+costs about what V.90 does (`make cost-k56`), because it asks the client
+in its MP for the upstream V.90 has (16 states, linear, minimum shaping);
+a client that ignores that and sends x2's upstream costs about what x2
+does.
 
 The calling side's retrains and rate renegotiations stay under 98 k a tick
-(a 10 ms block of the box is about 1.23 M). The measurements and how they
-were made are in `docs/history/PROGRESS.md` ("cpu").
+(a 10 ms block of the box is about 1.22 M). The measurements and how they
+were made are in `docs/history/PROGRESS.md` ("cpu") and, for 0.6.0,
+`docs/history/audit-0.6.md`.
 
 ## Examples
 
@@ -284,7 +300,7 @@ clears down; `-m` picks what the caller offers:
 
 ```
 $ build/call_loop
-libv90modem 0.5.0
+libv90modem 0.6.1
 caller   CONNECT 40000/50666 V.92
 answerer CONNECT 50666/40000 V.92
 caller   got "hello from the answerer"

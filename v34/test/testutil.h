@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
-#include "v34.h"
+#include "../v34.h"
 
 static uint32_t tu_seed = 0x12345678u;
 static inline uint32_t tu_rand(void)        /* xorshift32 */

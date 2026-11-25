@@ -1,0 +1,10 @@
+test_shared: one copy of each table and primitive
+  scramblers, GPC, scramble: 0 bits differ, 0 end states differ
+  scramblers, GPC, descramble: 0 bits differ, 0 end states differ
+  scramblers, GPA, scramble: 0 bits differ, 0 end states differ
+  scramblers, GPA, descramble: 0 bits differ, 0 end states differ
+  PP: 0 of 4608 points differ
+  S, S-bar: 0 of 90900 points differ
+  INFO CRC: 0 of 6000 registers differ; x2 records: 0 of 4000 differ
+  INFO1c as INFO1d: 0 of 200 differ
+test_shared: 17 checks, 0 failures

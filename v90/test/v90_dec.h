@@ -18,8 +18,8 @@
 #ifndef V90D_V90_DEC_H
 #define V90D_V90_DEC_H
 #include <stdint.h>
-#include "v90_enc.h"
-#include "v90_scr.h"
+#include "../v90_enc.h"
+#include "../v90_scr.h"
 
 typedef struct {
     const v90_map_t *m;

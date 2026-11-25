@@ -25,6 +25,7 @@ static long peer_lead;                 /* samples of silence before the far end'
 static long lead_ms = 300;             /* the far end starts this long after answering */
 static long jm_at;                     /* peer sample at which the answerer began JM */
 static long delay_set = -1;            /* the line's one-way delay, when a test sets it */
+static int jm_pcm_analog;              /* the answerer's JM names "PCM analogue" (an analogue V.90 modem) */
 
 static int16_t clip(double x) { long q = lrint(x); return (int16_t)(q > 32767 ? 32767 : q < -32768 ? -32768 : q); }
 
@@ -35,7 +36,18 @@ static double peer(void *u, double rx)
     peer_n++;
     if (peer_n <= peer_lead) return 0;
     switch (peer_kind) {
-    case P_V8ANS: if (v8ans_tick(&A, clip(rx), &tx) == V8A_JM && !jm_at) jm_at = peer_n; return tx;
+    case P_V8ANS:
+        if (v8ans_tick(&A, clip(rx), &tx) == V8A_JM && !jm_at) {
+            jm_at = peer_n;
+            if (jm_pcm_analog) {        /* the JM, before its first bit goes out */
+                uint8_t oct[V8_MAX_OCTETS];
+                int n;
+                A.jm.has_pcm = 1; A.jm.pcm = V8_PCM_ANALOG;
+                n = v8_encode(&A.jm, oct, V8_MAX_OCTETS);
+                A.njm = v8_frame(V8_SYNC_CM_JM, oct, n, A.jmbits, V8A_MAXBITS);
+            }
+        }
+        return tx;
     case P_ANSAM_ONLY: ansam_run(&G, &tx, 1); return tx;
     case P_ANS: {      /* V.25 ANS: 2100 Hz with reversals every 450 ms, no modulation */
         double t = (double)(peer_n - peer_lead) / FS, ph = TWO_PI * 2100 * t;
@@ -178,6 +190,20 @@ int main(void)
     CHECK_EQ_I(r, V8O_RES_OK);
     CHECK_EQ_I(O.selected, V8_SEL_V90);
     CHECK_EQ_I(A.selected, V8_SEL_V90);
+
+    printf("PCM: a JM naming PCM-analogue only (an analogue answerer): V.34, not V.90\n");
+    {
+        v8_menu_t jm_v34_only;
+        jm_pcm_analog = 1;
+        r = call(P_V8ANS, 1, &cm, &al, 0, MS(12000));
+        jm_pcm_analog = 0;
+        jm_v34_only = O.jm; jm_v34_only.has_pcm = 0; jm_v34_only.pcm = 0;
+        printf("  result %d, JM pcm %d/0x%x, selected %d\n", r, O.jm.has_pcm, O.jm.pcm, O.selected);
+        CHECK_EQ_I(r, V8O_RES_OK);
+        CHECK(O.jm.has_pcm && O.jm.pcm == V8_PCM_ANALOG);
+        CHECK_EQ_I(O.selected, v8_selected(&jm_v34_only));
+        CHECK_EQ_I(O.selected, V8_SEL_V34);
+    }
 
     printf("nothing in common: JM with no modulation mode (8.1.2)\n");
     menu_cm(&cm, V8_MOD_V22 | V8_MOD_V21);

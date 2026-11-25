@@ -6,7 +6,7 @@
 # program. The signal path is fixed point, so every target must print the
 # same thing; only lines that time the host (wall clock, CPU) are left out
 # of the comparison, and those that print the size of structures in memory
-# (TIMING below). One allowance: a C library whose printf
+# (TIMING, tools/out-filter.sh). One allowance: a C library whose printf
 # rounds numbers up where the correct rounding is down (uClibc-ng; found by
 # tools/printf-probe.c on the target itself) may print such a number one
 # unit larger in its last digit (tools/ports-cmp.awk); those lines are
@@ -20,9 +20,11 @@
 # files go there too.
 #   PAR=4      targets built and run at once
 #   JOBS=2     make -j for each target (so at most PAR * JOBS compilers)
+#   PROG_PAR=8 test programs each target runs at once (tools/par-run.sh's
+#              PAR; so at most PAR * PROG_PAR programs)
 #   QUICK="t1 t2 ..."  targets that skip the slow programs listed in
-#              tools/ports-slow.txt (the comparison then covers the rest
-#              and says how many were skipped)
+#              SLOW (default tools/ports-slow.txt; the comparison then
+#              covers the rest and says how many were skipped)
 #   SKIP="arm_test_orig_seeds ..."  programs no target but the reference
 #              runs (as a quick target's are skipped and counted)
 #   COMPARE_ONLY=1  compare what an earlier run left in OUT, run nothing
@@ -37,11 +39,10 @@ TC=${TOOLCHAINS:-$ROOT/../toolchains}
 PAR=${PAR:-4}
 JOBS=${JOBS:-2}
 QUICK=${QUICK:-}
+SLOW=${SLOW:-$ROOT/tools/ports-slow.txt}
 SUBS=$(sed -n 's/^SUBS *:= *//p' "$ROOT/Makefile")
-# lines that measure the host, not the modem: CPU and wall time, and the
-# size of structures in memory (pointer width, alignment: v90tx_t, v34_rx_t,
-# V.44's encoder and decoder)
-TIMING='of CPU here|% of real time| ns +[0-9]+ ns +[0-9]+ ns$|^  speed on |^  sizeof\(|^  decoder state: sizeof\(|^  sizes: encoder [0-9]+ octets, decoder [0-9]+ octets$'
+# lines that measure the host, not the modem (TIMING, out_filter)
+. "$ROOT/tools/out-filter.sh"
 
 tc() { set -- "$TC"/$1/bin/$2; [ -x "$1" ] && echo "$1" || echo "$TC/missing/$2"; }
 
@@ -69,10 +70,12 @@ REF=$(echo "$TARGETS" | awk 'NF {print $1; exit}')
 # --one NAME: build and run one target (what the parallel step below runs)
 if [ "${1:-}" = --one ]; then
     OUT=$2; name=$3
+    # the programs one target runs at once (par-run's PAR, not the targets')
+    PAR=${PROG_PAR:-8}; export PAR
     set -- $(echo "$TARGETS" | awk -v n="$name" '$1 == n')
     cc=$2; run=$3; B=$OUT/$name
     skip=-
-    case " $QUICK " in *" $name "*) [ "$name" != "$REF" ] && skip=$ROOT/tools/ports-slow.txt ;; esac
+    case " $QUICK " in *" $name "*) [ "$name" != "$REF" ] && skip=$SLOW ;; esac
     if [ -n "${SKIP:-}" ] && [ "$name" != "$REF" ]; then
         mkdir -p "$B"
         { [ "$skip" = - ] || cat "$skip"; printf '%s\n' $SKIP; } > "$B/skip.txt"
@@ -86,10 +89,16 @@ if [ "${1:-}" = --one ]; then
     # 32-bit x86 the test harness's doubles (the simulated line, sim/) are
     # computed in SSE2, not in the x87's 80 bits, which round differently
     # and so feed the modem a different line; the modem itself is integer
-    # code that these flags do not change (see docs/history/PROGRESS.md, "ports-2")
+    # code that these flags do not change (see docs/history/PROGRESS.md, "ports-2").
+    # On m68k the frame pointer is kept: GCC 12.3 for m68k, with it omitted
+    # (-O1 and up), reads an incoming argument 8 bytes off around a 64-bit
+    # division (a DImode push from an sp-relative source after a subq). The
+    # two sites in the tree are written so that it compiles them right
+    # anyway; the flag guards against new ones (docs/history/PROGRESS.md, "m68k")
     extra="-DTEST_FULL"
     case "$cc" in *mingw*) extra="$extra -D__USE_MINGW_ANSI_STDIO=1" ;; esac
     case "$name" in i686-*|win32-*) extra="$extra -msse2 -mfpmath=sse" ;; esac
+    case "$name" in m68k-*) extra="$extra -fno-omit-frame-pointer" ;; esac
     case "$run" in qemu-*) extra="$extra -DTEST_EMULATED=1" ;; esac
     rm -rf "$B/out"; mkdir -p "$B/out"
     Q="$ROOT/tools/portrun $B $B/out $skip $run"
@@ -130,7 +139,7 @@ if [ -z "${COMPARE_ONLY:-}" ]; then
 fi
 
 # one program's output as compared: no carriage returns (wine), no timing
-norm() { tr -d '\r' < "$1" | grep -vE "$TIMING"; }
+norm() { out_filter "$1"; }
 
 fail=0
 rst=$(cat "$OUT/$REF.status" 2>/dev/null || echo missing)

@@ -1,5 +1,6 @@
 /* L1 / L2 line probing: generator and block-DFT analyser. See probe.h. */
 #include "probe.h"
+#include "fixmath.h"
 
 int probe_has_tone(int m)
 {
@@ -107,19 +108,6 @@ void proberx_tick(proberx_t *r, int16_t x)
     r->nblk++;
 }
 
-static int64_t isqrt64(int64_t v)
-{
-    int64_t r = 0, b = (int64_t)1 << 62;
-    if (v <= 0) return 0;
-    while (b > v) b >>= 2;
-    while (b) {
-        if (v >= r + b) { v -= r + b; r = (r >> 1) + b; }
-        else r >>= 1;
-        b >>= 2;
-    }
-    return r;
-}
-
 /* repeating (signal) power and noise power per block at bin m, in |X|^2 units.
  * With c = sum X[k] conj(X[k-1]) over K-1 block pairs, the signal is |c|/(K-1)
  * and sum |X[k] - e^(j theta) X[k-1]|^2 = 2 sum|X|^2 - |X first|^2 - |X last|^2
@@ -130,7 +118,7 @@ static void powers(const proberx_t *r, int m, int64_t *sig, int64_t *noise)
     /* |c| without overflow: scale down to 31 bits first */
     int sh = 0;
     while ((a >> sh) > 0x3fffffff || (b >> sh) > 0x3fffffff) sh++;
-    int64_t c = isqrt64((a >> sh) * (a >> sh) + (b >> sh) * (b >> sh)) << sh;
+    int64_t c = (int64_t)isqrt_s64((a >> sh) * (a >> sh) + (b >> sh) * (b >> sh)) << sh;
     int64_t last = (int64_t)r->lr[m] * r->lr[m] + (int64_t)r->li[m] * r->li[m];
     *sig = c / (r->nblk - 1);
     *noise = (2 * r->pw[m] - r->p0[m] - last - 2 * c) / (2 * (r->nblk - 1));
@@ -141,7 +129,7 @@ int proberx_level(const proberx_t *r, int m)
     int64_t s, t;
     if (r->nblk < 3 || m < 1 || m > PROBE_NBIN) return 0;
     powers(r, m, &s, &t);
-    return (int)isqrt64(s / 12800);
+    return (int)isqrt_s64(s / 12800);
 }
 
 int64_t proberx_power(const proberx_t *r, int m)
@@ -155,13 +143,13 @@ int64_t proberx_power(const proberx_t *r, int m)
 int proberx_last(const proberx_t *r, int m)
 {
     if (r->nblk < 1 || m < 1 || m > PROBE_NBIN) return 0;
-    return (int)isqrt64(((int64_t)r->lr[m] * r->lr[m] + (int64_t)r->li[m] * r->li[m]) / 12800);
+    return (int)isqrt_s64(((int64_t)r->lr[m] * r->lr[m] + (int64_t)r->li[m] * r->li[m]) / 12800);
 }
 
 int proberx_noise(const proberx_t *r, int m)
 {
     if (r->nblk < 3 || m < 1 || m > PROBE_NBIN) return 0;
-    return (int)isqrt64(r->pw[m] / r->nblk / 12800);
+    return (int)isqrt_s64(r->pw[m] / r->nblk / 12800);
 }
 
 int proberx_snr(const proberx_t *r, int m)
@@ -183,7 +171,7 @@ void proberx_bin(const proberx_t *r, int m, int *snr, int *level, int64_t *power
     *snr = *level = 0; *power = 0;
     if (r->nblk < 3 || m < 1 || m > PROBE_NBIN) return;
     powers(r, m, &s, &n);
-    *level = (int)isqrt64(s / 12800);
+    *level = (int)isqrt_s64(s / 12800);
     *power = s > 0 ? s : 0;
     if (s <= 0) return;
     if (n < 1) n = 1;

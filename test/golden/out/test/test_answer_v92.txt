@@ -1,0 +1,26 @@
+  V.92 caller, mu-law: data mode at 8.99 s
+  V.92 caller                                  V.92: 50666 bit/s down, 38666 bit/s up; 152000 / 116000 bits, 0 / 0 bad; SNR 51.8 dB, rtd 3
+  after the caller's rate renegotiation        V.92: 50666 bit/s down, 38666 bit/s up; 152000 / 116000 bits, 0 / 0 bad; SNR 50.9 dB, rtd 3
+  after our retrain                            V.92: 50666 bit/s down, 38666 bit/s up; 152000 / 116000 bits, 0 / 0 bad; SNR 51.1 dB, rtd 2
+  after the caller's retrain                   V.92: 50666 bit/s down, 38666 bit/s up; 152000 / 116000 bits, 0 / 0 bad; SNR 51.6 dB, rtd 3
+  V.92 caller, A-law, DIL, long line           V.92: 50666 bit/s down, 36000 bit/s up; 152000 / 108000 bits, 0 / 0 bad; SNR 54.2 dB, rtd 2
+  V.92 caller, ceilings 44000 / 33600          V.92: 50666 bit/s down, 33333 bit/s up; 152000 / 100000 bits, 0 / 0 bad; SNR 55.4 dB, rtd 3
+  our cleardown, the caller deaf to us: over after 3500 ms, end 4, retrain 0
+  V.92 start-up without the caller's Ru: V.90 data mode at 15.98 s, 1 retrain(s)
+  V.90 after the failed V.92 start-up          V.90: 50666 bit/s down, 28800 bit/s up; 152000 / 86400 bits, 0 / 0 bad; SNR 35.6 dB, rtd 2
+  and after a retrain of that call             V.90: 50666 bit/s down, 28800 bit/s up; 152000 / 86400 bits, 0 / 0 bad; SNR 36.4 dB, rtd 2
+  V.92 caller, PCM upstream off                V.90: 50666 bit/s down, 28800 bit/s up; 152000 / 86400 bits, 0 / 0 bad; SNR 36.4 dB, rtd 3
+  V.90 caller, V.92 not enabled                V.90: 50666 bit/s down, 28800 bit/s up; 152000 / 86400 bits, 0 / 0 bad; SNR 36.4 dB, rtd 3
+  V.90 caller, V.92 enabled here               V.90: 50666 bit/s down, 28800 bit/s up; 152000 / 86400 bits, 0 / 0 bad; SNR 36.4 dB, rtd 3
+  V.90 caller, V.92 enabled against not enabled: 392 of 240000 octets sent differ, all between 2.890 s and 2.942 s (Phase 2 began at 2.842 s; INFO0d is its first 104 ms)
+  V.92 caller, V.92 not enabled here           V.90: 50666 bit/s down, 28800 bit/s up; 152000 / 86400 bits, 0 / 0 bad; SNR 36.4 dB, rtd 3
+  V.34 caller, V.92 enabled here: data mode at 7.90 s, 28800 / 28800 bit/s
+  V.92 caller gone in data mode: over after 510 ms, 0 retrain(s)
+  V.92 line dead in data mode: over after 500 ms, end 2, 0 retrain(s), renegotiation 0
+  far echo 300 ms, 20 dB down (echo delay 2416) V.92: 50666 bit/s down, 40000 bit/s up; 152000 / 120000 bits, 0 / 0 bad; SNR 49.9 dB, rtd 2402
+  far echo 400 ms, 20 dB down (echo delay 3216) V.92: 50666 bit/s down, 40000 bit/s up; 152000 / 120000 bits, 0 / 0 bad; SNR 50.5 dB, rtd 3202
+  far echo 100 ms, 20 dB down (echo delay 816) V.92: 50666 bit/s down, 40000 bit/s up; 152000 / 120000 bits, 0 / 0 bad; SNR 49.7 dB, rtd 802
+  far echo 300 ms, 20 dB down (echo delay 2415) V.90: 50666 bit/s down, 28800 bit/s up; 152000 / 86400 bits, 0 / 0 bad; SNR 36.6 dB, rtd 2402
+  far echo 400 ms, 20 dB down (echo delay 3214) V.90: 50666 bit/s down, 28800 bit/s up; 152000 / 86400 bits, 0 / 0 bad; SNR 36.1 dB, rtd 3202
+  far echo 100 ms, 20 dB down (echo delay 814) V.90: 50666 bit/s down, 28800 bit/s up; 152000 / 86400 bits, 0 / 0 bad; SNR 36.4 dB, rtd 802
+answer_v92: 322 checks, 0 failures

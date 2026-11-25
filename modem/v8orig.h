@@ -64,7 +64,7 @@ typedef struct {
     long       ci_sent;             /* CI sequences sent in all */
     int        jm_seen;             /* two identical JM: CJ follows the current octet */
     v8_menu_t  jm;
-    int        result, selected;    /* V8O_RES_*, v8_selected(jm) */
+    int        result, selected;    /* V8O_RES_*, v8_selected_caller(jm) */
     anst_result answer_tone;
     long       at_tone, at_cm, at_cj, at_post;  /* sample numbers, for the tests */
 } v8orig_t;

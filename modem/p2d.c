@@ -1,11 +1,6 @@
 /* V.90 Phase 2, digital modem. See p2d.h and V.90 9.2.1. */
 #include "p2d.h"
-
-#define MS(x) ((x) * 8)
-#define TONE_SEEN 160           /* 20 ms of steady carrier = tone detected */
-#define TURN 320                /* the 40 ms turn-round */
-#define TAIL 80                 /* 10 ms of tone after a reversal */
-#define PROBE_BLOCKS 23         /* 460 ms of L2 analysed (not to exceed 500 ms) */
+#include "p2common.h"
 
 int p2_level(int dbm0)
 {
@@ -45,13 +40,14 @@ void p2d_init(p2d_t *p, const p2d_cfg *cfg)
     if (p->cfg.tx_dbm0 < -21) p->cfg.tx_dbm0 = -21;
     p->level = p2_level(p->cfg.tx_dbm0);
     p->state = P2D_INFO0; p->error = P2D_OK; p->now = 0; p->t = 0;
+    p->t_x = 0; p->n_recover = 0; p->n_restart = 0;
     dpsktx_init(&p->tx, DPSK_FC_B, p->level, 0);
     dpskrx_init(&p->rx, DPSK_FC_A);
     dpskrx_expect(&p->rx, INFO_PAYLOAD(INFO0A_BITS));
     probetx_init(&p->ptx, p->level);
     proberx_init(&p->prx);
     p->probing = 0;
-    p->got0a = 0; p->sent_ack = 0; p->resend = 0; p->n_info0d = 0;
+    p->got0a = 0; p->resend = 0; p->n_info0d = 0;
     p->act_at = p->b_rev_line = p->rev2_at = p->probe_from = p->l2_from = 0;
     p->rtd = 0; p->tone_blocks = 0;
     p->v92 = 0; p->pcm_up = 0; p->peer_v92 = 0; p->mode = P2D_MODE_V90;
@@ -89,10 +85,23 @@ void p2d_retrain_v92(p2d_t *p, int pcm_up)
     p->v92 = 1; p->pcm_up = pcm_up != 0; p->peer_v92 = 1;
 }
 
-/* V.34 Table 1: symbol rates and their low / high carriers */
-static const int16_t SR[6] = { 2400, 2743, 2800, 3000, 3200, 3429 };
-static const int16_t FC[6][2] = { {1600, 1800}, {1646, 1829}, {1680, 1867},
-                                  {1800, 2000}, {1829, 1920}, {1959, 1959} };
+/* 9.2.1.2.1: the caller's INFO0a again (in p->rx.frame) once the INFO0
+ * exchange is behind us. It has not heard us: INFO0d with bit 28 set, as
+ * INFO0a came in correctly, then Tone B, and P2D_INFO0 goes on from there
+ * (INFO0d again while INFO0a comes without bit 28; on Tone A, 9.2.1.1.3).
+ * Past P2D_MAX_RESTART the INFO0a is ignored, as it was before 0.6.1, and
+ * the state's own time-out ends the call. */
+static void info0a_again(p2d_t *p)
+{
+    if (p->n_restart >= P2D_MAX_RESTART) return;
+    p->n_restart++;
+    info0a_parse(p->rx.frame, &p->info0a);
+    p->got0a = 1; p->resend = 0;
+    p->probing = 0;
+    dpskrx_expect(&p->rx, INFO_PAYLOAD(INFO0A_BITS));
+    send_info0d(p, 1);
+    go(p, P2D_INFO0);
+}
 
 /* turn the probing measurements into INFO1d */
 static void probe_result(p2d_t *p)
@@ -107,7 +116,7 @@ static void probe_result(p2d_t *p)
     p->info1d.md_len = 0;
     for (k = 0; k < 6; k++) {
         int hi = (p->cfg.up_hi_carrier >> k) & 1;
-        int lo_f = FC[k][hi] - SR[k] / 2, hi_f = FC[k][hi] + SR[k] / 2;
+        int fc = p2_carrier_hz(k, hi), lo_f = fc - p2_sr[k] / 2, hi_f = fc + p2_sr[k] / 2;
         int32_t sum = 0, n = 0, rate;
         p->info1d.sr[k].hi_carrier = (uint8_t)hi;
         p->info1d.sr[k].preemph = 0;
@@ -120,7 +129,7 @@ static void probe_result(p2d_t *p)
         if (!n) continue;
         /* bits per symbol = (mean SNR - 9 dB gap) / 3.01 dB; rate in 2400 bit/s units.
          * 12 is the ceiling without 1664-point constellations (Table 9 note 1). */
-        rate = ((sum / n - 90) * SR[k]) / (30 * 2400);
+        rate = ((sum / n - 90) * p2_sr[k]) / (30 * 2400);
         if (rate > 12) rate = 12;
         if (rate < 0) rate = 0;
         p->info1d.sr[k].max_rate = (uint8_t)rate;
@@ -139,22 +148,14 @@ static void send_info1d(p2d_t *p)
     dpsktx_send(&p->tx, bits, n);
 }
 
-/* a tone (bin m) standing out of our own probing echo for two blocks running */
-static int tone_under_probe(p2d_t *p, int16_t x, int m)
-{
-    proberx_tick(&p->prx, x);
-    if (p->prx.n != 0) return p->tone_blocks >= 2;
-    {
-        int lvl = proberx_last(&p->prx, m), ref = proberx_last(&p->prx, 6);
-        if (lvl > 30 && lvl > 4 * ref) p->tone_blocks++; else p->tone_blocks = 0;
-    }
-    return p->tone_blocks >= 2;
-}
-
 int16_t p2d_tick(p2d_t *p, int16_t x)
 {
     int ev = dpskrx_tick(&p->rx, x);
     int32_t out;
+
+    /* the exchange as a whole (spec D5): the states' own limits start again
+     * on every return to INFO0 or WAIT_REV1 */
+    if (p->state != P2D_DONE && p->state != P2D_FAILED && p->t_x >= MS(P2D_EXCHANGE_MS)) fail(p, P2D_ERR_TIME);
 
     switch (p->state) {
     case P2D_INFO0:
@@ -200,7 +201,9 @@ int16_t p2d_tick(p2d_t *p, int16_t x)
         break;
 
     case P2D_WAIT_REV2:
-        if (ev & DPSK_EV_REVERSAL) {
+        if (ev & DPSK_EV_FRAME) {
+            info0a_again(p);
+        } else if (ev & DPSK_EV_REVERSAL) {
             int32_t line = p->now - DPSK_RX_REV_DELAY;
             p->rtd = line - p->b_rev_line - TURN - p->cfg.io_delay;
             if (p->rtd < 0) p->rtd = 0;
@@ -210,12 +213,14 @@ int16_t p2d_tick(p2d_t *p, int16_t x)
             proberx_init(&p->prx);
             go(p, P2D_PROBE_RX);
         } else if (p->t > MS(2000)) {
-            go(p, P2D_RECOVER);             /* 9.2.1.2.3 */
+            if (p->n_recover >= P2D_MAX_RECOVER) fail(p, P2D_ERR_REV);
+            else { p->n_recover++; go(p, P2D_RECOVER); }    /* 9.2.1.2.3 */
         }
         break;
 
     case P2D_RECOVER:
-        if (p->rx.steady >= TONE_SEEN) { dpsktx_on(&p->tx); go(p, P2D_WAIT_REV1); }
+        if (ev & DPSK_EV_FRAME) info0a_again(p);
+        else if (p->rx.steady >= TONE_SEEN) { dpsktx_on(&p->tx); go(p, P2D_WAIT_REV1); }
         else if (p->t > MS(5000)) fail(p, P2D_ERR_REV);
         break;
 
@@ -257,14 +262,16 @@ int16_t p2d_tick(p2d_t *p, int16_t x)
         break;
 
     case P2D_L1:
-        (void)tone_under_probe(p, x, 16);
+        (void)tone_under_probe(&p->prx, &p->tone_blocks, x, 16);
+        /* one sample short of P2N_L1's: kept (p2common.h) */
         if (p->t >= MS(160) - 1) { p->probing = 2; p->tone_blocks = 0; go(p, P2D_L2); }
         break;
 
     case P2D_L2:
-        if (tone_under_probe(p, x, 16)) {
+        if (tone_under_probe(&p->prx, &p->tone_blocks, x, 16)) {
             p->probing = 0;
             dpskrx_expect(&p->rx, INFO_PAYLOAD(INFO1A_BITS));
+            dpskrx_expect_also(&p->rx, INFO_PAYLOAD(INFO0A_BITS));     /* 9.2.1.2.1 */
             send_info1d(p);
             go(p, P2D_INFO1D);
         } else if (p->t > MS(650) + p->rtd + MS(100)) {
@@ -278,7 +285,9 @@ int16_t p2d_tick(p2d_t *p, int16_t x)
         break;
 
     case P2D_WAIT_INFO1A:
-        if (ev & DPSK_EV_FRAME) {
+        if ((ev & DPSK_EV_FRAME) && p->rx.flen == INFO_PAYLOAD(INFO0A_BITS)) {
+            info0a_again(p);                /* the caller lost our INFO1d and starts over */
+        } else if (ev & DPSK_EV_FRAME) {
             info1a_parse(p->rx.frame, &p->info1a);
             switch (info1a_kind(&p->info1a)) {
             case INFO1A_PCM:
@@ -290,7 +299,7 @@ int16_t p2d_tick(p2d_t *p, int16_t x)
             default:         p->mode = P2D_MODE_V34; go(p, P2D_DONE); break;
             }
         } else if (p->t > MS(700) + p->rtd + MS(300)) {
-            fail(p, P2D_ERR_INFO1A);        /* 9.2.1.2.6 recovery not implemented */
+            fail(p, P2D_ERR_INFO1A);        /* 9.2.1.2.6 (Tone A, INFOMARKSa) not implemented */
         }
         break;
 
@@ -304,5 +313,6 @@ int16_t p2d_tick(p2d_t *p, int16_t x)
     if (out > 32767) out = 32767;
     if (out < -32768) out = -32768;
     p->now++; p->t++;
+    if (p->state != P2D_DONE && p->state != P2D_FAILED) p->t_x++;
     return (int16_t)out;
 }

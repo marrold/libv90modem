@@ -1,0 +1,14 @@
+ V.8, then V.32bis (mu-law, near echo 15 dB, far echo 20 dB down)
+  V.8 done at 2.56 s (selected 3), V.32bis data at 5.47 s, 14400 bit/s; c->a 71233 bits 0 errors, a->c 71935 bits 0 errors
+ AA detector (1800 Hz during the answer tone)
+  AA -20 dBm0, answer tone echo -10 dBm0: detected 104 ms after it starts
+  AA -30 dBm0, answer tone echo -10 dBm0: detected 108 ms after it starts
+  AA -40 dBm0, answer tone echo -10 dBm0: detected 127 ms after it starts
+  1793 Hz and 1807 Hz at -30 dBm0: detected
+  answer tone echo alone at -6 dBm0, 5 s: nothing
+  1800 Hz at -48 dBm0 (below the -43 dBm0 threshold): nothing
+  1650 Hz at -20 dBm0, V.21 CM tones (980 / 1180 Hz) at -12 dBm0: nothing
+  white noise at -15 dBm0, 10 s: nothing
+ a V.32bis caller without V.8: AA during the answer tone
+  AA sent from 1.40 s, detected at 1.54 s; V.32bis data at 4.53 s, 14400 bit/s; c->a 71233 bits 0 errors, a->c 71935 bits 0 errors
+test_v8: 28 checks, 0 failures

@@ -1,0 +1,19 @@
+same clock: 0 of 3967 samples differ from the symbols 33 samples earlier
+    +0 ppm: 80000 symbols in 80000 samples (80000.0 expected), at most 1 in one sample
+  +100 ppm: 79992 symbols in 80000 samples (79992.0 expected), at most 1 in one sample
+  -100 ppm: 80008 symbols in 80000 samples (80008.0 expected), at most 2 in one sample
+ +1000 ppm: 79920 symbols in 80000 samples (79920.1 expected), at most 1 in one sample
+ -1000 ppm: 80080 symbols in 80000 samples (80080.1 expected), at most 2 in one sample
+round trip through the test line's resampler, 3.4 kHz band limit:
+     +0 ppm: fitted on 0.1..2.5 s, error over 2.5..7.5 s -66.5 dB, group delay -1.000
+    +30 ppm: fitted on 0.1..2.5 s, error over 2.5..7.5 s -65.9 dB, group delay -1.000
+   +100 ppm: fitted on 0.1..2.5 s, error over 2.5..7.5 s -65.9 dB, group delay -1.000
+   -100 ppm: fitted on 0.1..2.5 s, error over 2.5..7.5 s -65.9 dB, group delay -1.000
+   +300 ppm: fitted on 0.1..2.5 s, error over 2.5..7.5 s -65.5 dB, group delay -1.000
+  slip 0.5000 at   +0 ppm: delay +0.5001 symbols, errors -66.5 / -67.6 dB
+  slip 0.2500 at +100 ppm: delay +0.2500 symbols, errors -65.8 / -66.2 dB
+  slip 0.7500 at -100 ppm: delay +0.7501 symbols, errors -65.9 / -65.8 dB
+  slip 0.0044 at   +0 ppm: delay +0.0044 symbols, errors -66.5 / -66.4 dB
+constant 32767: last output 32767, 0 outputs off
+constant -32768: last output -32768, 0 outputs off
+pcmtx: 27 checks, 0 failures

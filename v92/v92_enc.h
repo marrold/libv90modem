@@ -24,7 +24,7 @@
 #define V90D_V92_ENC_H
 #include "v92.h"
 #include "v92_mod.h"
-#include "v90_scr.h"
+#include "../v90/v90_scr.h"
 
 #define V92_XQ 8                /* fractional bits of x(n) and v(n) */
 
@@ -69,9 +69,15 @@ typedef struct {
 /* Everything initialised to zero (8.7.1: "the scrambler, modulus encoder,
  * convolutional encoder, precoder and prefilter memories are initialized to
  * zero prior to transmitting B1u"); the first symbol returned is data frame
- * interval 0 and n = 0 of the filter equations. map and filt must outlive
- * the encoder. B1u is then 48 data frames (V92_B1U_FRAMES) of binary ones
- * from get(), and data follows without any re-initialisation.
+ * interval 0 and n = 0 of the filter equations. B1u is then 48 data frames
+ * (V92_B1U_FRAMES) of binary ones from get(), and data follows without any
+ * re-initialisation.
+ *
+ * map and filt must outlive the encoder, which reads them at every symbol,
+ * unchecked: a map or filter that fails v92_map_check / v92_filt_check
+ * makes it divide by zero or read out of bounds. An owner whose map or
+ * filter may change (a CPd received later) gives the encoder copies that
+ * only it writes, taken when it calls this (v90a: encm, encf).
  * Returns 0, or V92_ERR_RANGE if v92_map_check() or v92_filt_check() fail. */
 int  v92_enc_init(v92_enc_t *e, const v92_map_t *map, const v92_filt_t *filt,
                   v92_getbit_fn get, void *user);

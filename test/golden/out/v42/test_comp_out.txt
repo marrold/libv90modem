@@ -1,0 +1,150 @@
+v42bis lcg    P1  512 P2   6 auto  : whole  8229 octets 9c508707, pieces  8229 octets 9c508707
+v42bis lcg    P1  512 P2   6 always: whole  9180 octets 81a9d384, pieces  9191 octets d66484cb
+v42bis lcg    P1  512 P2   6 never : whole  8229 octets 9c508707, pieces  8229 octets 9c508707
+v42bis lcg    P1  512 P2 250 auto  : whole  8229 octets 9c508707, pieces  8229 octets 9c508707
+v42bis lcg    P1  512 P2 250 always: whole  9180 octets 81a9d384, pieces  9191 octets d66484cb
+v42bis lcg    P1  512 P2 250 never : whole  8229 octets 9c508707, pieces  8229 octets 9c508707
+v42bis lcg    P1 2048 P2   6 auto  : whole  8229 octets 9c508707, pieces  8229 octets 9c508707
+v42bis lcg    P1 2048 P2   6 always: whole 10828 octets d0fabd85, pieces 10843 octets 88ac1f11
+v42bis lcg    P1 2048 P2   6 never : whole  8229 octets 9c508707, pieces  8229 octets 9c508707
+v42bis lcg    P1 2048 P2 250 auto  : whole  8229 octets 9c508707, pieces  8229 octets 9c508707
+v42bis lcg    P1 2048 P2 250 always: whole 10828 octets d0fabd85, pieces 10843 octets 88ac1f11
+v42bis lcg    P1 2048 P2 250 never : whole  8229 octets 9c508707, pieces  8229 octets 9c508707
+v42bis text   P1  512 P2   6 auto  : whole  1663 octets 9b62f729, pieces  1674 octets d4f97e05
+v42bis text   P1  512 P2   6 always: whole  1657 octets 451cba4d, pieces  1667 octets 914c7640
+v42bis text   P1  512 P2   6 never : whole  8192 octets c85107c7, pieces  8192 octets c85107c7
+v42bis text   P1  512 P2 250 auto  : whole  1407 octets 461d98c7, pieces  1466 octets 06acc52d
+v42bis text   P1  512 P2 250 always: whole  1403 octets 5b76eae4, pieces  1460 octets 5f913ee2
+v42bis text   P1  512 P2 250 never : whole  8192 octets c85107c7, pieces  8192 octets c85107c7
+v42bis text   P1 2048 P2   6 auto  : whole  1663 octets 9b62f729, pieces  1674 octets d4f97e05
+v42bis text   P1 2048 P2   6 always: whole  1657 octets 451cba4d, pieces  1667 octets 914c7640
+v42bis text   P1 2048 P2   6 never : whole  8192 octets c85107c7, pieces  8192 octets c85107c7
+v42bis text   P1 2048 P2 250 auto  : whole  1020 octets ea0fc00b, pieces  1037 octets 1cffceb8
+v42bis text   P1 2048 P2 250 always: whole  1014 octets 2438d38e, pieces  1031 octets 85622a96
+v42bis text   P1 2048 P2 250 never : whole  8192 octets c85107c7, pieces  8192 octets c85107c7
+v42bis zeros  P1  512 P2   6 auto  : whole  1593 octets 57e3b595, pieces  1603 octets fa6def62
+v42bis zeros  P1  512 P2   6 always: whole  1546 octets 4f80d408, pieces  1556 octets 63b82deb
+v42bis zeros  P1  512 P2   6 never : whole  8193 octets c2335d1e, pieces  8193 octets c2335d1e
+v42bis zeros  P1  512 P2 250 auto  : whole   255 octets 40c4634f, pieces   271 octets 16d718e1
+v42bis zeros  P1  512 P2 250 always: whole   207 octets 1e1bd306, pieces   224 octets 39d09673
+v42bis zeros  P1  512 P2 250 never : whole  8193 octets c2335d1e, pieces  8193 octets c2335d1e
+v42bis zeros  P1 2048 P2   6 auto  : whole  1593 octets 57e3b595, pieces  1603 octets fa6def62
+v42bis zeros  P1 2048 P2   6 always: whole  1546 octets 4f80d408, pieces  1556 octets 63b82deb
+v42bis zeros  P1 2048 P2   6 never : whole  8193 octets c2335d1e, pieces  8193 octets c2335d1e
+v42bis zeros  P1 2048 P2 250 auto  : whole   255 octets 40c4634f, pieces   271 octets 16d718e1
+v42bis zeros  P1 2048 P2 250 always: whole   207 octets 1e1bd306, pieces   224 octets 39d09673
+v42bis zeros  P1 2048 P2 250 never : whole  8193 octets c2335d1e, pieces  8193 octets c2335d1e
+v42bis sym16  P1  512 P2   6 auto  : whole  5807 octets 2b520133, pieces  5827 octets fad2dee1
+v42bis sym16  P1  512 P2   6 always: whole  5795 octets d1f17009, pieces  5815 octets 2baf396b
+v42bis sym16  P1  512 P2   6 never : whole  8192 octets 77302458, pieces  8192 octets 77302458
+v42bis sym16  P1  512 P2 250 auto  : whole  5807 octets 2b520133, pieces  5827 octets fad2dee1
+v42bis sym16  P1  512 P2 250 always: whole  5795 octets d1f17009, pieces  5815 octets 2baf396b
+v42bis sym16  P1  512 P2 250 never : whole  8192 octets 77302458, pieces  8192 octets 77302458
+v42bis sym16  P1 2048 P2   6 auto  : whole  5108 octets 5a77938b, pieces  5123 octets ffefa112
+v42bis sym16  P1 2048 P2   6 always: whole  5096 octets db41ac9d, pieces  5111 octets d2405080
+v42bis sym16  P1 2048 P2   6 never : whole  8192 octets 77302458, pieces  8192 octets 77302458
+v42bis sym16  P1 2048 P2 250 auto  : whole  5108 octets 5a77938b, pieces  5123 octets ffefa112
+v42bis sym16  P1 2048 P2 250 always: whole  5096 octets db41ac9d, pieces  5111 octets d2405080
+v42bis sym16  P1 2048 P2 250 never : whole  8192 octets 77302458, pieces  8192 octets 77302458
+v42bis mixed  P1  512 P2   6 auto  : whole  5414 octets e111b42e, pieces  5419 octets 73dc3090
+v42bis mixed  P1  512 P2   6 always: whole  5842 octets a5471682, pieces  5854 octets 2f409d58
+v42bis mixed  P1  512 P2   6 never : whole  8206 octets 0ef4497c, pieces  8206 octets 0ef4497c
+v42bis mixed  P1  512 P2 250 auto  : whole  5393 octets 546467c3, pieces  5401 octets 20180af1
+v42bis mixed  P1  512 P2 250 always: whole  5811 octets 8c693ed3, pieces  5826 octets 8a881c27
+v42bis mixed  P1  512 P2 250 never : whole  8206 octets 0ef4497c, pieces  8206 octets 0ef4497c
+v42bis mixed  P1 2048 P2   6 auto  : whole  5450 octets 7bd52e7d, pieces  5454 octets b99f9aa5
+v42bis mixed  P1 2048 P2   6 always: whole  6442 octets ccca28e6, pieces  6452 octets 089833b7
+v42bis mixed  P1 2048 P2   6 never : whole  8206 octets 0ef4497c, pieces  8206 octets 0ef4497c
+v42bis mixed  P1 2048 P2 250 auto  : whole  5167 octets c9f65b40, pieces  5177 octets dd012a38
+v42bis mixed  P1 2048 P2 250 always: whole  6147 octets 77268c57, pieces  6162 octets fa2779a6
+v42bis mixed  P1 2048 P2 250 never : whole  8206 octets 0ef4497c, pieces  8206 octets 0ef4497c
+v42bis esc    P1  512 P2   6 auto  : whole 16384 octets 5b03bdc5, pieces 16384 octets 5b03bdc5
+v42bis esc    P1  512 P2   6 always: whole  9218 octets ece4a5cd, pieces  9218 octets ece4a5cd
+v42bis esc    P1  512 P2   6 never : whole 16384 octets 5b03bdc5, pieces 16384 octets 5b03bdc5
+v42bis esc    P1  512 P2 250 auto  : whole 16384 octets 5b03bdc5, pieces 16384 octets 5b03bdc5
+v42bis esc    P1  512 P2 250 always: whole  9218 octets ece4a5cd, pieces  9218 octets ece4a5cd
+v42bis esc    P1  512 P2 250 never : whole 16384 octets 5b03bdc5, pieces 16384 octets 5b03bdc5
+v42bis esc    P1 2048 P2   6 auto  : whole  2929 octets 0b91a391, pieces  2941 octets 0807f127
+v42bis esc    P1 2048 P2   6 always: whole  2613 octets acbf9083, pieces  2625 octets e73c530d
+v42bis esc    P1 2048 P2   6 never : whole 16384 octets 5b03bdc5, pieces 16384 octets 5b03bdc5
+v42bis esc    P1 2048 P2 250 auto  : whole  2834 octets 148ba822, pieces  2823 octets a45bf315
+v42bis esc    P1 2048 P2 250 always: whole  2518 octets 8df41f04, pieces  2507 octets 5010d4cb
+v42bis esc    P1 2048 P2 250 never : whole 16384 octets 5b03bdc5, pieces 16384 octets 5b03bdc5
+v42bis all256 P1  512 P2   6 auto  : whole  8353 octets 9cb0351e, pieces  8353 octets 9cb0351e
+v42bis all256 P1  512 P2   6 always: whole  9218 octets 4560a9cd, pieces  9218 octets 4560a9cd
+v42bis all256 P1  512 P2   6 never : whole  8353 octets 9cb0351e, pieces  8353 octets 9cb0351e
+v42bis all256 P1  512 P2 250 auto  : whole  8353 octets 9cb0351e, pieces  8353 octets 9cb0351e
+v42bis all256 P1  512 P2 250 always: whole  9218 octets 4560a9cd, pieces  9218 octets 4560a9cd
+v42bis all256 P1  512 P2 250 never : whole  8353 octets 9cb0351e, pieces  8353 octets 9cb0351e
+v42bis all256 P1 2048 P2   6 auto  : whole  2616 octets 42eab191, pieces  2628 octets cd842699
+v42bis all256 P1 2048 P2   6 always: whole  2613 octets a86c0383, pieces  2625 octets 6c4ad6a3
+v42bis all256 P1 2048 P2   6 never : whole  8353 octets 9cb0351e, pieces  8353 octets 9cb0351e
+v42bis all256 P1 2048 P2 250 auto  : whole  2521 octets e4d5b222, pieces  2510 octets f2110717
+v42bis all256 P1 2048 P2 250 always: whole  2518 octets 7c43a804, pieces  2507 octets ed9172f1
+v42bis all256 P1 2048 P2 250 never : whole  8353 octets 9cb0351e, pieces  8353 octets 9cb0351e
+v44    lcg    P1  256 P2  32 P3  512 auto  : whole  8294 octets 84789d57, pieces  8294 octets 84789d57
+v44    lcg    P1  256 P2  32 P3  512 always: whole  9264 octets 92e0db0b, pieces  9275 octets 7878f609
+v44    lcg    P1  256 P2  32 P3  512 never : whole  8230 octets 1e30a550, pieces  8230 octets 1e30a550
+v44    lcg    P1 1024 P2 255 P3 3072 auto  : whole  8292 octets 950b97c4, pieces  8292 octets 950b97c4
+v44    lcg    P1 1024 P2 255 P3 3072 always: whole  9205 octets 7f3146a1, pieces  9218 octets 494f6127
+v44    lcg    P1 1024 P2 255 P3 3072 never : whole  8230 octets 1e30a550, pieces  8230 octets 1e30a550
+v44    lcg    P1 2048 P2 255 P3 4096 auto  : whole  8292 octets 950b97c4, pieces  8292 octets 950b97c4
+v44    lcg    P1 2048 P2 255 P3 4096 always: whole  9167 octets 937d5575, pieces  9182 octets b56438a6
+v44    lcg    P1 2048 P2 255 P3 4096 never : whole  8230 octets 1e30a550, pieces  8230 octets 1e30a550
+v44    text   P1  256 P2  32 P3  512 auto  : whole  1191 octets 5970b859, pieces  1199 octets 143db8e1
+v44    text   P1  256 P2  32 P3  512 always: whole  1191 octets 5970b859, pieces  1199 octets 143db8e1
+v44    text   P1  256 P2  32 P3  512 never : whole  8193 octets 7131517a, pieces  8193 octets 7131517a
+v44    text   P1 1024 P2 255 P3 3072 auto  : whole   181 octets 30ab95d8, pieces   231 octets 37fb44f9
+v44    text   P1 1024 P2 255 P3 3072 always: whole   181 octets 30ab95d8, pieces   231 octets 37fb44f9
+v44    text   P1 1024 P2 255 P3 3072 never : whole  8193 octets 7131517a, pieces  8193 octets 7131517a
+v44    text   P1 2048 P2 255 P3 4096 auto  : whole   136 octets 6a8999f5, pieces   179 octets 2e42bdeb
+v44    text   P1 2048 P2 255 P3 4096 always: whole   136 octets 6a8999f5, pieces   179 octets 2e42bdeb
+v44    text   P1 2048 P2 255 P3 4096 never : whole  8193 octets 7131517a, pieces  8193 octets 7131517a
+v44    zeros  P1  256 P2  32 P3  512 auto  : whole   299 octets ce4158d2, pieces   320 octets fdac1db6
+v44    zeros  P1  256 P2  32 P3  512 always: whole   299 octets ce4158d2, pieces   320 octets fdac1db6
+v44    zeros  P1  256 P2  32 P3  512 never : whole  8194 octets 2b6a9d65, pieces  8194 octets 2b6a9d65
+v44    zeros  P1 1024 P2 255 P3 3072 auto  : whole    45 octets add81f50, pieces    68 octets f44ee3c3
+v44    zeros  P1 1024 P2 255 P3 3072 always: whole    45 octets add81f50, pieces    68 octets f44ee3c3
+v44    zeros  P1 1024 P2 255 P3 3072 never : whole  8194 octets 2b6a9d65, pieces  8194 octets 2b6a9d65
+v44    zeros  P1 2048 P2 255 P3 4096 auto  : whole    42 octets e6a3ed62, pieces    59 octets aca1d48d
+v44    zeros  P1 2048 P2 255 P3 4096 always: whole    42 octets e6a3ed62, pieces    59 octets aca1d48d
+v44    zeros  P1 2048 P2 255 P3 4096 never : whole  8194 octets 2b6a9d65, pieces  8194 octets 2b6a9d65
+v44    sym16  P1  256 P2  32 P3  512 auto  : whole  6286 octets 5e152ca1, pieces  6299 octets ec4421d4
+v44    sym16  P1  256 P2  32 P3  512 always: whole  6286 octets 5e152ca1, pieces  6299 octets ec4421d4
+v44    sym16  P1  256 P2  32 P3  512 never : whole  8193 octets 52d1e751, pieces  8193 octets 52d1e751
+v44    sym16  P1 1024 P2 255 P3 3072 auto  : whole  5524 octets b68ff35c, pieces  5543 octets 0bbd76ac
+v44    sym16  P1 1024 P2 255 P3 3072 always: whole  5524 octets b68ff35c, pieces  5543 octets 0bbd76ac
+v44    sym16  P1 1024 P2 255 P3 3072 never : whole  8193 octets 52d1e751, pieces  8193 octets 52d1e751
+v44    sym16  P1 2048 P2 255 P3 4096 auto  : whole  5416 octets c72bdf62, pieces  5432 octets ac093d82
+v44    sym16  P1 2048 P2 255 P3 4096 always: whole  5416 octets c72bdf62, pieces  5432 octets ac093d82
+v44    sym16  P1 2048 P2 255 P3 4096 never : whole  8193 octets 52d1e751, pieces  8193 octets 52d1e751
+v44    mixed  P1  256 P2  32 P3  512 auto  : whole  6735 octets adb256d3, pieces  6733 octets d8a93b17
+v44    mixed  P1  256 P2  32 P3  512 always: whole  5373 octets dc4ecf6b, pieces  5392 octets 5e03f502
+v44    mixed  P1  256 P2  32 P3  512 never : whole  8207 octets aa6c6101, pieces  8207 octets aa6c6101
+v44    mixed  P1 1024 P2 255 P3 3072 auto  : whole  6614 octets b8a16bc8, pieces  6630 octets 316dd482
+v44    mixed  P1 1024 P2 255 P3 3072 always: whole  4843 octets 60d854ea, pieces  4867 octets 9c4c9ff3
+v44    mixed  P1 1024 P2 255 P3 3072 never : whole  8207 octets aa6c6101, pieces  8207 octets aa6c6101
+v44    mixed  P1 2048 P2 255 P3 4096 auto  : whole  6614 octets b8a16bc8, pieces  6630 octets 316dd482
+v44    mixed  P1 2048 P2 255 P3 4096 always: whole  4778 octets c31793f0, pieces  4801 octets 45e670f3
+v44    mixed  P1 2048 P2 255 P3 4096 never : whole  8207 octets aa6c6101, pieces  8207 octets aa6c6101
+v44    esc    P1  256 P2  32 P3  512 auto  : whole 15941 octets 2e424406, pieces 15941 octets 2e424406
+v44    esc    P1  256 P2  32 P3  512 always: whole  9269 octets 6f998a9d, pieces  9282 octets 92428491
+v44    esc    P1  256 P2  32 P3  512 never : whole 16385 octets afcc7b8c, pieces 16385 octets afcc7b8c
+v44    esc    P1 1024 P2 255 P3 3072 auto  : whole   972 octets d81ff4e0, pieces   989 octets 172a7960
+v44    esc    P1 1024 P2 255 P3 3072 always: whole   972 octets d81ff4e0, pieces   989 octets 172a7960
+v44    esc    P1 1024 P2 255 P3 3072 never : whole 16385 octets afcc7b8c, pieces 16385 octets afcc7b8c
+v44    esc    P1 2048 P2 255 P3 4096 auto  : whole   682 octets b8603276, pieces   698 octets b1cefe12
+v44    esc    P1 2048 P2 255 P3 4096 always: whole   682 octets b8603276, pieces   698 octets b1cefe12
+v44    esc    P1 2048 P2 255 P3 4096 never : whole 16385 octets afcc7b8c, pieces 16385 octets afcc7b8c
+v44    all256 P1  256 P2  32 P3  512 auto  : whole  8397 octets d0a9bca0, pieces  8397 octets d0a9bca0
+v44    all256 P1  256 P2  32 P3  512 always: whole  9258 octets 3f1903fb, pieces  9266 octets f8763029
+v44    all256 P1  256 P2  32 P3  512 never : whole  8354 octets 9a3969c5, pieces  8354 octets 9a3969c5
+v44    all256 P1 1024 P2 255 P3 3072 auto  : whole   925 octets f2e11438, pieces   941 octets 889e1ce2
+v44    all256 P1 1024 P2 255 P3 3072 always: whole   925 octets f2e11438, pieces   941 octets 889e1ce2
+v44    all256 P1 1024 P2 255 P3 3072 never : whole  8354 octets 9a3969c5, pieces  8354 octets 9a3969c5
+v44    all256 P1 2048 P2 255 P3 4096 auto  : whole   651 octets b2010465, pieces   666 octets abb01e63
+v44    all256 P1 2048 P2 255 P3 4096 always: whole   651 octets b2010465, pieces   666 octets abb01e63
+v44    all256 P1 2048 P2 255 P3 4096 never : whole  8354 octets 9a3969c5, pieces  8354 octets 9a3969c5
+writer v42bis: 20000 calls, 147508 octets, the same as before
+writer v44: 20000 calls, 82379 octets, the same as before
+test_comp_out: 2354 checks, 0 failures

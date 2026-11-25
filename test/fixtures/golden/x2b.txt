@@ -1,0 +1,168 @@
+recording: 16-bit linear receive, 203120 samples
+answer tone at 5.550 s in the recording; the modem starts 0.200 s before it
+  5.349 s  modem phase V8 (V.34 engine state 0 error 0)
+  5.349 s    V.8 state 0
+  5.349 s    V.42 state -1, retrains 0, p34 state 0
+  5.349 s    modem connected 0 moving 0 retraining 0
+  5.549 s    V.8 state 1
+  7.466 s    V.8 state 2
+  CM heard: call function 6, modes 0x001a (3 octets), pcm 0x01, protocol absent 0x00, access 0x00
+  JM sent : call function 6, modes 0x001a (3 octets), pcm 0x02, protocol absent 0x00, access 0x04
+  8.339 s    V.8 state 3
+  8.414 s  modem phase P2 (V.34 engine state 0 error 0)
+  8.414 s    Phase 2 INFO0 (error 0)
+  8.532 s    Phase 2 WAIT_REV1 (error 0)
+  8.660 s    Phase 2 REPLY1 (error 0)
+  8.695 s    Phase 2 WAIT_REV2 (error 0)
+  8.775 s    Phase 2 PROBE_RX (error 0)
+  9.405 s    Phase 2 WAIT_REV3 (error 0)
+  9.540 s    Phase 2 REPLY3 (error 0)
+  9.579 s    Phase 2 L1 (error 0)
+  9.739 s    Phase 2 L2 (error 0)
+  9.959 s    Phase 2 INFO1D (error 0)
+ 10.148 s    Phase 2 WAIT_INFO1A (error 0)
+ 10.299 s  modem phase P3 (V.34 engine state 0 error 0)
+ 10.299 s    Phase 3/4 state 0 (error 0)
+ 10.415 s    Phase 3/4 state 2 (error 0)
+      p34   0.20 s state  2  line    1799 rms -> after the canceller    1799 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 1, mse -9.5 dB, gain 293, symbols 236, timing 0/0, freq -128976, got_cpt 0, tx signal 0
+      p34   0.40 s state  2  line    2190 rms -> after the canceller    2190 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -48.2 dB, gain 293, symbols 876, timing 0/0, freq 7344, got_cpt 0, tx signal 0
+      p34   0.60 s state  2  line    2194 rms -> after the canceller    2194 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -90.0 dB, gain 293, symbols 1516, timing 0/0, freq 1328, got_cpt 0, tx signal 0
+      p34   0.80 s state  2  line    2196 rms -> after the canceller    2196 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -90.0 dB, gain 293, symbols 2156, timing 0/0, freq -6224, got_cpt 0, tx signal 0
+      p34   1.00 s state  2  line    2199 rms -> after the canceller    2199 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -90.0 dB, gain 293, symbols 2796, timing 0/0, freq 3248, got_cpt 0, tx signal 0
+      p34   1.20 s state  2  line    2194 rms -> after the canceller    2194 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -90.0 dB, gain 293, symbols 3436, timing 0/0, freq -12624, got_cpt 0, tx signal 0
+      p34   1.40 s state  2  line    2197 rms -> after the canceller    2197 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -90.0 dB, gain 293, symbols 4076, timing 0/0, freq 48, got_cpt 0, tx signal 0
+      p34   1.60 s state  2  line    2191 rms -> after the canceller    2191 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -90.0 dB, gain 293, symbols 4716, timing 0/0, freq 2736, got_cpt 0, tx signal 0
+      p34   1.80 s state  2  line    2195 rms -> after the canceller    2195 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -90.0 dB, gain 293, symbols 5356, timing 0/0, freq -18384, got_cpt 0, tx signal 0
+      p34   2.00 s state  2  line    2198 rms -> after the canceller    2198 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -90.0 dB, gain 293, symbols 5996, timing 0/0, freq 4272, got_cpt 0, tx signal 0
+      p34   2.20 s state  2  line    2200 rms -> after the canceller    2200 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -90.0 dB, gain 293, symbols 6636, timing 0/0, freq -6992, got_cpt 0, tx signal 0
+      p34   2.40 s state  2  line    2193 rms -> after the canceller    2193 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -90.0 dB, gain 293, symbols 7276, timing 0/0, freq 1072, got_cpt 0, tx signal 0
+      p34   2.60 s state  2  line    2193 rms -> after the canceller    2193 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -90.0 dB, gain 293, symbols 7916, timing 0/0, freq 176, got_cpt 0, tx signal 0
+      p34   2.80 s state  2  line    2193 rms -> after the canceller    2193 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 2, mse -90.0 dB, gain 293, symbols 8556, timing 0/0, freq -9424, got_cpt 0, tx signal 0
+ 13.109 s    Phase 3/4 state 3 (error 0)
+      Ja: DIL N 197, Lsp 66, Ltp 66, H 10 10 10 10 10 10 10 10, REF 0 0 0 0 0 0 0 0
+          SP101010101101001010110100101011010010110101001011010100101101010010 TP000000001000010000100001000010000100010000100001000010000100001000
+          training Ucodes 116 115 114 113 112 111 0 110 1 109 2 108 3 107 4 106 5 105 6 104 7 103 8 102 9 101 10 100 11 99 12 98 13 97 14 96 15 95 0 94 1 93 2 92 3 91 4 90 5 89 6 88 7 87 8 86 9 85 10 84 11 83 12 82 13 81 14 80 15 79 0 78 1 77 2 76 3 75 4 74 5 73 6 72 7 71 8 70 9 69 10 68 11 67 12 66 13 65 14 64 15 63 0 62 1 61 2 60 3 59 4 58 5 57 6 56 7 55 8 54 9 53 10 52 11 51 12 50 13 49 14 48 15 47 16 46 17 45 18 44 19 43 20 42 21 41 22 40 23 39 24 38 25 37 26 36 27 35 28 34 29 33 30 32 31 47 16 46 17 45 18 44 19 43 20 42 21 41 22 40 23 39 24 38 25 37 26 36 27 35 28 34 29 33 30 32 31
+      p34   3.00 s state  3  line    1396 rms -> after the canceller    1396 rms (0.0 dB), delay 0, mu -1, sres_in_s 0
+          receiver: mode 3, mse -90.0 dB, gain 293, symbols 9196, timing 0/0, freq -12112, got_cpt 0, tx signal 3
+      p34   3.20 s state  3  line     487 rms -> after the canceller     458 rms (-0.5 dB), delay 263, mu 0, sres_in_s 0
+          receiver: mode 3, mse -90.0 dB, gain 293, symbols 9836, timing 0/0, freq -12112, got_cpt 0, tx signal 3
+      p34   3.40 s state  3  line     380 rms -> after the canceller     157 rms (-7.7 dB), delay 263, mu 0, sres_in_s 0
+          receiver: mode 3, mse -90.0 dB, gain 293, symbols 10476, timing 0/0, freq -12112, got_cpt 0, tx signal 3
+      p34   3.60 s state  3  line     417 rms -> after the canceller     160 rms (-8.3 dB), delay 263, mu 3, sres_in_s 0
+          receiver: mode 3, mse -90.0 dB, gain 293, symbols 11116, timing 0/0, freq -12112, got_cpt 0, tx signal 3
+ 14.050 s    Phase 3/4 state 4 (error 0)
+      p34   3.80 s state  4  line     481 rms -> after the canceller     126 rms (-11.7 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 11756, timing 0/0, freq -12112, got_cpt 0, tx signal 4
+      p34   4.00 s state  4  line     408 rms -> after the canceller     115 rms (-11.0 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 12396, timing 0/0, freq -12112, got_cpt 0, tx signal 4
+      p34   4.20 s state  4  line     415 rms -> after the canceller     111 rms (-11.4 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 13036, timing 0/0, freq -12112, got_cpt 0, tx signal 4
+      p34   4.40 s state  4  line     457 rms -> after the canceller     121 rms (-11.5 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 13676, timing 0/0, freq -12112, got_cpt 0, tx signal 4
+      p34   4.60 s state  4  line     416 rms -> after the canceller     114 rms (-11.2 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 14316, timing 0/0, freq -12112, got_cpt 0, tx signal 4
+      p34   4.80 s state  4  line     469 rms -> after the canceller     125 rms (-11.5 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 14956, timing 0/0, freq -12112, got_cpt 0, tx signal 4
+      p34   5.00 s state  4  line     379 rms -> after the canceller     101 rms (-11.5 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 15596, timing 0/0, freq -12112, got_cpt 0, tx signal 4
+      p34   5.20 s state  4  line     461 rms -> after the canceller     125 rms (-11.4 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 16236, timing 0/0, freq -12112, got_cpt 0, tx signal 4
+ 15.624 s    Phase 3/4 state 5 (error 0)
+      p34   5.40 s state  5  line    1569 rms -> after the canceller    1477 rms (-0.5 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -28.4 dB, gain 293, symbols 16876, timing 0/0, freq -12112, got_cpt 0, tx signal 6
+      p34   5.60 s state  5  line    2199 rms -> after the canceller    2193 rms (-0.0 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 17516, timing 0/0, freq -12112, got_cpt 0, tx signal 6
+      p34   5.80 s state  5  line    2197 rms -> after the canceller    2193 rms (-0.0 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 18156, timing 0/0, freq -12112, got_cpt 0, tx signal 6
+      p34   6.00 s state  5  line    2199 rms -> after the canceller    2197 rms (-0.0 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 18796, timing 0/0, freq -12112, got_cpt 0, tx signal 6
+      p34   6.20 s state  5  line    2198 rms -> after the canceller    2198 rms (-0.0 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 19436, timing 0/0, freq -12112, got_cpt 0, tx signal 6
+      p34   6.40 s state  5  line    2195 rms -> after the canceller    2195 rms (0.0 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 20076, timing 0/0, freq -12112, got_cpt 0, tx signal 6
+      p34   6.60 s state  5  line    2191 rms -> after the canceller    2192 rms (0.0 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 20716, timing 0/0, freq -12112, got_cpt 0, tx signal 6
+      p34   6.80 s state  5  line    2194 rms -> after the canceller    2194 rms (-0.0 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -45.2 dB, gain 293, symbols 21356, timing 0/0, freq -12112, got_cpt 0, tx signal 6
+      p34   7.00 s state  5  line    2199 rms -> after the canceller    2197 rms (-0.0 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -90.0 dB, gain 293, symbols 21996, timing 0/0, freq -12112, got_cpt 0, tx signal 6
+      p34   7.20 s state  5  line    2210 rms -> after the canceller    2198 rms (-0.0 dB), delay 263, mu -1, sres_in_s 0
+          receiver: mode 4, mse -22.4 dB, gain 293, symbols 22636, timing 0/0, freq -12112, got_cpt 0, tx signal 6
+ 17.555 s    Phase 3/4 state 6 (error 0)
+      p34   7.40 s state  6  line    2162 rms -> after the canceller    2164 rms (0.0 dB), delay 263, mu -1, sres_in_s 1
+          receiver: mode 2, mse -34.2 dB, gain 293, symbols 23276, timing 0/0, freq -13776, got_cpt 0, tx signal 7
+      p34   7.60 s state  6  line    2204 rms -> after the canceller    2199 rms (-0.0 dB), delay 263, mu -1, sres_in_s 1
+          receiver: mode 2, mse -39.1 dB, gain 293, symbols 23916, timing 0/0, freq 7344, got_cpt 0, tx signal 7
+      p34   7.80 s state  6  line    2206 rms -> after the canceller    2200 rms (-0.0 dB), delay 263, mu -1, sres_in_s 1
+          receiver: mode 2, mse -39.7 dB, gain 293, symbols 24556, timing 0/0, freq -16080, got_cpt 0, tx signal 7
+ 18.122 s    Phase 3/4 state 7 (error 0)
+      CPt: is_cp 0 drn 16 silence 0 Sr 1 ack 0 alaw 0 rates 0x07ff ld 3 rms_ratio 8190 a1 64 a2 0 b1 0 b2 0 idx 0 1 2 3 4 5 codec_differs 1; upstream SNR 38.6 dB
+          constellation 0: 9 points: 30 51 62 69 75 80 83 86 89
+          codec constellation 0: 30 51 62 69 75 80 83 86 89
+          constellation 1: 9 points: 30 51 62 69 75 80 83 86 89
+          codec constellation 1: 30 51 62 69 75 80 83 86 89
+          constellation 2: 9 points: 30 51 62 69 75 80 83 86 89
+          codec constellation 2: 30 51 62 69 75 80 83 86 89
+          constellation 3: 9 points: 30 51 62 69 75 80 83 86 89
+          codec constellation 3: 30 51 62 69 75 80 83 86 89
+          constellation 4: 9 points: 30 51 62 69 75 80 83 86 89
+          codec constellation 4: 30 51 62 69 75 80 83 86 89
+          constellation 5: 9 points: 30 51 62 69 75 80 83 86 89
+          codec constellation 5: 30 51 62 69 75 80 83 86 89
+      p34   8.00 s state  7  line    2205 rms -> after the canceller    2199 rms (-0.0 dB), delay 263, mu -1, sres_in_s 1
+          receiver: mode 2, mse -38.2 dB, gain 293, symbols 25196, timing 0/0, freq -52304, got_cpt 1, tx signal 13
+      p34   8.20 s state  7  line    2206 rms -> after the canceller    2198 rms (-0.0 dB), delay 263, mu -1, sres_in_s 1
+          receiver: mode 2, mse -19.5 dB, gain 293, symbols 25836, timing 0/0, freq -13520, got_cpt 1, tx signal 13
+      p34   8.40 s state  7  line    2198 rms -> after the canceller    2203 rms (0.0 dB), delay 263, mu -1, sres_in_s 1
+          receiver: mode 2, mse -17.8 dB, gain 293, symbols 26476, timing 0/0, freq -360656, got_cpt 1, tx signal 13
+      p34   8.60 s state  7  line    2202 rms -> after the canceller    2214 rms (0.0 dB), delay 263, mu -1, sres_in_s 1
+          receiver: mode 2, mse -18.0 dB, gain 293, symbols 27116, timing 0/0, freq -93904, got_cpt 1, tx signal 13
+ 19.025 s    Phase 3/4 state 8 (error 0)
+      p34   8.80 s state  8  line    1899 rms -> after the canceller    1909 rms (0.0 dB), delay 263, mu -1, sres_in_s 1
+          receiver: mode 2, mse -1.3 dB, gain 293, symbols 27756, timing 0/0, freq -470608, got_cpt 1, tx signal 14
+ 19.185 s  modem phase RETRAIN (V.34 engine state 0 error 0)
+ 19.185 s    V.42 state -1, retrains 1, p34 state 16
+ 19.185 s    modem connected 0 moving 0 retraining 1
+ 19.255 s  modem phase P2 (V.34 engine state 0 error 0)
+ 19.255 s    Phase 2 WAIT_REV1 (error 0)
+ 19.392 s    Phase 2 REPLY1 (error 0)
+ 19.427 s    Phase 2 WAIT_REV2 (error 0)
+ 19.507 s    Phase 2 PROBE_RX (error 0)
+ 20.137 s    Phase 2 WAIT_REV3 (error 0)
+ 20.272 s    Phase 2 REPLY3 (error 0)
+ 20.311 s    Phase 2 L1 (error 0)
+ 20.471 s    Phase 2 L2 (error 0)
+ 20.691 s    Phase 2 INFO1D (error 0)
+ 20.880 s    Phase 2 WAIT_INFO1A (error 0)
+ 21.031 s  modem phase V34 (V.34 engine state 1 error 0)
+ 21.031 s    V.34 state 1 (error 0), rates tx 0 rx 0
+ 21.146 s    V.34 state 4 (error 0), rates tx 0 rx 0
+ 21.983 s    V.34 state 2 (error 0), rates tx 0 rx 0
+ 23.560 s    V.34 state 3 (error 0), rates tx 0 rx 0
+ 23.678 s    V.34 state 5 (error 0), rates tx 0 rx 0
+ 24.083 s    V.34 state 6 (error 0), rates tx 0 rx 0
+ 25.236 s    caller's MP: type 1, max ca 12 ac 12, aux 0, trellis 2, nonlinear 1, shaping 1, rates 0ffe, asym 1, h (0,0) (0,0) (0,0)
+              our cfg: symbol rate 3200, tx carrier 4/7, rx carrier 3/5, tx pre-emphasis 0
+ 25.245 s    V.34 state 7 (error 0), rates tx 28800 rx 28800
+          V.34 B1 good: 0 errors in 1152 bits, mse 0
+ 25.379 s    V.42 state 0, retrains 1, p34 state 16
+ 25.379 s    modem connected 1 moving 1 retraining 0
+ 25.379 s    V.34 state 8 (error 0), rates tx 28800 rx 28800
+modulation 5, 28800 bit/s down, 28800 up, SNR 48.1 dB, round trip 284, echo delay -1, 1 retrains, 0 renegotiations; 288 bits received
+  second 18: 4368 samples differ
+  second 19: 1405 samples differ
+203120 samples; after the answer our transmit differs from the recording in 5773 (first at 18.425 s)

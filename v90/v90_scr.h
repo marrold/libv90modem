@@ -24,4 +24,11 @@ int v90_descramble_gpc(v90_scr_t *s, int bit);   /* returns the data bit */
 int v90_scramble_gpa(v90_scr_t *s, int bit);
 int v90_descramble_gpa(v90_scr_t *s, int bit);
 
+/* n bits in place, one a byte (0/1; bit 0 of each is taken), element 0
+ * first: the same as n calls of the forms above */
+void v90_scramble_gpc_bits(v90_scr_t *s, uint8_t *bits, int n);
+void v90_descramble_gpc_bits(v90_scr_t *s, uint8_t *bits, int n);
+void v90_scramble_gpa_bits(v90_scr_t *s, uint8_t *bits, int n);
+void v90_descramble_gpa_bits(v90_scr_t *s, uint8_t *bits, int n);
+
 #endif

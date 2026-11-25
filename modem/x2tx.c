@@ -8,6 +8,7 @@
  * Facts only; no code of either. */
 #include <string.h>
 #include "x2tx.h"
+#include "clock.h"
 #include "x2rec.h"
 
 #define POS   0x80              /* bit 7 of a mu-law octet: positive */
@@ -78,7 +79,8 @@ int x2tx_rate(const x2tx_t *t)
 int x2tx_data_next(const x2tx_t *t)
 {
     if (t->seg == X2TX_DATA) return !t->go;
-    return t->seg == X2TX_START && t->n > (int32_t)(X2TX_START_FRAMES + t->again - 1) * X2MAP_N;
+    /* (a rate change pending: its marker follows this start, not data) */
+    return !t->go && t->seg == X2TX_START && t->n > (int32_t)(X2TX_START_FRAMES + t->again - 1) * X2MAP_N;
 }
 
 /* the next frame of the mapped segments; returns 1, or 0 when the segment
@@ -179,7 +181,7 @@ static int next_frame(x2tx_t *t)
         for (k = 0; k < nb; k++) bits[k] = t->getbit ? (uint8_t)(t->getbit(t->user) & 1) : 1;
         break;
     }
-    for (k = 0; k < nb; k++) bits[k] = (uint8_t)v90_scramble_gpc(&t->scr, bits[k]);
+    v90_scramble_gpc_bits(&t->scr, bits, nb);
     x2map_frame(&t->map, bits, t->frame);
     t->fpos = 0;
     return 1;
@@ -225,7 +227,7 @@ uint8_t x2tx_tick(x2tx_t *t)
         return o;
     default:
         if (t->fpos == X2MAP_N) (void)next_frame(t);
-        t->n++;
+        t->n = clk_sat_inc(t->n);          /* (not read in data) */
         return t->frame[t->fpos++];
     }
 }

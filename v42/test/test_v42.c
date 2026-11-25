@@ -3,6 +3,7 @@
  * with optional delay, random bit errors, error bursts and line cut; plus
  * single-endpoint runs against scripted start-stop peers for the detection
  * phase fallbacks. Every transfer is checked octet for octet. */
+#include <limits.h>
 #include <string.h>
 #include "test.h"
 #include "v42.h"
@@ -955,6 +956,119 @@ static void test_detection_off(void)
     CHECK_EQ_I(s.reason, V42EC_R_NO_SABME);
 }
 
+/* the originator detects, the answerer does not (7.2.1 allows it when the
+ * peer is known to do LAPM): the answerer's flags end the originator's
+ * detection phase, as the originator's end the answerer's */
+static void test_detection_mirror(void)
+{
+    v42ec_status_t s;
+    int t;
+    setup(); cb.detect = 0; start();
+    t = run_until_both(V42EC_CONNECTED, 3000);
+    CHECK(t >= 0 && t < 750);                           /* before T400 */
+    CHECK_EQ_I(v42ec_state(&A), V42EC_CONNECTED);
+    CHECK_EQ_I(ba.ngot, 0);                             /* no flag debris read as characters */
+    v42ec_get_status(&A, &s);
+    CHECK_EQ_I(s.comp_tx, 1); CHECK_EQ_I(s.comp_rx, 1);    /* XID went through */
+    flow_fill(&ab, 3000, F_TEXT); flow_fill(&ba, 3000, F_TEXT);
+    CHECK(run_until_done(5000) >= 0);
+    check_flow(&ab); check_flow(&ba);
+}
+
+/* v42ec_abort: in every state the endpoint stops at once and says nothing */
+static void test_abort_states(void)
+{
+    static v42ec_t E;
+    v42ec_cfg_t c; v42ec_status_t s;
+    uint8_t buf[8];
+    int i, ones;
+
+    /* detection phase: no start-stop mode when T400 runs out */
+    v42ec_cfg_default(&c, 0);
+    v42ec_init(&E, &c);
+    v42ec_abort(&E);
+    CHECK_EQ_I(v42ec_state(&E), V42EC_DISCONNECTED);
+    for (i = 0; i < 1000; i++) v42ec_tick(&E, 1);
+    CHECK_EQ_I(v42ec_state(&E), V42EC_DISCONNECTED);
+    v42ec_get_status(&E, &s);
+    CHECK_EQ_I(s.reason, V42LAPM_R_LOCAL);
+
+    /* the originator's ODP stops too */
+    v42ec_cfg_default(&c, 1);
+    v42ec_init(&E, &c);
+    for (i = 0; i < 50; i++) v42ec_tx_bit(&E);
+    v42ec_abort(&E);
+    CHECK_EQ_I(v42ec_state(&E), V42EC_DISCONNECTED);
+    for (ones = 0, i = 0; i < 200; i++) ones += v42ec_tx_bit(&E);
+    CHECK_EQ_I(ones, 200);
+
+    /* start-stop mode: no more data either way */
+    v42ec_cfg_default(&c, 0);
+    v42ec_init(&E, &c);
+    v42ec_tick(&E, 1000);
+    CHECK_EQ_I(v42ec_state(&E), V42EC_ASYNC);
+    CHECK_EQ_I(v42ec_write(&E, (const uint8_t *)"abc", 3), 3);
+    v42ec_abort(&E);
+    CHECK_EQ_I(v42ec_state(&E), V42EC_DISCONNECTED);
+    CHECK_EQ_I(v42ec_write(&E, (const uint8_t *)"x", 1), 0);
+    for (ones = 0, i = 0; i < 100; i++) ones += v42ec_tx_bit(&E);
+    CHECK_EQ_I(ones, 100);                              /* "abc" is not sent */
+    v42ec_get_status(&E, &s);
+    CHECK_EQ_I(s.reason, V42LAPM_R_LOCAL);
+
+    /* protocol establishment: the XID is never sent */
+    setup(); ca.detect = cb.detect = 0; start();
+    CHECK_EQ_I(v42ec_state(&A), V42EC_ESTABLISH);
+    v42ec_abort(&A);
+    CHECK_EQ_I(v42ec_state(&A), V42EC_DISCONNECTED);
+    run(500);
+    CHECK_EQ_I(v42ec_state(&A), V42EC_DISCONNECTED);
+    CHECK_EQ_I(ta.n, 0);
+
+    /* connected: visible at once, no DISC */
+    setup(); connect_pair();
+    v42ec_abort(&A);
+    CHECK_EQ_I(v42ec_state(&A), V42EC_DISCONNECTED);
+    v42ec_get_status(&A, &s);
+    CHECK_EQ_I(s.reason, V42LAPM_R_LOCAL);
+    CHECK_EQ_I(v42ec_write(&A, buf, 1), 0);
+    run(1000);
+    CHECK_EQ_I(v42ec_state(&A), V42EC_DISCONNECTED);
+    CHECK_EQ_I(tap_count(&ta, 0x03, 0x53), 0);
+    CHECK_EQ_I(v42ec_state(&B), V42EC_CONNECTED);       /* the far end was told nothing */
+
+    /* releasing: the DISC is not repeated */
+    setup(); connect_pair();
+    pab.cut = pba.cut = 1;
+    v42ec_release(&A);
+    CHECK_EQ_I(v42ec_state(&A), V42EC_RELEASING);
+    run(100);
+    i = tap_count(&ta, 0x03, 0x53);
+    CHECK_EQ_I(i, 1);
+    v42ec_abort(&A);
+    CHECK_EQ_I(v42ec_state(&A), V42EC_DISCONNECTED);
+    run(3000);
+    CHECK_EQ_I(tap_count(&ta, 0x03, 0x53), i);
+    v42ec_get_status(&A, &s);
+    CHECK_EQ_I(s.reason, V42LAPM_R_LOCAL);
+
+    /* a UA already owed still goes: the far end's DISC was answered */
+    setup(); connect_pair();
+    v42ec_release(&B);
+    while (v42ec_state(&A) == V42EC_CONNECTED && now_ms < 5000) {
+        int a = v42ec_tx_bit(&A), b = v42ec_tx_bit(&B);
+        tap_bit(&ta, a); tap_bit(&tb, b);
+        v42ec_rx_bit(&B, a); v42ec_rx_bit(&A, b);
+    }
+    CHECK_EQ_I(v42ec_state(&A), V42EC_DISCONNECTED);    /* DISC taken: UA owed */
+    v42ec_abort(&A);
+    v42ec_get_status(&A, &s);
+    CHECK_EQ_I(s.reason, V42LAPM_R_PEER_DISC);          /* over already: abort changes nothing */
+    run(200);
+    CHECK_EQ_I(tap_count(&ta, 0x01, 0x73), 1);
+    CHECK_EQ_I(v42ec_state(&B), V42EC_DISCONNECTED);
+}
+
 /* compression asked by one side only, or in one direction only */
 static void test_comp_negotiation(void)
 {
@@ -982,6 +1096,48 @@ static void test_comp_negotiation(void)
     CHECK(run_until_done(20000) >= 0);
     check_flow(&ab); check_flow(&ba);
     CHECK(A.enc.bis.d.recovered > 100);
+}
+
+/* V.42 bis P1 above what this build holds: proposed at the ceiling, and
+ * the encoder and decoder run (they were agreed and then left off) */
+static void test_p1_ceiling(void)
+{
+    v42ec_status_t sa, sb;
+    setup();
+    ca.lapm.comp_p1 = cb.lapm.comp_p1 = 4096; ca.comp_policy = V42COMP_ALWAYS;
+    connect_pair();
+    v42ec_get_status(&A, &sa); v42ec_get_status(&B, &sb);
+    CHECK_EQ_I(sa.comp_alg, V42EC_COMP_V42BIS);
+    CHECK_EQ_I(sa.comp_n2, V42COMP_MAX_CODEWORDS); CHECK_EQ_I(sb.comp_n2, V42COMP_MAX_CODEWORDS);
+    CHECK_EQ_I(A.comp_tx, 1); CHECK_EQ_I(A.comp_rx, 1);
+    CHECK_EQ_I(B.comp_tx, 1); CHECK_EQ_I(B.comp_rx, 1);
+    flow_fill(&ab, 20000, F_TEXT); flow_fill(&ba, 5000, F_TEXT);
+    CHECK(run_until_done(10000) >= 0);
+    check_flow(&ab); check_flow(&ba);
+    CHECK_EQ_I(A.enc.bis.in_chars, 20000);
+    CHECK(A.enc.bis.out_octets < 10000);
+}
+
+/* a C-INIT that fails (values LAPM should never have agreed) releases the
+ * link instead of running uncompressed while the far end compresses */
+static void test_cinit_fail(void)
+{
+    v42ec_status_t s;
+    int i;
+    setup(); start();
+    for (i = 0; i < 3000 && A.lapm.state != V42LAPM_ESTABLISHING; i++) step_ms();
+    CHECK_EQ_I(A.lapm.state, V42LAPM_ESTABLISHING);
+    CHECK_EQ_I(A.lapm.comp_tx, 1);
+    A.lapm.comp_n2 = 4096;                              /* past V42COMP_MAX_CODEWORDS */
+    for (i = 0; i < 3000 && v42ec_state(&A) != V42EC_DISCONNECTED; i++) step_ms();
+    CHECK_EQ_I(v42ec_state(&A), V42EC_DISCONNECTED);
+    v42ec_get_status(&A, &s);
+    CHECK_EQ_I(s.reason, V42EC_R_COMPRESSION);
+    CHECK_EQ_I(tap_count(&ta, 0x03, 0x53), 1);          /* DISC */
+    run(200);
+    v42ec_get_status(&B, &s);
+    CHECK_EQ_I(s.state, V42EC_DISCONNECTED);
+    CHECK_EQ_I(s.reason, V42LAPM_R_PEER_DISC);
 }
 
 /* a corrupt compressed stream (cannot happen over LAPM unless one end is
@@ -1263,6 +1419,22 @@ static void test_coarse_timing(void)
     check_flow(&ab); check_flow(&ba);
 }
 
+/* v42ec_tick with any ms: past INT_MAX it expires the timers, not
+ * extends them */
+static void test_tick_huge(void)
+{
+    static v42ec_t E;
+    v42ec_cfg_t c;
+    v42ec_cfg_default(&c, 0);
+    v42ec_init(&E, &c);
+    CHECK_EQ_I(v42ec_state(&E), V42EC_DETECT);
+    v42ec_tick(&E, UINT_MAX);
+    CHECK_EQ_I(E.t400, -1);                             /* T400 expired: no V.42 peer */
+    CHECK_EQ_I(v42ec_state(&E), V42EC_ASYNC);
+    v42ec_tick(&E, 0x80000000u);
+    CHECK_EQ_I(v42ec_state(&E), V42EC_ASYNC);
+}
+
 int main(void)
 {
     test_handshake();
@@ -1286,11 +1458,16 @@ int main(void)
     test_release(0);
     test_release_unanswered();
     test_detection_off();
+    test_detection_mirror();
+    test_abort_states();
     test_comp_negotiation();
     test_comp_error();
+    test_p1_ceiling();
+    test_cinit_fail();
     test_break();
     test_octet_pump();
     test_coarse_timing();
+    test_tick_huge();
 
     /* V.44: its own cases, then the data tests above once more with V.44
      * doing the compression */

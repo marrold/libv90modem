@@ -1,0 +1,16 @@
+  answer: V.8 + V.22bis connected at 4.30 s
+  answer: V.8 + V.21 connected at 2.75 s
+  answer: legacy V.22bis connected at 6.93 s
+  not connected: answer phase 3 (v8 state 4 result 1, v22 state 6) peer phase 3
+  answer: Bell 103 connected at 5.58 s, "caller says hello, 0123456789" / "answerer replies: ~{}[] OK"
+  answer: Bell 103 without V.22 connected at 5.44 s
+  answer: Bell 212A connected at 10.96 s, "caller says hello, 0123456789" / "answerer replies: ~{}[] OK"
+  answer: V.21 caller (mark during ANSam) connected at 5.63 s, 0.35 s after its mark in the V.22 wait, "caller says hello, 0123456789" / "answerer replies: ~{}[] OK"
+  answer: V.21 caller (mark after the tone, -18 dBm0) connected at 6.56 s, 0.36 s after its mark
+  answer: legacy V.22bis at -18 dBm0 connected at 6.93 s
+  answer: legacy V.22 at -18 dBm0 connected at 7.29 s
+  answer: noise at -30 dBm0: gave up after 35.3 s, V.21 tried 0
+  answer: silent line with echo: gave up after 33.3 s
+  answer: V.22bis retrain by the caller: seen 1, completed 1, call dropped 0, text "before the retrainand after it"
+  answer: our retrain never answered: call given up 13.0 s after it was asked for
+answer: 105 checks, 0 failures

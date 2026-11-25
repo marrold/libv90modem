@@ -19,7 +19,10 @@ Characters of 1 start bit, 8 data bits LSB first and 1 stop bit, mark when
 idle. Pass `v90m_async_getbit` and `v90m_async_putbit` as the modem's
 `getbit` / `putbit`, with the object as `user` (or call them from your own
 callbacks, as `examples/call_loop.c` does). The queues are fixed at 512
-octets each way.
+octets each way, and all 512 hold an octet (up to 0.5.0 they held 511). A
+character received while the receive queue is full is dropped and not
+counted: read often enough, or use the V.42 endpoint, whose start-stop
+mode counts its overruns (`async_overruns`).
 
 | | |
 |---|---|
@@ -51,8 +54,10 @@ octets     v90m_ec_write / v90m_ec_read
 (`v42/v42.c`): detection on, start-stop fallback on, `t400_ms` 750,
 `establish_ms` 30000, `V90M_COMP_AUTO`, V.42bis and V.44 wanted both ways
 (V.42bis 2048 codewords, strings of 32; V.44 2048 codewords, strings of
-255, history 4096). `v90m_ec_create` / `v90m_ec_init` do not check the
-configuration's values; `v90m_ec_reset` restarts the endpoint with one.
+255, history 4096). `v90m_ec_create`, `v90m_ec_init` and `v90m_ec_reset`
+check every value against its range ([api.md](api.md), `v90m_ec_cfg`) and
+give `V90M_EINVAL` outside it; `v90m_ec_reset` restarts the endpoint with
+a new configuration.
 
 **When to start it.** At connection (`V90M_EV_CONNECTED`, or
 `v90m_state.connected` turning 1), with `v90m_ec_reset`. Until then
@@ -62,7 +67,8 @@ modems that both named LAPM in V.8, V.92 9.3.1), set `detect = 0`: the
 caller skips the detection phase.
 
 **The detection phase** (V.42 7.2.1). The originator sends the ODP until
-two ADPs are seen or T400 passes; the answerer sends mark until the ODP,
+two ADPs are seen, or the answerer's flags (an answerer without the
+detection phase), or T400 passes; the answerer sends mark until the ODP,
 then the ADP. If T400 passes without an error-correcting peer, the
 endpoint goes to `V90M_EC_ASYNC` (start-stop, no correction) with
 `fallback` 1, or disconnects (`V90M_EC_R_NO_EC`) with `fallback` 0
@@ -80,7 +86,39 @@ V.44 is preferred where both ends have both. `comp_policy`
 error releases the connection (`V90M_EC_R_COMPRESSION`).
 `v90m_ec_get_status` reports what was agreed (`comp_alg`, `comp_tx`,
 `comp_rx`, the parameters per direction) and what is in use now (`enc_on`,
-`dec_on`, `alg_on`).
+`dec_on`, `alg_on`). V.42bis's P1 (`v42bis_p1`) has a ceiling of
+`V42COMP_MAX_CODEWORDS` (2048 in this build: the size of the dictionary
+arrays); the endpoint never proposes more. Should a direction be agreed
+that the encoder or decoder cannot run (only a bug could do it), the
+connection is released with `V90M_EC_R_COMPRESSION` rather than run
+uncompressed while the far end compresses.
+
+**The XID exchange.** Our XID command gives the HDLC optional functions in
+three octets (bit 16 set, bit 17 for the 32-bit FCS), the form real modems
+send: some take nothing after a mask of another length, our compression
+offer included. An answer has the form of the command it answers, three
+octets or four. The V.44 parameters go last, in the user data subfield,
+which has no group length (V.42 12.2.1.3). A responder that answers a
+smaller window `k` or a shorter `N401` than we proposed for our sending
+direction is taken at its word.
+
+**Bounded waits** (a ruling that departs from V.42). V.42, like HDLC,
+starts the retransmission count again at each timer recovery (8.4.8): a
+peer that answers every poll (RR with F=1) but never acknowledges an I
+frame keeps the link up for ever with nothing moving, and so does one that
+answers every I frame with a REJ that acknowledges nothing. Here every
+wait is bounded: after `n400` recoveries (timer recoveries, and go-backs
+on a REJ that acknowledges nothing) with I frames unacknowledged and V(A)
+not moving, the next one releases the link with `V90M_EC_R_N400` (about
+(`n400` + 1) x `t401_ms`: 11 s with the defaults). With `n400` 1 one
+recovery is still made. Acknowledged data starts the count again; a
+destructive break, which resets the data path but moves no data, does
+not. A peer that says it is busy (RNR) is not counted: V.42 8.4.7 lets
+that last, and the program, which stops being able to write, decides.
+T403 is off by default (`t403_ms` 0): with nothing unacknowledged a peer
+that has gone silently is not noticed by V.42 itself; the modem's loss of
+carrier (`V90M_EV_ENDED`) is what tells. Set `t403_ms` to have an idle
+link polled.
 
 **Flow control.** `v90m_ec_write` takes what fits (`v90m_ec_write_space`
 says how much); `v90m_ec_read` gives what has arrived
@@ -115,7 +153,9 @@ Robotics x2 client resumes after its rate change. v90d also holds V.42's
 timers while the data are stopped (`DESIGN.md`, 4.2).
 
 **The end.** `v90m_ec_release` is orderly (DISC, then wait for UA);
-`v90m_ec_abort` stops without a word when the line is gone. After
+`v90m_ec_abort` stops without a word when the line is gone, in every
+state (detection and start-stop mode included), and the state is
+`V90M_EC_DISCONNECTED` (`V90M_EC_R_LOCAL`) on return. After
 `V90M_EC_DISCONNECTED`, if the line is still up, keep the bits moving for a
 few dozen more so that a final UA or DM gets out; data already received
 stays readable (`v42/v42.h`). Then the modem's cleardown, where there is

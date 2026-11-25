@@ -2,6 +2,7 @@
 #include <string.h>
 #include "anstone.h"
 #include "sintab.h"
+#include "fixmath.h"
 
 #define FS 8000
 /* a block whose 2100 Hz amplitude fell below this share of the block before
@@ -20,17 +21,6 @@
 static uint32_t f2inc(int hz) { return (uint32_t)(((uint64_t)hz << 32) / FS); }
 static int32_t  q15cos(uint32_t ph) { return sintab[((ph + 0x40000000u) >> 22) & SIN_MASK]; }
 static int32_t  q15sin(uint32_t ph) { return sintab[(ph >> 22) & SIN_MASK]; }
-
-static uint32_t isqrt64(uint64_t v)
-{
-    uint64_t r = 0, bit = (uint64_t)1 << 62;
-    while (bit > v) bit >>= 2;
-    while (bit) {
-        if (v >= r + bit) { v -= r + bit; r = (r >> 1) + bit; } else r >>= 1;
-        bit >>= 2;
-    }
-    return (uint32_t)r;
-}
 
 static void window_reset(anst_t *d) { d->wsum = d->wc = d->ws = 0; d->wn = 0; d->amph = 0; }
 
@@ -61,7 +51,7 @@ static int verdict(const anst_t *d)
 static void block(anst_t *d)
 {
     int64_t a2 = (int64_t)d->bi * d->bi + (int64_t)d->bq * d->bq;
-    int32_t amp = (int32_t)isqrt64((uint64_t)a2), env;
+    int32_t amp = (int32_t)isqrt_u64((uint64_t)a2), env;
     /* the 2100 Hz component holds at least half of the block's power: for a
      * pure tone 2 amp^2 = N * power */
     int tone = amp >= d->min_amp && 4 * a2 >= (int64_t)ANST_BLOCK * d->bpow;

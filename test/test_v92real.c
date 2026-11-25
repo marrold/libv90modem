@@ -1,8 +1,8 @@
 /* What a real V.92 modem sent (Conexant CX93001), against the data mode
  * decoder: test/data/cx93001_b1u.txt holds the decoder's input from the first
  * symbol after E2u, at start-up and after a rate renegotiation of one
- * recorded call (see ../v92/README.md, readings 57 and 59). Skips when the
- * file is not there. */
+ * recorded call (see ../v92/README.md, readings 57 and 59). A missing file
+ * is a failure (TEST_DATA_DIR, test.h). */
 #include <stdio.h>
 #include <string.h>
 #include "test.h"
@@ -24,10 +24,11 @@ int main(void)
     static int v[1024], D[1024];
     static v92_map_t map;
     static v92_dec_t dec;
-    FILE *f = fopen("test/data/cx93001_b1u.txt", "r");
+    static const char path[] = TEST_DATA_DIR "/cx93001_b1u.txt";
+    FILE *f = fopen(path, "r");
     int starts = 0, n = 0, i, k;
 
-    if (!f) { printf("v92real: test/data/cx93001_b1u.txt not found, skipped\n"); return 0; }
+    if (!f) { printf("v92real: %s not found\n", path); CHECK(f != NULL); T_REPORT("v92real"); }
     while (fgets(line, sizeof line, f)) {
         if (!strncmp(line, "start ", 6)) {
             memset(&map, 0, sizeof map);

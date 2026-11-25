@@ -1,0 +1,6 @@
+335 streams (D = 6..72, CPd of 2 to 1170 words), 15 with a whole frame of fill after the CRC
+a bit wrong in the first of two CPd: 1 taken, 1 bad
+ones, zeros, random: events 0x0
+full CPd then moduli only: 2 taken; has 1 1 1
+next Phase 4, moduli only: complete 0
+v92aseq: 3346 checks, 0 failures

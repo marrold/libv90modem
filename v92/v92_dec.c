@@ -324,3 +324,63 @@ void v92_dec_flush(v92_dec_t *d)
     d->nsteps = 0;
     d->head = 0;
 }
+
+void v92_dec_flush_before(v92_dec_t *d, unsigned n, const int32_t *y)
+{
+    unsigned held, part, c, k, q, slot, st, s, bs = 0, kE, slotE;
+    uint8_t path[V92_VIT_DEPTH];
+    uint64_t best = UINT64_MAX;
+
+    if (d->hard) return;
+    held = d->nsteps < V92_VIT_DEPTH ? (unsigned)d->nsteps : V92_VIT_DEPTH - 1;
+    part = (unsigned)d->i_in % V92_TFRAME;     /* inputs of the trellis frame under way */
+    if (held * V92_TFRAME + part <= n) return;
+    c = (held * V92_TFRAME + part - n) / V92_TFRAME;   /* trellis frames wholly before them */
+    if (c == 0) return;
+    if (c > held) c = held;
+    /* the newest of them, k back from the newest held (0) */
+    kE = held - c;
+    slotE = (d->head + 2u * V92_VIT_DEPTH - 1u - kE) % V92_VIT_DEPTH;
+    if (y) {
+        /* The best state now is the best through what came after them: the
+         * path through them is the survivor, of the states at the newest
+         * of them, that costs least over them, from the inputs given */
+        for (s = 0; s < d->nstates; s++) {
+            uint64_t cost = 0;
+            st = s; slot = slotE;
+            for (k = kE; k < held; k++) {
+                const v92_vstep_t *h = &d->hist[slot];
+                unsigned res = h->res[st];
+                for (q = 0; q < V92_TFRAME; q++) {
+                    unsigned j = part + V92_TFRAME * k + (V92_TFRAME - 1 - q);      /* inputs back */
+                    int i = ((int)d->i_in - 1 - (int)j) % V92_DFRAME;
+                    if (i < 0) i += V92_DFRAME;
+                    cost += dist2(y[j] - v92_point(d->map, i, h->idx[q][(res >> (2 * q)) & 3]));
+                }
+                st = h->prev[st];
+                slot = slot ? slot - 1 : V92_VIT_DEPTH - 1;
+            }
+            if (cost < best) { best = cost; bs = s; }
+        }
+        st = bs;
+    } else {
+        st = best_state(d);
+        slot = d->head;
+        for (k = 0; k < kE; k++) {
+            slot = slot ? slot - 1 : V92_VIT_DEPTH - 1;
+            st = d->hist[slot].prev[st];
+        }
+    }
+    /* states along that path, from the newest of them back */
+    slot = slotE;
+    for (k = 0; k < c; k++) {
+        path[k] = (uint8_t)st;
+        st = d->hist[slot].prev[st];
+        slot = slot ? slot - 1 : V92_VIT_DEPTH - 1;
+    }
+    /* oldest first; a data frame they leave partial stays in ki[] */
+    for (k = c; k-- > 0; )
+        emit_step(d, (slotE + V92_VIT_DEPTH - k) % V92_VIT_DEPTH, path[k]);
+    d->nsteps = 0;
+    d->head = 0;
+}

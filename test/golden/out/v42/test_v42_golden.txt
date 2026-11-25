@@ -1,0 +1,35 @@
+v42bis lcg   P1  512 P2   6:  8229 octets, hash 9c508707
+v42bis lcg   P1  512 P2  32:  8229 octets, hash 9c508707
+v42bis lcg   P1  512 P2 250:  8229 octets, hash 9c508707
+v42bis lcg   P1 2048 P2   6:  8229 octets, hash 9c508707
+v42bis lcg   P1 2048 P2  32:  8229 octets, hash 9c508707
+v42bis lcg   P1 2048 P2 250:  8229 octets, hash 9c508707
+v42bis text  P1  512 P2   6:  1663 octets, hash 9b62f729
+v42bis text  P1  512 P2  32:  1411 octets, hash b0690167
+v42bis text  P1  512 P2 250:  1407 octets, hash 461d98c7
+v42bis text  P1 2048 P2   6:  1663 octets, hash 9b62f729
+v42bis text  P1 2048 P2  32:  1020 octets, hash ea0fc00b
+v42bis text  P1 2048 P2 250:  1020 octets, hash ea0fc00b
+v42bis zeros P1  512 P2   6:  1593 octets, hash 57e3b595
+v42bis zeros P1  512 P2  32:   373 octets, hash 927b4f01
+v42bis zeros P1  512 P2 250:   255 octets, hash 40c4634f
+v42bis zeros P1 2048 P2   6:  1593 octets, hash 57e3b595
+v42bis zeros P1 2048 P2  32:   373 octets, hash 927b4f01
+v42bis zeros P1 2048 P2 250:   255 octets, hash 40c4634f
+v42bis sym16 P1  512 P2   6:  5807 octets, hash 2b520133
+v42bis sym16 P1  512 P2  32:  5807 octets, hash 2b520133
+v42bis sym16 P1  512 P2 250:  5807 octets, hash 2b520133
+v42bis sym16 P1 2048 P2   6:  5108 octets, hash 5a77938b
+v42bis sym16 P1 2048 P2  32:  5108 octets, hash 5a77938b
+v42bis sym16 P1 2048 P2 250:  5108 octets, hash 5a77938b
+v44    lcg   P1 1024 P2 255 P3 3072:  8292 octets, hash 950b97c4
+v44    lcg   P1 2048 P2 255 P3 4096:  8292 octets, hash 950b97c4
+v44    text  P1 1024 P2 255 P3 3072:   181 octets, hash 30ab95d8
+v44    text  P1 2048 P2 255 P3 4096:   136 octets, hash 6a8999f5
+v44    zeros P1 1024 P2 255 P3 3072:    45 octets, hash add81f50
+v44    zeros P1 2048 P2 255 P3 4096:    42 octets, hash e6a3ed62
+v44    sym16 P1 1024 P2 255 P3 3072:  5524 octets, hash b68ff35c
+v44    sym16 P1 2048 P2 255 P3 4096:  5416 octets, hash c72bdf62
+v42ec  A to B: 282560 octets written, 278464 read, line hash 92ea3b64
+v42ec  B to A: 282560 octets written, 278464 read, line hash 95c9f1c0
+test_v42_golden: 232 checks, 0 failures

@@ -113,4 +113,10 @@ typedef struct {
  * all, LZ2 = 0 (no output at all) or gain4 = 0 (Table 30: 4 * G > 0). */
 int v92_filt_check(const v92_filt_t *f);
 
+/* *dst = *src without the zero coefficients at the end of each section
+ * (z2(0) kept): the same precoder and prefilter, fewer taps to sum when a
+ * server pads its sections. src must pass v92_filt_check(); dst may not be
+ * src. */
+void v92_filt_trim(v92_filt_t *dst, const v92_filt_t *src);
+
 #endif

@@ -1,8 +1,9 @@
 /* The answering modem (modem/answer) with a V.34 caller: V.8 selects V.34
  * when it is offered, the call reaches data mode and carries data both
  * ways, the rate ceilings hold, our cleardown ends it; and a caller that
- * only has V.34 is turned away when V.34 is not offered. The caller is
- * sim/v34peer over test/line34.h (mu-law codec at our side). */
+ * only has V.34 is turned away when V.34 is not offered; after a click on
+ * the line in data mode (Task 20) the upstream is clean from 10 s on. The
+ * caller is sim/v34peer over test/line34.h (mu-law codec at our side). */
 #include <stdio.h>
 #include <string.h>
 #include "test.h"
@@ -89,7 +90,22 @@ int main(void)
     /* our cleardown */
     CHECK_EQ_I(answer_cleardown(&A), 0);
     for (t = 0; t < 2000 && A.phase != ANS_FAILED; t += 10) run(80);
-    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(A.cleared, 2); CHECK_EQ_I(A.connected, 0);
+    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(answer_end(&A), ANS_END_CLEARDOWN_OURS); CHECK_EQ_I(A.connected, 0);
+
+    /* a click in data mode (Task 20): 0.75 ms of full scale on the line
+     * to us, 1 s into data mode. From 10 s after it the upstream is clean,
+     * or the call has ended */
+    start(ANS_MODE_V90 | V8_MOD_V34 | V8_MOD_V22 | V8_MOD_V21, 0, 0);
+    CHECK_EQ_I(to_data(25000), 1);
+    L.c.click_at = L.n + 8000;
+    run(8000L * 11);
+    {
+        long bad10 = UA.bad, n10 = UA.n;
+        run(8000L * 4);
+        printf("  V.34 caller, a click 1 s into data mode: %ld bits %ld bad from it, %ld bits %ld bad from 10 s after the click;"
+               " %d retrains; end %d\n", UA.n, UA.bad, UA.n - n10, UA.bad - bad10, A.retrains, answer_end(&A));
+        CHECK((UA.bad == bad10 && UA.n - n10 >= 3L * A.rx_bitrate) || answer_end(&A) != ANS_END_NONE);
+    }
 
     /* ceilings: max_down is what we send, max_up what we take */
     start(ANS_MODE_V90 | V8_MOD_V34 | V8_MOD_V22 | V8_MOD_V21, 14400, 9600);

@@ -330,8 +330,9 @@ static void build_frame(v90tx_t *t, v90tx_frame_t *q)
             case V90TX_DATA:                  bit = t->getbit(t->getbit_ctx) & 1; break;
             default:                          bit = seq_bit(t, f->fr * D + i); break;
             }
-            bits[i] = (uint8_t)v90_scramble_gpc(&f->scr, bit);
+            bits[i] = (uint8_t)bit;
         }
+        v90_scramble_gpc_bits(&f->scr, bits, D);
         v90_frame_encode(m, &f->diff, bits, q->u, q->t);
         if (m->Sr > 0) flags |= FL_SHAPED;
         if (dm) flags |= FL_DMAP;

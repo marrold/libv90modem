@@ -1,0 +1,5 @@
+  v22tx mode 0: other-channel leakage -58.8 dB
+  v22tx mode 1: other-channel leakage -59.2 dB
+  v22tx guard tone 1800 Hz: found at 1800.0 Hz, 6.03 dB below the data signal; data 0.95 dB below a modem without it; total 3007 RMS
+  v22tx guard tone 550 Hz: found at 550.0 Hz, 2.98 dB below the data signal; data 1.79 dB below a modem without it; total 2994 RMS
+v22tx: 34 checks, 0 failures

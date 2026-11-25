@@ -21,7 +21,7 @@
  * and INFO0a, not those it would get without x2.
  * After the marker there is no way back to V.34: an x2 start-up that does
  * not reach data mode, or a client's rate change that does not get back to
- * it, ends the call with x2_failed.
+ * it, ends the call with ANS_END_X2_FAILED.
  * K56flex (ANS_MODE_K56, with V8_MOD_V34, on a mu-law line): V.8bis comes
  * first (ANS_V8BIS: modem/v8bis), then V.8 as above whatever came of it. A
  * client whose MS carries the K56flex block is agreed (k56_agreed): x2 is
@@ -29,13 +29,14 @@
  * flags our INFO1a when the client's INFO1c takes K56flex up and the symbol
  * rate is 3200 (modem/p2ans): the point of no return, ANS_K56: modem/k56d
  * (PCM downstream, V.34 upstream) to data mode. A K56flex start-up that
- * does not reach data mode ends the call with k56_failed; in data mode the
- * upstream's loss ends it with k56_lost, our cleardown with cleared = 2.
+ * does not reach data mode ends the call with ANS_END_K56_FAILED; in data
+ * mode the upstream's loss ends it with ANS_END_LOST, our cleardown with
+ * ANS_END_CLEARDOWN_OURS.
  * The client's retrain (its tone B in data mode) is ANS_K56RT: Phase 2 of
  * a retrain with INFO1a flagged again, then ANS_K56 from the start
  * (retraining until data mode); anything but our flagged INFO1a, or a
  * third retrain in a row (none forgotten until data mode holds 2 s), ends
- * the call with k56_failed. We never retrain K56flex.
+ * the call with ANS_END_K56_FAILED. We never retrain K56flex.
  * One sample in, one sample out. The data interface is a bit pump: getbit is
  * called for every transmitted line bit, putbit for every received one, once
  * the connection is up. Characters travel start-stop framed in that bit stream
@@ -75,8 +76,9 @@ typedef enum {
     ANS_K56RT,           /* K56flex: the client's retrain (its tone B in data mode): 70 ms of
                             silence, then V.34's Phase 2 of a retrain (v34.p2, INFO1a flagged
                             again), then ANS_K56 from the start */
-    ANS_V23              /* V.23: 1200 bit/s forward channel (1300/2100 Hz) transmit,
+    ANS_V23,             /* V.23: 1200 bit/s forward channel (1300/2100 Hz) transmit,
                             75 bit/s backward channel (390/450 Hz) receive */
+    ANS_NPHASES          /* the number of phases (not a phase): a new one goes above */
 } ans_phase;
 
 /* in answer_cfg.modes, next to the V8_MOD_ bits (which fit 16 bits): offer
@@ -113,6 +115,21 @@ typedef enum {
 #define ANS_MOD_K56    11    /* K56flex: PCM downstream, V.34 upstream */
 #define ANS_MOD_V23    12    /* V.23: 1200 bit/s forward (tx), 75 bit/s backward (rx) */
 
+/* why a call ended (answer_t.end, answer_end): set where it fails */
+enum {
+    ANS_END_NONE,
+    ANS_END_FAILED,         /* no connection was made (start-up failed) */
+    ANS_END_LOST,           /* the connection was lost */
+    ANS_END_CLEARDOWN_FAR,  /* the caller cleared down */
+    ANS_END_CLEARDOWN_OURS, /* we cleared down (answer_cleardown) */
+    ANS_END_NO_COMMON,      /* V.8: nothing in common with the caller */
+    ANS_END_RETRAIN_FAILED, /* V.90, V.92, V.34: a retrain due past the limit in a row;
+                               x2: the client asked for a retrain (its Tone A) */
+    ANS_END_X2_FAILED,      /* the x2 start-up, or a rate change of the client's, did not complete */
+    ANS_END_K56_FAILED      /* past the point of no return, the K56flex start-up, a rate change
+                               or retrain did not complete, or the third retrain in a row */
+};
+
 typedef struct {
     int           level;     /* transmit RMS, 16-bit sample units */
     unsigned      modes;     /* V8_MOD_V22 | V8_MOD_V21 ... what we offer */
@@ -130,10 +147,15 @@ typedef struct {
 
 #define ANS_MAX_TX_CODE 23
 
+struct ans_scheme;            /* modem/ans_scheme.h */
+
 typedef struct {
     answer_cfg cfg;
     ans_phase  phase;
-    int32_t    t;            /* samples in this phase */
+    const struct ans_scheme *s;  /* the scheme of the phase: set with it */
+    int32_t    t;            /* samples in this phase (saturates) */
+    int32_t    t_phase;      /* the backstop's clock (saturating): samples in this phase, or
+                                in V.34's Phase 2 within ANS_V34 since it began */
     int        used_v8;      /* the caller spoke V.8 */
     v8ans_t    v8;
     v22bis_t   v22;
@@ -159,11 +181,13 @@ typedef struct {
     int16_t    bpf[128]; int bpos;   /* V.21 / Bell 103 receive band-pass history */
     const int16_t *bpf_taps;         /* v21_bpf or bell103_bpf */
     tonedet_t  bell;                 /* the Bell 103 caller's mark while we wait in ANS_V22 */
+    tonedet_t  v21mark;              /* the V.21 caller's mark (980 Hz) while we wait in ANS_V22 */
     int        connected, modulation, bitrate;
     int        rx_bitrate;   /* receive direction, where it differs (V.90 upstream) */
-    int        cleared;      /* the call ended by a V.90 cleardown: 1 the caller's, 2 ours */
+    int        end;          /* ANS_END_*: why the call ended (ANS_FAILED) */
     int        retrains;     /* V.90 retrains begun */
-    int        retraining;   /* from there until data mode is back: connected stays 1, no data moves */
+    int        retraining;   /* from there until data mode is back: connected stays 1, no data
+                                moves (a rate renegotiation is not a retrain: 0) */
     int        rt_recent;    /* retrains lately: one is forgotten per minute of data mode */
     int32_t    rt_clock;
     /* V.92 */
@@ -175,18 +199,10 @@ typedef struct {
     int        v92_data;     /* this V.92 engine has reached data mode */
     /* x2 */
     int        x2_offered;   /* ANS_MODE_X2 with V.34, on a mu-law line */
-    int        x2_failed;    /* the client sent the x2 marker and the x2 start-up did not
-                                reach data mode, or a rate change of its own did not get
-                                back to it: there is no way back to V.34, the call ended;
-                                2: in data mode the client asked for a retrain (its Tone
-                                A), which x2 cannot serve */
     /* K56flex */
     int        k56_offered;  /* ANS_MODE_K56 with V.34, on a mu-law line: ANS_V8BIS first */
     int        k56_agreed;   /* the client's MS carried the K56flex block (we sent ACK(1));
                                 x2 is then not offered in this call */
-    int        k56_failed;   /* past the point of no return, the K56flex start-up or a rate
-                                change did not complete: the call ended */
-    int        k56_lost;     /* K56flex data mode ended by the upstream's loss */
 } answer_t;
 
 void    answer_init(answer_t *a, const answer_cfg *cfg);
@@ -205,7 +221,8 @@ uint8_t answer_tick_pcm(answer_t *a, uint8_t rx);
  * quantiser. Set cfg.rx_linear with it. */
 uint8_t answer_tick_lin(answer_t *a, int16_t rx);
 /* optional, between answer_init and the first tick: Phase 2 parameters other
- * than the defaults (-12 dBm0, mu-law, no I/O delay, 3200 and 3000 symbols/s) */
+ * than the defaults (-12 dBm0, mu-law, no I/O delay, 3200 and 3000 symbols/s);
+ * after the first tick it changes nothing */
 void    answer_v90_cfg(answer_t *a, const p2d_cfg *cfg);
 /* optional, likewise (V.92, V.90 and V.34; for V.34 max_down is the ceiling of
  * what we send, max_up of what we receive): echo_delay = samples from handing a codeword to the
@@ -216,8 +233,11 @@ void    answer_v90_cfg(answer_t *a, const p2d_cfg *cfg);
 void    answer_v90_line(answer_t *a, int echo_delay, int max_down, int max_up);
 int16_t answer_tick(answer_t *a, int16_t rx);
 /* Tell the calling modem that we are hanging up, where the modulation has a
- * way to say so (V.90 9.7, V.92 9.11). Returns 0 when that has begun: the phase goes to
- * ANS_FAILED by itself within a fraction of a second, with cleared = 2.
+ * way to say so (V.90 9.7, V.92 9.11). Returns 0 when that has begun: the
+ * phase goes to ANS_FAILED by itself within a fraction of a second, ending
+ * ANS_END_CLEARDOWN_OURS. V.92: the cleardown is a rate sequence (CPd) with
+ * data rate 0 (drn = 0); a caller that does not acknowledge it, or does not
+ * answer the renegotiation at all, is given up to 3.5 s.
  * Returns -1 when there is nothing to send: just stop. */
 int     answer_cleardown(answer_t *a);
 /* What the receiver makes of the caller's signal in data mode: signal to
@@ -238,5 +258,11 @@ int     answer_moving(const answer_t *a);
 /* 1 when both modems indicated V.92 in Phase 2 (V.92 9.3) and LAPM in V.8:
  * the caller then skips the ODP / ADP exchange of V.42 (9.3.1/V.92). */
 int     answer_odp_bypass(const answer_t *a);
+/* Why the call ended: ANS_END_*, ANS_END_NONE until the phase is ANS_FAILED. */
+int     answer_end(const answer_t *a);
+/* The echo delay in samples the running engine measured or was given (V.90,
+ * V.92, x2, K56flex): the engine of the phase; between engines (a retrain,
+ * the end) the modulation's. -1 where there is none. */
+int     answer_echo_delay(const answer_t *a);
 
 #endif

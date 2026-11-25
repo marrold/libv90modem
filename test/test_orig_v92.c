@@ -17,6 +17,12 @@
 #include <inttypes.h>
 #include "test.h"
 #include "v90link.h"
+/* the old cleared flag, from the end reason: 1 the caller's cleardown, 2 ours */
+static int cleared_of(const answer_t *a)
+{
+    int e = answer_end(a);
+    return e == ANS_END_CLEARDOWN_FAR ? 1 : e == ANS_END_CLEARDOWN_OURS ? 2 : 0;
+}
 
 #define MS(x) ((int64_t)(x) * 8)
 
@@ -68,7 +74,9 @@ static void print(const char *name, const res_t *o)
            o->snr / 10, o->snr % 10, o->rtd, o->bd, o->fd, o->bu, o->fu);
 }
 
-int main(void)
+/* the cases (test/test.h, t_case_arg): 1 .. NR each line, then the two V.90
+ * fallbacks, the line reported only, and the two cleardowns */
+int main(int argc, char **argv)
 {
     static const row_t R[] = {
         { "2 km,    0 ppm, -75 dBm0",            2,    0, -75, 0, 0, 0, 49333 },
@@ -83,15 +91,20 @@ int main(void)
         { "2 km,  -50 ppm, A-law",               2,  -50, -75, 0, 0, 1, 44000 },
     };
     enum { NR = sizeof R / sizeof R[0] };
+    enum { NCASES = NR + 5 };
     static res_t O[NR];
     res_t o;
     int i;
+    const int only = t_case_arg(argc, argv, NCASES);
 
-    printf("the library's caller (V.8, V.92 analogue) against the library's answerer, 10 s of data per line\n");
-    printf("  %-38s %4s %7s %6s %6s %6s %5s  %9s %5s  %9s %5s\n", "line", "mod", "data ms", "down", "up", "SNR dB", "rtd",
-           "bits down", "fail", "bits up", "fail");
     for (i = 0; i < NR; i++) {
         res_t *p = &O[i];
+        if (!T_CASE(only, i + 1)) continue;
+        if (i == 0) {
+            printf("the library's caller (V.8, V.92 analogue) against the library's answerer, 10 s of data per line\n");
+            printf("  %-38s %4s %7s %6s %6s %6s %5s  %9s %5s  %9s %5s\n", "line", "mod", "data ms", "down", "up", "SNR dB", "rtd",
+                   "bits down", "fail", "bits up", "fail");
+        }
         run(&R[i], (uint32_t)(20 + i), 1, 1, 1, p);
         print(R[i].name, p);
         CHECK(p->ok);
@@ -106,27 +119,32 @@ int main(void)
         CHECK(p->rtd > 0);
     }
 
-    printf("V.90 when V.92 is not on both sides\n");
-    run(&R[0], 40, 0, 1, 1, &o);
-    print("the answerer without V.92", &o);
-    CHECK(o.ok);
-    CHECK_EQ_I(o.mod, ORIG_MOD_V90);
-    CHECK(o.up <= 33600);
-    CHECK_EQ_I(o.fd, 0);
-    CHECK_EQ_I(o.fu, 0);
-    run(&R[0], 41, 1, 0, 1, &o);
-    print("ours with V.92 off", &o);
-    CHECK(o.ok);
-    CHECK_EQ_I(o.mod, ORIG_MOD_V90);
-    CHECK_EQ_I(o.fd, 0);
-    CHECK_EQ_I(o.fu, 0);
+    if (T_CASE(only, NR + 1)) {
+        printf("V.90 when V.92 is not on both sides\n");
+        run(&R[0], 40, 0, 1, 1, &o);
+        print("the answerer without V.92", &o);
+        CHECK(o.ok);
+        CHECK_EQ_I(o.mod, ORIG_MOD_V90);
+        CHECK(o.up <= 33600);
+        CHECK_EQ_I(o.fd, 0);
+        CHECK_EQ_I(o.fu, 0);
+    }
+    if (T_CASE(only, NR + 2)) {
+        run(&R[0], 41, 1, 0, 1, &o);
+        print("ours with V.92 off", &o);
+        CHECK(o.ok);
+        CHECK_EQ_I(o.mod, ORIG_MOD_V90);
+        CHECK_EQ_I(o.fd, 0);
+        CHECK_EQ_I(o.fu, 0);
+    }
 
-    printf("reported only: the upstream through the downstream's loop and codec response\n");
-    run(&R[0], 42, 1, 1, 2, &o);
-    print("2 km,    0 ppm, dschan's response up", &o);
+    if (T_CASE(only, NR + 3)) {
+        printf("reported only: the upstream through the downstream's loop and codec response\n");
+        run(&R[0], 42, 1, 1, 2, &o);
+        print("2 km,    0 ppm, dschan's response up", &o);
+    }
 
-    printf("ending a call\n");
-    {
+    if (T_CASE(only, NR + 4) || T_CASE(only, NR + 5)) {
         vl_cfg c;
         vl_t *l = &L;
         int64_t t0;
@@ -134,30 +152,35 @@ int main(void)
         c.loop_km = 2; c.noise_dbm0 = -75; c.ppm = 20; c.phase = 0.4; c.echo_db = -16;
         c.up_loss_db = 6; c.up_noise_dbm0 = -70; c.up_line = 1; c.full = 1; c.caller_orig = 1; c.seed = 7;
         c.v92 = 1; c.caller_v92 = 1;
-        vl_init(l, &c);
-        while (l->k < MS(30000) && !(orig_moving(&l->org) && answer_moving(&l->ans))) vl_tick(l);
-        CHECK_EQ_I(l->org.modulation, ORIG_MOD_V92);
-        CHECK_EQ_I(l->ans.modulation, ANS_MOD_V92);
-        CHECK_EQ_I(orig_retrains(&l->org), 0);      /* (retrains: test_orig_retrain) */
-        CHECK(orig_snr_db10(&l->org) > 400);
-        t0 = l->k;
-        CHECK_EQ_I(orig_cleardown(&l->org), 0);
-        while (l->k < t0 + MS(4000) && l->org.phase != ORIG_FAILED) vl_tick(l);
-        { int64_t e = l->k + MS(500); while (l->k < e) vl_tick(l); }
-        printf("  ours: caller ended %d after %d ms (end %d), answerer phase %d, cleared %d\n", l->org.phase,
-               (int)((l->k - t0) / 8), l->org.end, l->ans.phase, l->ans.cleared);
-        CHECK_EQ_I(l->org.end, ORIG_END_HANGUP);
-        CHECK_EQ_I(l->ans.cleared, 1);
+        if (T_CASE(only, NR + 4)) {
+            printf("ending a call\n");
+            vl_init(l, &c);
+            while (l->k < MS(30000) && !(orig_moving(&l->org) && answer_moving(&l->ans))) vl_tick(l);
+            CHECK_EQ_I(l->org.modulation, ORIG_MOD_V92);
+            CHECK_EQ_I(l->ans.modulation, ANS_MOD_V92);
+            CHECK_EQ_I(orig_retrains(&l->org), 0);      /* (retrains: test_orig_retrain) */
+            CHECK(orig_snr_db10(&l->org) > 400);
+            t0 = l->k;
+            CHECK_EQ_I(orig_cleardown(&l->org), 0);
+            while (l->k < t0 + MS(4000) && l->org.phase != ORIG_FAILED) vl_tick(l);
+            { int64_t e = l->k + MS(500); while (l->k < e) vl_tick(l); }
+            printf("  ours: caller ended %d after %d ms (end %d), answerer phase %d, cleared %d\n", l->org.phase,
+                   (int)((l->k - t0) / 8), l->org.end, l->ans.phase, cleared_of(&l->ans));
+            CHECK_EQ_I(l->org.end, ORIG_END_HANGUP);
+            CHECK_EQ_I(answer_end(&l->ans), ANS_END_CLEARDOWN_FAR);
+        }
 
-        c.seed = 8;
-        vl_init(l, &c);
-        while (l->k < MS(30000) && !(orig_moving(&l->org) && answer_moving(&l->ans))) vl_tick(l);
-        t0 = l->k;
-        CHECK_EQ_I(answer_cleardown(&l->ans), 0);
-        while (l->k < t0 + MS(12000) && l->org.phase != ORIG_FAILED) vl_tick(l);
-        printf("  the answerer's: caller ended after %d ms, end %d\n", (int)((l->k - t0) / 8), l->org.end);
-        CHECK_EQ_I(l->org.phase, ORIG_FAILED);
-        CHECK_EQ_I(l->org.end, ORIG_END_CLEARDOWN);
+        if (T_CASE(only, NR + 5)) {
+            c.seed = 8;
+            vl_init(l, &c);
+            while (l->k < MS(30000) && !(orig_moving(&l->org) && answer_moving(&l->ans))) vl_tick(l);
+            t0 = l->k;
+            CHECK_EQ_I(answer_cleardown(&l->ans), 0);
+            while (l->k < t0 + MS(12000) && l->org.phase != ORIG_FAILED) vl_tick(l);
+            printf("  the answerer's: caller ended after %d ms, end %d\n", (int)((l->k - t0) / 8), l->org.end);
+            CHECK_EQ_I(l->org.phase, ORIG_FAILED);
+            CHECK_EQ_I(l->org.end, ORIG_END_CLEARDOWN);
+        }
     }
     T_REPORT("orig_v92");
 }

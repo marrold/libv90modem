@@ -1,7 +1,9 @@
 /* The calling modem in V.90 (modem/orig with modem/v90a) on the target:
  * replays what tools/rec_v90c recorded and prints a hash of everything it
  * sent (integer only, so it must equal the host's), when it reached data
- * mode, its rates, and the bits it received. A recording of a V.92 call
+ * mode, its rates, and the bits it received; then "tx hash" (the same
+ * hash) and "rx hash" (the data bits received, FNV-1a over one bit at a
+ * time) for tools/bench-hashes.sh. A recording of a V.92 call
  * ("V92C0001") is replayed with V.92 on as well (PCM upstream).
  *
  *   bench_v90c RECORDING [-w N] [-t] [-n N]
@@ -31,7 +33,7 @@ static double now(void)
 }
 
 /* the recorder's upstream data: 2^23 - 1 (test/v90link.h, bert_get, seed 5) */
-typedef struct { uint32_t gen; int64_t got; } src_t;
+typedef struct { uint32_t gen; int64_t got; uint32_t h; } src_t;
 static int get(void *u)
 {
     src_t *s = (src_t *)u;
@@ -39,7 +41,7 @@ static int get(void *u)
     s->gen = ((s->gen << 1) | (uint32_t)bit) & 0x7fffff;
     return bit;
 }
-static void put(void *u, int bit) { (void)bit; ((src_t *)u)->got++; }
+static void put(void *u, int bit) { src_t *s = (src_t *)u; s->got++; s->h = (s->h ^ (uint32_t)(bit & 1)) * 16777619u; }
 
 static orig_t o;
 /* not inlined (called through a volatile pointer): its address marks the trace */
@@ -82,7 +84,7 @@ int main(int argc, char **argv)
     }
     if (nw > NW) nw = NW;
     for (i = 0; i < NW; i++) { wt[i] = 0; wk[i] = -1; }
-    memset(&s, 0, sizeof s); s.gen = (0x4321u + 5u) | 1u;
+    memset(&s, 0, sizeof s); s.gen = (0x4321u + 5u) | 1u; s.h = 2166136261u;
     memset(&c, 0, sizeof c);
     c.level = 3000; c.modes = V8_MOD_V34 | V8_MOD_V22 | V8_MOD_V21 | ORIG_MODE_V90;
     if (memcmp(hdr, "V92C", 4) == 0) c.modes |= ORIG_MODE_V92;
@@ -114,6 +116,7 @@ int main(int argc, char **argv)
     printf("bench_v90c: %" PRId64 " samples (%.2f s of line), %sdata mode at sample %" PRId64 " (recorded %" PRIu32 "), "
            "%d / %d bit/s, %" PRId64 " bits received, hash %08" PRIx32 "\n",
            k, (double)k / 8000.0, o.modulation == ORIG_MOD_V92 ? "V.92, " : "", t_data, t_rec, o.rx_bitrate, o.bitrate, s.got, hash);
+    printf("tx hash %08" PRIx32 "\nrx hash %08" PRIx32 "\n", hash, s.h);
     if (!nw) fprintf(stderr, "bench_v90c: %.3f s of CPU here (%.1f %% of real time)\n", t, 100.0 * t / ((double)k / 8000.0 + 1e-9));
     for (i = 0; i < nw; i++) if (wk[i] >= 0) printf("slow tick %" PRId64 " (%.3f s): %.1f us here\n", wk[i], (double)wk[i] / 8000.0, wt[i] * 1e6);
     return 0;

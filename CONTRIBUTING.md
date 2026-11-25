@@ -21,7 +21,10 @@ Nothing outside `include/v90modem.h` is part of the API.
 
 **Checks.** A change is ready when `make check` passes, and `make check-arm`
 for anything in the signal path. A change that should not alter what the
-modem sends shows it: the same transmit hash from `make bench-v90`.
+modem sends shows it: the same transmit hash from `make bench-v90`, and
+`make golden` with no golden file changed. A golden file is re-recorded
+only when the change explains it, and the commit says which and why
+(`docs/testing.md`; `make verify` runs all of this at once).
 
 By contributing you agree that your contribution is licensed under
 GPL-2.0-only, like the rest of the library.

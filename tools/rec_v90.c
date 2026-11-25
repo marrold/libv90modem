@@ -63,7 +63,7 @@ int main(int argc, char **argv)
         } else ctx = p34a_tick(&p34, atx);
         if (a.phase == ANS_FAILED) { printf("FAILED at %.2f err %d\n", n / 8000.0, a.p34.error); break; }
         if (n % (2 * FS) == 2 * FS - 1 && a.connected) {
-            { int k; double te = 0; qamrx_t *r = &a.p34.rx; for (k = 0; k < QRX_NTAP; k++) te += (double)r->cr[k] * r->cr[k] + (double)r->ci[k] * r->ci[k];
+            { int k; double te = 0; qamrx_t *r = &a.p34.up.rx; for (k = 0; k < QRX_NTAP; k++) te += (double)r->cr[k] * r->cr[k] + (double)r->ci[k] * r->ci[k];
             printf("t=%2d s: up %ld bits, %ld bad (snr %d) mse %.1f dB cent %d freq %d tinteg %d gain %d tapE %.3g\n", (n + 1) / FS, dsink.n - lastn, dsink.bad - lastbad, (int)a.p34.snr_db10,
                    10 * log10((r->mse + 1e-9) / 65536.0), qamrx_centroid(r), (int)r->freq, (int)r->t_integ, (int)r->gain, te); }
             lastn = dsink.n; lastbad = dsink.bad;

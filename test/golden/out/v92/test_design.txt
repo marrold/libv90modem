@@ -1,0 +1,20 @@
+  C1 mu-law amp 4000 noise 4 echo 0: 41333 bit/s, M 43 of 44, 4G 69, delay 116, power 0.18 (limit 1), ISI -53.9 dB, rho 1.16, x rms max 4160, peak 2.38, 0 cuts, 6856 steps, 183954 bits, 0 errors
+  C1 mu-law amp 4000 noise 40 echo 0: 37333 bit/s, M 30 of 31, 4G 69, delay 116, power 0.73 (limit 1), ISI -79.5 dB, rho 1.19, x rms max 4162, peak 2.38, 0 cuts, 6856 steps, 166152 bits, 0 errors
+  C1 mu-law amp 4000 noise 4 echo 600: 38666 bit/s, M 34 of 35, 4G 69, delay 114, power 0.49 (limit 1), ISI -53.9 dB, rho 1.05, x rms max 4160, peak 2.25, 0 cuts, 6856 steps, 172086 bits, 0 errors
+  C1 A-law amp -4000 noise 4 echo 300: 41333 bit/s, M 43 of 43, 4G 69, delay 116, power 0.27 (limit 1), ISI -73.1 dB, rho 1.03, x rms max 4161, peak 2.31, 0 cuts, 6856 steps, 183954 bits, 0 errors
+  C2 mu-law amp 5000 noise 4 echo 300: 40000 bit/s, M 38 of 40, 4G 58, delay 117, power 0.19 (limit 1), ISI -120.0 dB, rho 1.07, x rms max 4879, peak 2.38, 0 cuts, 3987 steps, 178020 bits, 0 errors
+  C2 A-law amp 2000 noise 20 echo 300: 36000 bit/s, M 27 of 37, 4G 144, delay 117, power 0.75 (limit 1), ISI -120.0 dB, rho 1.05, x rms max 1951, peak 2.12, 1 cuts, 8493 steps, 160218 bits, 0 errors
+  C3 mu-law amp 4000 noise 4 echo 300: 40000 bit/s, M 38 of 40, 4G 70, delay 114, power 0.29 (limit 1), ISI -73.9 dB, rho 1.09, x rms max 4102, peak 2.62, 0 cuts, 6856 steps, 178020 bits, 0 errors
+  C3 A-law amp 4000 noise 4 echo 300: 40000 bit/s, M 38 of 42, 4G 70, delay 114, power 0.22 (limit 1), ISI -73.9 dB, rho 1.04, x rms max 4102, peak 2.62, 0 cuts, 6856 steps, 178020 bits, 0 errors
+  line 0 mu-law amp 4000 noise 3 echo 400: 40000 bit/s, M 38 of 39, 4G 79, delay 115, power 0.48 (limit 1), ISI -66.5 dB, rho 1.04, x rms max 3613, peak 2.56, 0 cuts, 6856 steps, 178020 bits, 0 errors
+  line 0 A-law amp 4000 noise 40 echo 400: 36000 bit/s, M 27 of 31, 4G 79, delay 115, power 0.74 (limit 1), ISI -60.3 dB, rho 1.04, x rms max 3632, peak 2.25, 1 cuts, 9857 steps, 160218 bits, 0 errors
+  line 1 A-law amp 4000 noise 3 echo 400: 36000 bit/s, M 27 of 39, 4G 94, delay 115, power 0.31 (limit 1), ISI -54.0 dB, rho 1.07, x rms max 2948, peak 3.50, 3 cuts, 20667 steps, 160218 bits, 0 errors
+  line 1 mu-law amp 1500 noise 20 echo 400: 29333 bit/s, M 15 of 35, 4G 243, delay 115, power 0.78 (limit 1), ISI -47.3 dB, rho 1.07, x rms max 1128, peak 2.62, 0 cuts, 8361 steps, 130548 bits, 0 errors
+  C1 masked mu-law amp 4000 noise 4 echo 0: 34666 bit/s, M 29 of 46, 4G 69, delay 116, power 0.02 (limit 1), ISI -53.9 dB, rho 1.16, x rms max 4160, peak 2.38, 0 cuts, 6856 steps, 154284 bits, 0 errors
+  line 0, echo as loud mu-law amp 1400 noise 3 echo 1400: 26666 bit/s, M 12 of 28, 4G 225, delay 115, power 1.00 (limit 1), ISI -57.0 dB, rho 1.04, x rms max 1274, peak 2.19, 0 cuts, 8060 steps, 118680 bits, 0 errors
+  the same, linear A/D mu-law amp 1400 noise 3 echo 1400: 41333 bit/s, M 43 of 128, 4G 226, delay 115, power 0.95 (limit 1), ISI -65.8 dB, rho 1.00, x rms max 1266, peak 1.75, 0 cuts, 8963 steps, 183954 bits, 0 errors
+  the same, A-law tables A-law amp 1400 noise 3 echo 1400: 41333 bit/s, M 43 of 128, 4G 226, delay 115, power 0.97 (limit 1), ISI -65.8 dB, rho 1.00, x rms max 1266, peak 1.75, 0 cuts, 8963 steps, 183954 bits, 0 errors
+  ramp from tap 30, 40 taps: end -1 after 17 steps
+  ramp from tap 40, 56 taps: end -1 after 15 steps
+  peak in the last tap: end -2 after 5829 steps
+design: 203 checks, 0 failures

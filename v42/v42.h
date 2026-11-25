@@ -28,7 +28,8 @@
  *     with neither, the endpoint goes to V42EC_ASYNC (or disconnects with
  *     V42EC_R_NO_EC when cfg.fallback is 0). Characters that arrived during
  *     the detection phase are then delivered to v42ec_read().
- *   - Originator: ODP until two ADPs are seen or T400 passes; after "EC" it
+ *   - Originator: ODP until two ADPs or the answerer's flags (an answerer
+ *     without the detection phase) are seen, or T400 passes; after "EC" it
  *     sends flags until the answerer's flags arrive (at most 600 line bits)
  *     and then XID (if cfg.lapm.use_xid) and SABME.
  *   - Flow control: v42ec_write() takes nothing once the transmit buffer is
@@ -212,6 +213,11 @@ int    v42ec_tx_idle(const v42ec_t *e);
 /* Orderly release (7.7): DISC is sent; unsent data is discarded, so wait
  * for v42ec_tx_idle() first if it matters. In async mode it just stops. */
 void   v42ec_release(v42ec_t *e);
+/* The line is gone: stop at once, without a word to the far end, in every
+ * state (V42EC_DISCONNECTED with V42LAPM_R_LOCAL on return). A UA or DM
+ * already owed may still go out while v42ec_tx_bit() is called; nothing
+ * else does, and data already received stays readable. */
+void   v42ec_abort(v42ec_t *e);
 
 /* Break (7.4, 7.5): opt is one of V42_BRK_*, len10ms the length in units of
  * 10 ms (0 = default). Send returns 0, or -1 if not possible now. Get

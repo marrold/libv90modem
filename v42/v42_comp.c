@@ -2,6 +2,7 @@
  * Clause numbers in comments refer to V.42 bis. */
 #include <string.h>
 #include "v42_comp.h"
+#include "comp_out.h"
 
 #define N5 V42COMP_N5
 #define N6 V42COMP_N6
@@ -133,39 +134,27 @@ void v42comp_enc_policy(v42comp_enc_t *e, int policy)
     e->policy = policy;
 }
 
+COMP_OUT_WRITER(v42comp_enc_t, V42COMP_OVF)
+
+/* The most one step puts out (comp_out.h): a character before which the
+ * test leaves compressed mode (7.8.2): up to 7 bits held, the string's
+ * codeword after every STEPUP from 9 bits up to N1, ETM, 0 bits to the
+ * octet boundary, then the character and EID in transparent mode. Flushing (7.9) and entering
+ * compressed mode (7.8.1) put out less. */
+#define N1_MAX COMP_OUT_BITS(V42COMP_MAX_CODEWORDS)
+#define STEP_MAX ((7 + (N1_MAX - (V42COMP_N3 + 1) + 2) * N1_MAX + 7) / 8 + 2)
+COMP_OUT_FITS(v42comp_step_fits_ovf, STEP_MAX, V42COMP_OVF);
+
 size_t v42comp_enc_pending(const v42comp_enc_t *e)
 {
-    return (size_t)(e->ovf_len - e->ovf_pos);
-}
-
-static void put_octet(v42comp_enc_t *e, unsigned o)
-{
-    e->out_octets++;
-    if (e->ovf_len == e->ovf_pos && e->out_len < e->out_max)
-        e->out[e->out_len++] = (uint8_t)o;
-    else if (e->ovf_len < V42COMP_OVF)
-        e->ovf[e->ovf_len++] = (uint8_t)o;
+    return out_pending(e);
 }
 
 /* 7.5: codewords are packed least significant bit first */
 static void put_bits(v42comp_enc_t *e, unsigned v, int n)
 {
-    e->bitbuf |= (uint32_t)v << e->nbits;
-    e->nbits += n;
     e->win_bits += (uint32_t)n;
-    while (e->nbits >= 8) {
-        put_octet(e, e->bitbuf & 0xFF);
-        e->bitbuf >>= 8;
-        e->nbits -= 8;
-    }
-}
-
-static void pad_to_octet(v42comp_enc_t *e)
-{
-    if (e->nbits > 0) {
-        put_octet(e, e->bitbuf & 0xFF);
-        e->bitbuf = 0; e->nbits = 0;
-    }
+    out_bits(e, v, n);
 }
 
 /* 7.4 and Figure I-4: step the codeword size up as far as needed */
@@ -182,8 +171,8 @@ static void put_codeword(v42comp_enc_t *e, unsigned code)
 /* 7.8.1 */
 static void enter_compressed(v42comp_enc_t *e)
 {
-    put_octet(e, e->esc);
-    put_octet(e, CC_ECM);
+    out_octet(e, e->esc);
+    out_octet(e, CC_ECM);
     e->compressed = 1;
     e->bitbuf = 0; e->nbits = 0;
     if (e->d.str != 0) e->d.exc = 1;
@@ -195,7 +184,7 @@ static void enter_transparent(v42comp_enc_t *e)
 {
     if (e->d.str != 0 && !e->d.exc) put_codeword(e, e->d.str);
     put_bits(e, CW_ETM, e->c2);
-    pad_to_octet(e);
+    out_pad(e);
     e->compressed = 0;
     if (e->d.str != 0) e->d.exc = 1;
     e->mode_switches++;
@@ -243,21 +232,13 @@ static void enc_char(v42comp_enc_t *e, uint8_t c)
             int b = bits_for((unsigned)old + 1);
             e->win_bits += (uint32_t)(b > e->c2 ? b : e->c2);
         }
-        put_octet(e, c);                                /* 7.5 */
+        out_octet(e, c);                                /* 7.5 */
     }
     /* 9.2 and Figure I-8 */
     if (c == e->esc) {
-        if (!e->compressed) put_octet(e, CC_EID);
+        if (!e->compressed) out_octet(e, CC_EID);
         e->esc = (uint8_t)(e->esc + ESCAPE_STEP);
     }
-}
-
-static void enc_begin(v42comp_enc_t *e, uint8_t *out, size_t outmax, size_t outlen)
-{
-    e->out = out; e->out_max = outmax; e->out_len = outlen;
-    while (e->ovf_pos < e->ovf_len && e->out_len < e->out_max)
-        e->out[e->out_len++] = e->ovf[e->ovf_pos++];
-    if (e->ovf_pos == e->ovf_len) { e->ovf_pos = 0; e->ovf_len = 0; }
 }
 
 size_t v42comp_encode(v42comp_enc_t *e, const uint8_t *in, size_t inlen,
@@ -265,28 +246,26 @@ size_t v42comp_encode(v42comp_enc_t *e, const uint8_t *in, size_t inlen,
 {
     size_t used = 0;
 
-    enc_begin(e, out, outmax, *outlen);
+    out_begin(e, out, outmax, *outlen);
     while (used < inlen && e->ovf_len == 0 && e->out_len < e->out_max)
         enc_char(e, in[used++]);
-    *outlen = e->out_len;
-    e->out = NULL;
+    *outlen = out_end(e);
     return used;
 }
 
 int v42comp_flush(v42comp_enc_t *e, uint8_t *out, size_t outmax, size_t *outlen)
 {
-    enc_begin(e, out, outmax, *outlen);
+    out_begin(e, out, outmax, *outlen);
     if (e->ovf_len == 0 && e->compressed && e->d.str != 0 && !e->d.exc) {
         /* 7.9 a) to c) */
         put_codeword(e, e->d.str);
         e->d.exc = 1;
         if (e->nbits > 0) {
             put_bits(e, CW_FLUSH, e->c2);
-            pad_to_octet(e);
+            out_pad(e);
         }
     }
-    *outlen = e->out_len;
-    e->out = NULL;
+    *outlen = out_end(e);
     return e->ovf_len == 0;
 }
 

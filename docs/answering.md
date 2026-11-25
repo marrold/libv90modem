@@ -77,19 +77,43 @@ first: below, "K56flex".) The menu decides:
   (`V90M_CONN_*`) and `tx_bps` / `rx_bps` (our transmit / receive rate;
   for V.90 and V.92 that is downstream / upstream).
 - `V90M_EV_DATA_STOPPED` and `V90M_EV_DATA_MOVING` around every retrain and
-  rate renegotiation; `v90m_state.retraining` during a retrain.
+  rate renegotiation; `v90m_state.retraining` during a retrain (not
+  during a rate renegotiation, in any modulation).
 - `V90M_EV_RATES` when the rates or the modulation changed.
 - `V90M_EV_ENDED` once, with `v90m_state.end`: `V90M_END_FAILED` (no
-  connection was made), `V90M_END_LOST`, `V90M_END_CLEARDOWN_FAR`,
-  `V90M_END_CLEARDOWN_OURS`, `V90M_END_X2_FAILED` (x2, below),
-  `V90M_END_K56_FAILED` (K56flex, below), `V90M_END_RETRAIN_FAILED` (x2:
-  the client's retrain, below). The other end codes are the calling
-  role's.
+  connection was made), `V90M_END_LOST` (the connection was lost: any
+  loss once connected, a renegotiation included),
+  `V90M_END_CLEARDOWN_FAR`, `V90M_END_CLEARDOWN_OURS`,
+  `V90M_END_NO_COMMON` (V.8 found no modulation in common with the
+  caller), `V90M_END_RETRAIN_FAILED` (V.90, V.92, V.34: a retrain failed,
+  or one more was due past the limit, below; x2: the client's retrain,
+  below),
+  `V90M_END_X2_FAILED` (x2, below), `V90M_END_K56_FAILED` (K56flex,
+  below). The code is the same as the calling role's for the same event.
+  `V90M_END_NO_ANSWER_TONE` and `V90M_END_NO_JM` are the calling role's
+  only. A caller whose V.8 sends CM but never CJ after our JM is served
+  anyway: JM stops after 5 s (V.8 8.2.3 leaves its length open) and the
+  modulation JM selected starts, as when CJ comes; a missed CJ does not
+  lose the call.
+
+`v90m_get_diag` (0.6.1) says, also after the end, why the call ended in
+the engines' own words (`error`, named by `v90m_err_name`: a start-up that
+failed in V.90's Phase 2 because no INFO1a came is `P2D_ERR_INFO1A`; 0
+after an orderly cleardown), the furthest phase it reached (`phase`), the
+modulation V.8 or the legacy detection chose (`selected`, set as soon as
+it is chosen: a call that never finished its training still says V.90)
+and whether data mode was reached (`data_reached`). The start-up failed
+when the call ended with `data_reached` 0. docs/api.md has the names.
 
 `v90m_get_stats` adds the receiver's signal to error (`snr_db10`, 0.1 dB),
 the round-trip delay measured in the handshake (`rtd`, samples: V.34, V.90,
-V.92), the echo delay in use (V.90 / V.92), and the counts of retrains and
-of rate renegotiations that stopped the data (V.90, V.92).
+V.92, x2, K56flex; both the engine's figure while connected, and after the
+end the last measured while data moved), the echo delay in use (V.90, V.92, x2, K56flex: that of the engine
+running now; during a retrain or after the end, that of the modulation of
+the call), and the counts of retrains and of rate renegotiations that
+stopped the data (V.34, V.90, V.92, x2, K56flex), each counted when data
+moves again, when it becomes a retrain, or when the call ends in it; the
+stop of a cleardown, ours or the far end's, does not count.
 
 ## x2
 
@@ -109,7 +133,13 @@ a mu-law line: never with `alaw` set. Robbed-bit lines are not handled.
 - **Rate changes.** The client asks for a new rate in data mode (a
   Courier about 12 s in, and again later); we answer at the rate and for
   the pad (none, 3 dB, 6 dB) its request names: `V90M_EV_DATA_STOPPED`,
-  then `V90M_EV_RATES` and `V90M_EV_DATA_MOVING`, about 0.75 s later.
+  then `V90M_EV_RATES` and `V90M_EV_DATA_MOVING`, about 0.75 s later;
+  `retraining` stays 0 and `v90m_stats.renegotiations` counts it. Its S
+  is watched for from our start segment on (its B1, its E a record before
+  it): one before our start segment is out is followed the same way, data
+  moving only once our answer's start segment is out, none of the host's
+  bits going down before (data had not moved: no `V90M_EV_DATA_STOPPED`,
+  and it is not counted).
 - **No way back to V.34.** Once the marker has come, a start-up or rate
   change that does not complete, or a request we cannot serve, ends the
   call with `V90M_END_X2_FAILED`; the client's Tone A (a retrain it asks
@@ -122,8 +152,10 @@ a mu-law line: never with `alaw` set. Robbed-bit lines are not handled.
   2 link NAKs, block error rate 0; pings across PPP 90 of 90 (average 148
   ms, worst 590 ms). Not shown on a live call: a client's retrain (it ends
   the call), pads, robbed bits, another x2 modem ([limits.md](limits.md)).
-- **CPU.** x2 data mode costs about twice V.90's (the upstream the client
-  dictates): one x2 call per ARM926 box ([limits.md](limits.md)).
+- **CPU.** x2 data mode costs about 1.8 times V.90's (56.58 M ARM
+  instructions a second against 31.19 M; the upstream the client
+  dictates): one x2 call per ARM926 box, with V.42bis too; two do not fit
+  ([limits.md](limits.md)).
 
 ## K56flex
 
@@ -163,29 +195,57 @@ answering, on a mu-law line: never with `alaw` set.
   our flagged INFO1a in the simulator; `tx_bps` is the downstream payload
   (32000 to 56000, as a Rockwell modem prints it), `rx_bps` the client's
   V.34 upstream (the highest rate its MP allows, capped by `max_up_bps`).
+- **A client that ignores our MP.** Our MP asks the client's transmitter
+  for 16 states, linear, minimum shaping, and nothing it sends says what
+  it will use. A client that sends x2's upstream regardless (64 states,
+  non-linear, expanded shaping) fails B1 under what we asked; its points
+  since its E are kept (192 symbols), decoded again under x2's
+  configuration, 3 every 2 symbol periods until the receiver has caught up
+  (about 110 ms; B1 is decided about 36 ms after the retry), the
+  equaliser back as it was at its E, and if B1 passes there the call goes
+  on under it (a renegotiation starts from the configuration that passed,
+  and tries the other if its B1 fails). Otherwise, as before,
+  `V90M_END_K56_FAILED`. Its S while catching up: the stored points go on
+  into the decoder at the same pace up to where S begins, and the data
+  before S goes on but for one mapping frame, as without the catch-up.
+  Only the simulated client has done it.
 - **Renegotiation.** The client's (its S in data mode) is followed: our
   data stops at a frame's end, our short training, its MP, our MP, then
   data at the new rate: `V90M_EV_DATA_STOPPED`, `V90M_EV_RATES`,
-  `V90M_EV_DATA_MOVING`. An MP with rate 0 ends the call as
-  `V90M_END_CLEARDOWN_FAR`. We never start one.
+  `V90M_EV_DATA_MOVING` (`retraining` 0; `v90m_stats.renegotiations`
+  counts it). An MP with rate 0 ends the call as
+  `V90M_END_CLEARDOWN_FAR`. We never start one. Its S is watched for from
+  its B1 on: one before our data has begun is followed the same way, our
+  R2 after our first data frame (data had not moved: no
+  `V90M_EV_DATA_STOPPED`, and it is not counted). Not while its E has come
+  before our MP is out (an early E: our MP, MP' and E still to go); an S
+  there is decoded as data until our MP has begun.
 - **Retrain.** The client's (its tone B in data mode) is followed: V.34's
   retrain Phase 2 with INFO1a flagged again, then the whole training:
   `V90M_EV_DATA_STOPPED` with `retraining` set, then
   `V90M_EV_DATA_MOVING` at the rates it agrees (some 10.5 s later in the
-  simulator), and `v90m_stats.retrains` counts it. Only a tone B in data
-  mode is a retrain: a client that gives up during a training (the first,
-  or a retrain's) and retrains again is not followed, and the call ends at
-  that training's time limit (`V90M_END_K56_FAILED`). The third retrain
-  in a row from data mode ends the call too; retrains are forgotten after
-  2 s of data mode. We never start one: `v90m_retrain` gives
-  `V90M_ESTATE`.
+  simulator), and `v90m_stats.retrains` counts it. A tone B in data mode
+  or in the client's renegotiation (one it gives up) is a retrain; a
+  client that gives up during a training (the first, or a retrain's) and
+  retrains again is not followed, and the call ends at that training's
+  time limit (`V90M_END_K56_FAILED`). A retrain from its renegotiation
+  is counted twice, in `renegotiations` (its S stopped the data) and in
+  `retrains`. The third retrain in a row from data mode ends the call
+  too; retrains are forgotten after 2 s of data mode. We never start
+  one: `v90m_retrain` gives `V90M_ESTATE`.
 - **Cleardown and failures.** `v90m_cleardown` ends the call at once
   (`V90M_END_CLEARDOWN_OURS`), with nothing sent: no K56flex cleardown is
   known. A start-up, renegotiation or retrain that does not complete in
   its time ends the call with `V90M_END_K56_FAILED`; an upstream lost in
   data mode, with `V90M_END_LOST`.
 - **CPU.** K56flex data mode costs about the same as V.90's (it asks the
-  client for V.90's upstream options) ([limits.md](limits.md)).
+  client for V.90's upstream options); with a client that ignores our MP,
+  about x2's (58.60 M ARM instructions a second against 32.12 M; 84 M and
+  39 M before 0.6.0's CPU work), and, as measured before that work, up
+  to 128 M a second
+  for the 110 ms of catching up after its B1, about the box's whole CPU:
+  v90d's answers come at most 11.7 ms late, inside its
+  20 ms of prefill ([limits.md](limits.md), `docs/history/audit-0.6.md`).
 
 ## Retrains, rate renegotiation, cleardown
 
@@ -194,10 +254,13 @@ answering, on a mu-law line: never with `alaw` set.
   otherwise, or while one is under way). In V.90 the far end's Tone A is
   listened for through Phase 4 and data mode; our own retrain is 70 ms of
   silence and Phase 2 again from Tone B. A call is let go at the fourth
-  retrain in a row (`DESIGN.md`, 4.2).
+  retrain in a row (`DESIGN.md`, 4.2), V.90, V.92 and V.34 with
+  `V90M_END_RETRAIN_FAILED`, as on the calling side; so does a retrain of
+  theirs that does not get back to data mode.
 - **Rate renegotiation** in V.32bis, V.34, V.90 and V.92 (the standards
   table of the top-level README); `v90m_stats.renegotiations` counts those
-  of V.90 and V.92. In V.90 and V.92 the caller's (its S) is followed;
+  of V.34, V.90 and V.92 (V.32bis's are not seen apart from its retrains),
+  and those of x2 and K56flex. In V.90 and V.92 the caller's (its S) is followed;
   the upstream rate is ours to set, and when the receiver's error stays
   above what the rate needs for a second the modem renegotiates with a
   lower ceiling; when nothing lower is left, or nothing is received, it
@@ -210,7 +273,9 @@ answering, on a mu-law line: never with `alaw` set.
   not hold even the lowest PCM rate.
 - **Cleardown** in V.90 (9.7), V.92 (9.11) and V.34 (11.7), either way:
   `v90m_cleardown` returns `V90M_OK` when it has begun, and
-  `V90M_EV_ENDED` follows within a fraction of a second.
+  `V90M_EV_ENDED` follows within a fraction of a second. In V.92 the
+  cleardown is a rate sequence (CPd) with data rate 0 (drn = 0); a caller
+  that does not acknowledge it is given up to 3.5 s.
   `V90M_ESTATE` means there is nothing to send (V.21, V.22, V.22bis,
   V.32bis, Bell, or not in data mode): just stop calling
   `v90m_process_*`.

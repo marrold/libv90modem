@@ -1,0 +1,40 @@
+V.32bis calling modem against the answering modem
+  clean, mu-law, echoes 15 / 20 dB: one-way 64 samples; data at 3.23 s, 14400 bit/s
+    turn-round: caller 63.30 T, answerer 63.00 T (64 +- 2); round trip 39.6 T: NT 102.9 T, MT 102.9 T (less the other's 64 T: 39.9, 39.6)
+    segments: S(NT) 102, S 256, S-bar 16, TRN 2816, R2 1720, E 8 T; echo attenuation 32.0 dB; R2 0ff9
+    data: caller -> answerer 42733 bits 0 errors, answerer -> caller 42721 bits 0 errors
+  10 dB loss, echoes 12-18 dB, -45 dBm0 noise, 1 Hz, 100 ppm: one-way 215 samples; data at 3.38 s, 9600 bit/s
+    segments: S(NT) 194, S 256, S-bar 16, TRN 2816, R2 1808, E 8 T; echo attenuation 16.0 dB; R2 0ff1
+    data: caller -> answerer 28283 bits 0 errors, answerer -> caller 28283 bits 0 errors
+  the same, -60 dBm0 noise: one-way 215 samples; data at 3.38 s, 12000 bit/s
+    segments: S(NT) 194, S 256, S-bar 16, TRN 2816, R2 1808, E 8 T; echo attenuation 23.0 dB; R2 0ff9
+    data: caller -> answerer 35370 bits 0 errors, answerer -> caller 35370 bits 0 errors
+  100 ms round trip: one-way 424 samples; data at 3.74 s, 14400 bit/s
+    turn-round: caller 63.30 T, answerer 63.00 T (64 +- 2); round trip 255.6 T: NT 318.9 T, MT 318.9 T (less the other's 64 T: 255.9, 255.6)
+    segments: S(NT) 318, S 256, S-bar 16, TRN 2816, R2 1936, E 8 T; echo attenuation 32.0 dB; R2 0ff9
+    data: caller -> answerer 42085 bits 0 errors, answerer -> caller 42079 bits 0 errors
+  a satellite hop, the answerer up to 9600: one-way 2424 samples; data at 7.21 s, 9600 bit/s
+    turn-round: caller 63.30 T, answerer 63.00 T (64 +- 2); round trip 1455.6 T: NT 1518.9 T, MT 1518.9 T (less the other's 64 T: 1455.9, 1455.6)
+    segments: S(NT) 1518, S 256, S-bar 16, TRN 2991, R2 3136, E 8 T; echo attenuation 32.0 dB; R2 0fd1
+    data: caller -> answerer 25635 bits 0 errors, answerer -> caller 25627 bits 0 errors
+  caller 9600 only: one-way 215 samples; data at 3.38 s, 9600 bit/s
+    segments: S(NT) 194, S 256, S-bar 16, TRN 2816, R2 1808, E 8 T; echo attenuation 16.0 dB; R2 0b91
+    data: caller -> answerer 28283 bits 0 errors, answerer -> caller 28283 bits 0 errors
+  caller 4800 only: one-way 215 samples; data at 3.37 s, 4800 bit/s
+    segments: S(NT) 194, S 256, S-bar 16, TRN 2816, R2 1808, E 8 T; echo attenuation 16.0 dB; R2 0d91
+    data: caller -> answerer 14155 bits 0 errors, answerer -> caller 14155 bits 0 errors
+  retrain asked for by the answerer: both ends retraining 97 ms later; data again after 3.48 s at 9600 bit/s
+    after the retrain: caller -> answerer 28283 bits 0 errors, answerer -> caller 28283 bits 0 errors
+  retrain asked for by the caller: both ends retraining 94 ms later; data again after 3.46 s at 9600 bit/s
+    after the retrain: caller -> answerer 28283 bits 0 errors, answerer -> caller 28283 bits 0 errors
+  rate renegotiation asked for by the answerer (R4 0fd1): caller R5 0ff9, E for 9600 bit/s; after 213 ms caller state 16 at 9600 bit/s, error 0
+    then: caller -> answerer 28323 bits 0 errors, answerer -> caller 28319 bits 0 errors
+  rate renegotiation asked for by the answerer (R4 0ff9): caller R5 0fd1, E for 9600 bit/s; after 213 ms caller state 16 at 9600 bit/s, error 0
+    then: caller -> answerer 28323 bits 0 errors, answerer -> caller 28319 bits 0 errors
+  rate renegotiation asked for by the answerer (R4 0f91): caller R5 0999, E for 0 bit/s; after 157 ms caller state 18 at 14400 bit/s, error 3
+  v32_retrain outside data mode: -1
+  the answerer silent: caller state 18 error 4 after 439 ms
+  nothing in common: R2 0991; caller state 18 error 3, answerer error 3
+  R3 calling for a cleardown: caller state 18 error 3
+  no answerer: caller state 18 error 1
+test_caller: 247 checks, 0 failures

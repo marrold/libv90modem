@@ -15,6 +15,7 @@
 #include <string.h>
 #include "test.h"
 #include "../modem/answer.h"
+#include "../modem/ans_scheme.h"   /* ans_enter: a phase put in place by hand */
 #include "../modem/info.h"
 #include "../sim/v92call.h"
 #include "../sim/v34peer.h"
@@ -44,6 +45,7 @@ static void p_put(void *u, int bit)
 
 static answer_t A; static v92call_t C; static prbs_t UA, UC;
 static uint8_t atx;                 /* the octet we send */
+static int deaf;                    /* the caller no longer hears us: it gets the idle code */
 static long now;
 static uint8_t rec[2][RECN]; static int rec_to = -1;    /* what we sent, for comparisons */
 
@@ -70,11 +72,21 @@ static void start(const scen_t *s)
     atx = v90_pcm_octet(s->alaw, 0, 1); now = 0;
 }
 
+/* the caller behind a packet network (an ATA's jitter buffers): far_d
+ * samples each way, so the echo of its line's hybrid (v92call's, 20 dB down)
+ * comes back a round trip late; 0: no such delay */
+#define FARN 4096
+static int far_d; static uint8_t far_dn[FARN], far_up[FARN];
+
 static void run(long samples)
 {
     while (samples-- > 0) {
+        uint8_t to_c = deaf ? v90_pcm_octet(A.p2cfg.alaw, 0, 1) : atx, from_c;
         if (rec_to >= 0 && now < RECN) rec[rec_to][now] = atx;
-        atx = answer_tick_pcm(&A, v92call_tick(&C, atx));
+        if (far_d) { far_dn[now & (FARN - 1)] = to_c; to_c = far_dn[(now - far_d) & (FARN - 1)]; }
+        from_c = v92call_tick(&C, to_c);
+        if (far_d) { far_up[now & (FARN - 1)] = from_c; from_c = far_up[(now - far_d) & (FARN - 1)]; }
+        atx = answer_tick_pcm(&A, from_c);
         now++;
     }
 }
@@ -161,6 +173,20 @@ int main(void)
     CHECK(answer_snr_db10(&A) >= 250 && answer_snr_db10(&A) <= 600);
     CHECK(answer_rtd(&A) >= 0 && answer_rtd(&A) < 80);
     CHECK_EQ_I(A.u.v92.dec.bad_frames, 0);
+    /* the echo delay the stats give: the engine of the phase, not of the
+     * modulation (after a retrain that withdrew PCM upstream, V.90's Phase 3
+     * runs with the modulation still V.92) */
+    CHECK_EQ_I(answer_echo_delay(&A), A.u.v92.ecd.delay);
+    {
+        static answer_t E;
+        E = A;
+        ans_enter(&E, ANS_P3); E.p34.ecd.delay = 123; E.u.v92.ecd.delay = 77;
+        CHECK_EQ_I(answer_echo_delay(&E), 123);
+        ans_enter(&E, ANS_RETRAIN);
+        CHECK_EQ_I(answer_echo_delay(&E), 77);      /* between engines: the modulation's */
+        ans_enter(&E, ANS_FAILED);
+        CHECK_EQ_I(answer_echo_delay(&E), 77);
+    }
 
     /* the caller renegotiates the rate (9.8): connected throughout, data again */
     CHECK_EQ_I(v92call_renegotiate(&C, 0), 0);
@@ -195,7 +221,7 @@ int main(void)
     /* our cleardown (9.11) */
     CHECK_EQ_I(answer_cleardown(&A), 0);
     for (t = 0; t < 9000 && A.phase != ANS_FAILED; t += 10) run(80);     /* (the CPd design is paced) */
-    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(A.cleared, 2); CHECK_EQ_I(A.connected, 0);
+    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(answer_end(&A), ANS_END_CLEARDOWN_OURS); CHECK_EQ_I(A.connected, 0);
     CHECK(C.va.clear_seen);
     CHECK_EQ_I(answer_snr_db10(&A), -1); CHECK_EQ_I(answer_rtd(&A), -1);
 
@@ -211,7 +237,7 @@ int main(void)
     CHECK_EQ_I(A.u.v92.dec.bad_frames, 0);
     CHECK_EQ_I(v92call_renegotiate(&C, 1), 0);
     for (t = 0; t < 9000 && A.phase != ANS_FAILED; t += 10) run(80);     /* (the CPd design is paced) */
-    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(A.cleared, 1); CHECK_EQ_I(A.connected, 0);
+    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(answer_end(&A), ANS_END_CLEARDOWN_FAR); CHECK_EQ_I(A.connected, 0);
 
     /* ---- 3. rate ceilings hold: max_up applies to the PCM upstream ---- */
     scen(&s, V92, 0, 1, 1);
@@ -224,6 +250,25 @@ int main(void)
     CHECK_EQ_I(A.u.v92.jd.rates, 0x1FFF);
     CHECK_EQ_I(A.rx_bitrate, 33333);
     data_ok("V.92 caller, ceilings 44000 / 33600", ANS_MOD_V92);
+    /* ---- 3b. our cleardown when the caller no longer hears us (it goes on
+     * sending data, but our Rd never reaches it, nor its Ru us): Rd,
+     * TRN2d and SUVd go out all the same, no SUVu comes, and the call ends
+     * as our cleardown at the cleardown's limit; no retrain ---- */
+    deaf = 1;
+    run(800);
+    CHECK_EQ_I(answer_cleardown(&A), 0);
+    {
+        int retrain_seen = 0, retrains = A.retrains;
+        for (t = 0; t < 8L * 20000 && A.phase != ANS_FAILED; t++) {
+            run(1);
+            if (A.phase == ANS_RETRAIN || A.phase == ANS_P2) retrain_seen = 1;
+        }
+        printf("  our cleardown, the caller deaf to us: over after %ld ms, end %d, retrain %d\n", t / 8, answer_end(&A), retrain_seen);
+        CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(answer_end(&A), ANS_END_CLEARDOWN_OURS);
+        CHECK_EQ_I(retrain_seen, 0); CHECK_EQ_I(A.retrains, retrains);
+        CHECK(t < 8L * 4000);
+    }
+    deaf = 0;
 
     /* ---- 4. the V.92 start-up fails (the caller's Ru never arrives): the
      * recovery of 9.5.1.2 is a retrain; its INFO1d says "no PCM upstream"
@@ -350,8 +395,61 @@ int main(void)
     v92call_hangup(&C);
     for (t = 0; t < 60000 && A.phase != ANS_FAILED; t += 10) run(80);
     printf("  V.92 caller gone in data mode: over after %ld ms, %d retrain(s)\n", t, A.retrains);
-    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(A.connected, 0); CHECK_EQ_I(A.cleared, 0);
+    CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(A.connected, 0); CHECK(answer_end(&A) != ANS_END_CLEARDOWN_FAR && answer_end(&A) != ANS_END_CLEARDOWN_OURS);
     CHECK(t < 2000);
+
+    /* ---- 10. the line goes dead in V.92 data (the caller hung up, the
+     * network sends the idle code): what the canceller gives out is its own
+     * estimate of our echo; the call ends as a carrier loss, in the half
+     * second the carrier watch allows, with no rate renegotiation ---- */
+    scen(&s, V92, 0, 1, 1);
+    start(&s);
+    CHECK_EQ_I(to_data(30000), 1); failed_why();
+    run(8000);
+    {
+        int reneg = 0;
+        for (t = 0; t < 8L * 60000 && A.phase != ANS_FAILED; t++) {
+            atx = answer_tick_pcm(&A, 0xFF);
+            if (A.phase == ANS_V92 && A.u.v92.state == V92D_RENEG) reneg = 1;
+        }
+        printf("  V.92 line dead in data mode: over after %ld ms, end %d, %d retrain(s), renegotiation %d\n",
+               t / 8, answer_end(&A), A.retrains, reneg);
+        CHECK_EQ_I(A.phase, ANS_FAILED); CHECK_EQ_I(answer_end(&A), ANS_END_LOST);
+        CHECK_EQ_I(reneg, 0); CHECK_EQ_I(A.retrains, 0);
+        CHECK(t > 8L * 400 && t < 8L * 750);
+    }
+
+    /* ---- 11. the caller behind an ATA or a VoIP gateway (ISP calls of
+     * 2026-11-23: a Cisco IOS FXS port's hybrid at 302 ms, 19.5 dB down):
+     * the echo a round trip late, measured (as on the box). V.92 and V.90
+     * find it near the round trip of Phase 2 and cancel it: the upstream as
+     * clean as on a short path. And a round trip of 100 ms, inside the
+     * search as it always was ---- */
+    {
+        static const int ms[3] = { 300, 400, 100 };
+        int k, v;
+        for (v = 0; v < 2; v++)
+            for (k = 0; k < 3; k++) {
+                char what[64];
+                int e, d;
+#ifdef TEST_SHORT
+                if (k > 0) break;
+#endif
+                scen(&s, V92, 0, !v, !v);
+                far_d = ms[k] * 4; e = 2 * far_d + 21;  /* (v92call's echo path: 21 samples) */
+                memset(far_dn, v90_pcm_octet(0, 0, 1), sizeof far_dn); memset(far_up, v90_pcm_octet(0, 0, 1), sizeof far_up);
+                start(&s);
+                CHECK_EQ_I(to_data(40000), 1); failed_why();
+                d = v ? A.p34.ecd.delay : A.u.v92.ecd.delay;
+                snprintf(what, sizeof what, "far echo %d ms, 20 dB down (echo delay %d)", ms[k], d);
+                data_ok(what, v ? ANS_MOD_V90 : ANS_MOD_V92);
+                CHECK_EQ_I(A.retrains, 0);
+                CHECK(d >= e - 12 && d <= e + 2);
+                CHECK(answer_snr_db10(&A) > 300);      /* V.90: the upstream error below -30 dB */
+                if (!v) CHECK_EQ_I(A.u.v92.dec.bad_frames, 0);
+            }
+        far_d = 0;
+    }
 
     T_REPORT("answer_v92");
 }

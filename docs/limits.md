@@ -1,6 +1,6 @@
 # Known limits
 
-What is not done, not tried, or measured in simulation only, as of 0.5.0.
+What is not done, not tried, or measured in simulation only, as of 0.6.0.
 Each item names where it is recorded.
 
 ## Not tried
@@ -24,6 +24,12 @@ Each item names where it is recorded.
   modems"). Bell 212A answering was tried only on a test build with the
   2225 Hz tone from the start, by a modem that would also have taken V.22.
   V.23, either role, has not been tried against a real modem.
+- **The V.92 answering side's own cleardown has met no real modem.** It
+  sends what V.92 9.11 / 9.8.1.1.2 / 9.6.1.1.2 give (TRN2d, SUVd, on the
+  caller's SUVu one CPd with drn = 0, SUVd) and is over when the caller
+  acknowledges; only the simulator and this library's own caller have
+  answered it. (`v92/README.md`, reading 38; `docs/history/audit-0.6.md`,
+  T21.11, T21.12.)
 - **x2 (answering): one real modem, one line.** The owner's U.S. Robotics
   56K FAX EXT (flash 5.1.4) called the box (v90d with this library,
   2026-11-21): x2 at 56000 / 28800 with PPP, held 3 min 50 s until we hung
@@ -58,6 +64,59 @@ Each item names where it is recorded.
 - **The calling V.90 / V.92 receiver's watch** (3 dB over the design noise
   for 1 s, 12 dB for 250 ms, 6 dB under for 5 s) has thresholds that come
   from the simulator's lines only. (`docs/history/PROGRESS.md`, robust 2c.)
+- **A single impulse can start error propagation in the V.90 / V.92
+  calling receiver's decision-feedback equaliser** on lines whose
+  low-frequency tail sits in the feedback; recovery is by retrain, about
+  7 s (V.90) to 11 s (V.92). On the simulator's 2 km line the feedback
+  taps sum to about 4 in magnitude (the first 0.73): the few wrong
+  decisions a click makes feed back errors larger than half a level step,
+  which make more, and the error never decays. Measured: 50 units added to
+  one A/D sample (42 dB under the signal) loses the receiver; 20 does not.
+  One of our own A/D samples reaching full scale (our V.92 PCM upstream's
+  peak in a -10 dB hybrid echo) did the same. The receiver's watch then
+  retrains (12 dB over for 250 ms). A clipped sample cannot be repaired at
+  the sample: replacing it by 0 or keeping it leaves an error of thousands
+  of units against the 20 to 50 the decisions survive. Recovering without
+  a retrain (re-seeding the feedback after a runaway, or a feedback design
+  that cannot run away, or spectral shaping, V.90 Appendix I) is a design
+  item after the audit. (`docs/history/audit-0.6.md`, T21.9.)
+
+- **The V.92 answering side's own rate drop in data mode seldom comes, and
+  may not hold.** It needs the upstream decoder to flag 4 or more frames
+  in each of two seconds, and the modulus decoder flags few of the frames
+  noise spoils (11 to 33 in 10 s with a third of the bits wrong, on the
+  simulator); when a drop comes, the new design still takes the noise
+  floor measured at the start-up, so on a line that stays noisy the lower
+  rate can fail B1u and the call retrains without PCM upstream. A rate
+  renegotiation the caller starts is not affected.
+  (`docs/history/audit-0.6.md`, T21.10; deferred.)
+
+- **Clicks on the line in data mode** (the upstream QAM receiver: V.34,
+  V.90 answering, x2, K56flex). The receiver's AGC gain is set once, when
+  the far end's S is detected, and is not changed in data mode. A data-mode
+  sample is blanked when it exceeds about 8 times (18 dB) the input RMS
+  measured over S, so a click costs the bits around it and nothing more.
+  Tested with a 0.75 ms full-scale click in simulation, and on a recorded
+  x2 call with the click added. Not covered: a click under that threshold.
+  A full-scale click (32124) is blanked only if the line's RMS at S was
+  below about 4015 (about -12 dBm0); a line hotter than that at S gets no
+  protection. If the level rises by 5 to 8 dB during data mode, real peaks
+  would start to be blanked (untested). The echo canceller still adapts on
+  the click. Post-audit item: make the threshold track the data-mode level.
+  Also not covered: an impulse during training (training is not blanked, since some of its own
+  peaks are that loud); and bursts of clicks. There is no watch that ends
+  an x2 or K56flex call whose upstream stays deaf. Measured by mse alone, a
+  line deafened by a click looks the same as a clean low-SNR line (Task 20,
+  `docs/history/audit-0.6.md`).
+- **x2 on a noisy line can stay up with most upstream bits wrong.** In the
+  noise test (RMS 92) an x2 call stays up for 60 s with about 46% of the
+  upstream bits wrong and no end code. There is no watchdog, by ruling.
+
+- **The calling V.34 modem behind a long round trip** gets less
+  downstream: in `test/test_v34dx.c`'s far-echo case (the answer side with
+  a far echo 20 dB down, the call side with its own near echo), 31200 bit/s
+  at a 100 ms round trip, 28800 at 300 ms, 12000 at 400 ms. The answer side
+  is clean at every one. Not investigated (0.6.0 audit, ISP-1 follow-up).
 
 ## Not checked against a specification
 
@@ -65,6 +124,69 @@ Each item names where it is recorded.
   answerer (and the U.S. Robotics 5686 that called it) accepts: no Bell
   212A specification document was to hand. The 3 s and 6 s fallbacks to
   Bell 103 are this library's choices. (README, `DESIGN.md` 4.2e.)
+
+- **The calling V.90 / V.92 modem waits 2000 ms for Sd-bar from the start
+  of Ja**, where V.90 9.3.2.4 and V.92 9.5.2.2.1 say 1500 ms. A stated
+  deviation: the clause adds no round trip, and a digital modem that
+  follows the text (up to 500 ms after a whole Ja, 9.3.1.3) cannot meet
+  1500 ms on a round trip of about 0.9 s or more; a live server on a VoIP
+  path answered about 2 s after Ja (reported by an independent softmodem).
+  The wait stays bounded. The calling modem does not send S before Jd has
+  arrived, as that softmodem does for servers that wait for S without a
+  round trip: V.90 9.3.2.7 has S follow the reception of Jd.
+
+## Data across a rate renegotiation or cleardown (no error control)
+
+With V.42 the frames below are sent again; without it they are lost. The
+downstream loses nothing (V.90 and V.92: the frames before Rd are all
+delivered).
+
+- **V.90 upstream: one mapping frame at each S** (about 2.5 ms; 72 bits at
+  28800 bit/s). The answering modem delivers what its decoder held when it
+  heard S, but where S begins is found from S's points, which a real
+  channel turns for the first few symbols (up to 37 degrees in a
+  recording): the frame before the start found is held back, so that no
+  frame S cut or that holds S is delivered. The calling modem sends the
+  mapping frame under way whole before its S.
+- **V.34 (both ways), and the V.34 upstream of x2 and K56flex: the same
+  one mapping frame at each S** (78 bits at 31200 bit/s). Our transmitter
+  sends its mapping frame under way whole before its S; a far modem that
+  cuts its frame with S loses that frame too (two in all).
+  x2 and K56flex: an S before the client's B1 has been decided (some
+  55 ms after its E) loses what it sent before S (nothing of it is yet
+  known to be data); no client measuring our data can renegotiate that
+  early (our own data is not out until some 67 ms after its E for
+  K56flex), so only the simulated client has done it. A K56flex client
+  that ignores our MP and sends S that early may see errors in the first
+  few frames after the renegotiation (in the simulator: 11 words at 45 ms,
+  the equaliser pulled by B1 under the wrong configuration). A K56flex
+  client whose E comes before our MP is out (an early E) has its S
+  watched for only once our MP has begun: an S before that is decoded as
+  data until then (our R2 cannot be begun while our training waits for
+  its MP).
+- **V.92 upstream: what the caller's prefilter held when Ru began.** V.92
+  begins Ru on a data frame boundary (9.8.2.1.1). The symbols reach the
+  digital modem through the prefilter `dsn.dly` samples later (some 116
+  on the simulator's lines), and Ru, sent in their place, cuts that tail
+  off: about `dly` / 12 data frames (10 at 32000 bit/s, 480 bits) never
+  reach the line. Inherent to Ru on a frame boundary; neither end can
+  recover them. The answering modem then delivers the frames its decoder
+  held, but for one data frame of margin before where Ru was found to
+  begin (as V.90's). Measured on the simulator: 11 or 12 data frames
+  (`dly` 114 to 116) in 40 renegotiations, either end's, and nothing
+  wrong delivered in those or in 46 more over eight kinds of line (noise
+  40, pads, a strong echo, a bump); at most `dly` / 12 + 3.
+- **V.92 upstream: a caller off the designed level.** The answering modem
+  measures the caller's gain on B1u and scales what it decodes (within 1 %
+  from 0.4 to 3.0 of the design on the simulator), but the constellation
+  stays the one designed for the level asked. A weaker caller has that
+  much less margin against the line's noise (0.6 on a long line: some 100
+  bits wrong in 230000); a louder one sends its largest points past the
+  codec's full scale (from about 1.6 on the long lines of the simulator,
+  some 0.1 % of bits wrong at 2.4; on a short line clean to 3.0). Neither
+  is flagged by the modulus decoder, so the quality watch does not lower
+  the rate. A design for the measured level (a rate renegotiation after
+  B1u) is not done.
 
 ## x2 (answering)
 
@@ -131,15 +253,29 @@ a Rockwell or Lucent modem.
   as in V.34's and x2's rate changes: an assumption, confirmed by no real
   client. SM56 did not renegotiate in two calls of 120 s, so only the
   simulated client has renegotiated with it.
-- **The client's retrains:** only its tone B in data mode is taken as a
-  retrain. A client that gives up during a training (the first, or a
-  retrain's) and retrains again is not followed: the call ends at that
-  training's time limit (`V90M_END_K56_FAILED`). SM56 does that after
-  about half of its own retrains. So "the third in a row ends the call"
+- **The client's retrains:** only its tone B in data mode, or in its
+  renegotiation, is taken as a retrain. A client that gives up during a
+  training (the first, or a retrain's) and retrains again is not
+  followed: the call ends at that training's time limit
+  (`V90M_END_K56_FAILED`). SM56 does that after about half of its own
+  retrains. So "the third in a row ends the call"
   counts retrains each begun from data mode; they are forgotten once data
   mode has held 2 s (our own value: no source gives one). A retrain's
   Phase 2 must end within 9 s of the retrain's start (our own value), or
   the call ends. Only the simulated client has retrained with it.
+- **A client that ignores our MP: x2's upstream only.** One that sends 64
+  states, non-linear, expanded shaping whatever our MP asks is decoded
+  (B1 retried under that configuration; only the simulated client has
+  done it), and its data mode then costs about what x2's does: one such
+  call per ARM926 box. Catching up after its B1 (3 stored points every 2
+  symbol periods, about 110 ms, once per call) costs up to 1.28 M ARM
+  instructions per 10 ms block, 10.5 ms of the box's CPU (122 M a
+  second): with nothing else running, v90d's answers come at most 11.7 ms
+  after their block, inside its 20 ms of prefill (the pump's deadline
+  holds, with 8 ms to spare; V.42 or PPP work in those 110 ms eats into
+  it; `pump_underruns` on the first live heavy call is the check). Other
+  mixes (32 states, or some options only) are
+  not tried and end as a wrong B1 (`V90M_END_K56_FAILED`).
 - **Every caller hears our answer tone later.** V.8bis comes first (at
   least 400 ms of silence, CRe, the wait for CRd), so ANSam comes, against
   a call without K56flex: 1.790 s later for a caller without V.8bis,
@@ -231,40 +367,101 @@ minimum-distance ladder in linear terms behind the pad reproduces 25 of
 the 39 constellations, and only when each table's first point and
 spacing are given, and none of the 3 dB tables but 32000's.
 
+## Memory
+
+- **The answering side's state sets the memory of a modem.** One modem,
+  either role, is `v90m_mem_size()` octets: 106320 on x86-64, 106016 on
+  ARMv5, within `V90M_MEM_SIZE` (108 KiB) on every port target. The
+  calling side's state, whose modulations after V.8 share memory, is some
+  52 KiB: shrinking the calling side further (such as a union inside the
+  V.90 / V.92 analogue modem's state, some 6 KB) no longer lowers
+  `v90m_mem_size()`; only a smaller answering state (its union of engines,
+  or the V.34 and Phase 2 state outside it) would.
+  (`docs/history/audit-0.6.md`, Task 29.)
+
+## Bounds and clocks
+
+Every wait of a call is bounded, and every end of a call has an end code
+(0.6.0). The limits a program may meet, beyond each standard's own:
+
+- **Phase 2, answering** (V.90, V.92, V.34, x2, K56flex): the INFO
+  exchange ends 20 s after its start (or a restart V.34 counts), and V.90's
+  recovery (9.2.1.2.3) is tried at most 4 times, and a caller's INFO0a
+  after the INFO0 exchange (9.2.1.2.1: it lost our INFO1d, or started over)
+  takes Phase 2 back to INFO0 at most twice (0.6.1). Behind those, a backstop
+  ends the call when V.90's or V.92's Phase 2 (a retrain's included) or
+  V.34's lasts 30 s, or V.90's or V.92's Phases 3 and 4 last 60 s. A normal
+  Phase 2 takes 3 to 5 s.
+- **A retrain's Phase 2, calling** (V.90, V.92, V.34): each repeated INFO0
+  of the answerer counts as one of Phase 2's 4 restarts, and a retrain's
+  Phase 2 ends after 30 s: `V90M_END_RETRAIN_FAILED`. Start-up as a whole
+  has the 60 s limit.
+- **V.22bis, both roles:** the wait for the end of a far S1 ends after 1 s
+  (S1 is 100 ms).
+- **V.92 cleardown, answering:** a caller that never acknowledges our
+  cleardown is given 3.5 s.
+- **LAPM** (`v90m_ec`): `n400` recoveries in a row with I frames
+  unacknowledged release the link (`V90M_EC_R_N400`, some 11 s with the
+  defaults); a busy peer (RNR) is not bounded, by V.42 8.4.7
+  ([error-control.md](error-control.md)).
+- **Long calls:** the sample clocks and counters wrap as unsigned values or
+  stop at their limit; the receivers bring their sample and symbol numbers
+  back every 2^30 in data mode. No call length has a limit of its own; up
+  to 0.5.0 the V.34 receiver stopped after 58 to 62 hours of data mode and
+  the V.90 calling receiver after 74.6 hours. A host that keeps calling
+  `v90m_process_*` after `V90M_EV_ENDED` meets no overflow either.
+- **What is not bounded, by ruling:** an x2 call whose upstream decodes
+  badly but holds its carrier stays up (no watchdog on x2's error rate,
+  above); V.42 with T403 off (the default) does not notice a silent peer
+  while nothing is unacknowledged: the modem's loss of carrier does.
+
 ## CPU
 
 All figures are ARM instructions counted under qemu (ARMv5, gcc -O2);
 cycles on a real ARM926 have not been measured. v90d's box, an ARM926EJ-S
-at 400 MHz, runs the answering modem's V.90 data mode at 32 % of its CPU,
-which makes it about 123 M counted instructions a second.
+at 400 MHz, ran 0.5.0's answering V.90 data mode at 32 % of its CPU, which
+makes it about 122 M counted instructions a second. 0.6.0's figures
+(`docs/history/audit-0.6.md`, "after Phase 3"; README, "Memory and
+CPU"); 0.5.0's in brackets:
 
-- **One V.92 call on the calling side is some 56 to 60 % of that box**
-  (69.4 M a second at 0 ppm clock offset, 73.9 M at 100 ppm, data mode);
-  V.90 calling 44 to 48 %. One call fits with room; two V.92 calls at once
-  do not. What is left is per-tap work of the receiver; further cuts would
-  be numeric and cost rate. (`docs/history/PROGRESS.md`, cpu; README,
-  "Memory and CPU".)
-- The heaviest single tick of a calling V.90 / V.92 call is some 98 k
-  instructions (8 % of a 10 ms block of the box), after the heavy designs
-  were spread over many samples.
-- **x2 data mode costs about twice V.90's: one x2 call per box.** 81.9 M
-  instructions a second at 32000 and 83.7 M at 56000, against V.90
-  answering's 38.9 M measured the same way (`make cost-x2`, second 15 to
-  16 of the call); some two thirds of the box. The cause is the upstream the
-  client dictates: V.34 with the 64-state trellis, non-linear encoding and
+- **One V.92 call on the calling side is some 51 to 55 % of that box**
+  (62.12 M a second at 0 ppm clock offset, 66.52 M at 100 ppm, data mode;
+  0.5.0: 69.95 / 74.32); V.90 calling 38 to 42 % (46.97 / 50.95 M). One
+  call fits with room; two V.92 calls at once (2 x 62.12 = 124.24 M) do
+  not. (`docs/history/PROGRESS.md`, cpu.)
+- The heaviest single tick of a calling V.90 / V.92 call was some 98 k
+  instructions at 0.5.0 (8 % of a 10 ms block of the box), after the
+  heavy designs were spread over many samples; not measured again.
+- The answering V.92 modem measures the caller's gain once per B1u. In
+  any call whose B1u does not sit well on the designed points at scale 1
+  (21 of the 26 recorded calls that reach B1u, working ones among them)
+  that is one tick of some 175 k instructions (14 % of a 10 ms block);
+  14 k otherwise. Not yet spread over ticks.
+- **x2 data mode: one x2 call per box.** 56.58 M instructions a second
+  at 32000 (0.5.0: 82.57), about 1.8 times V.90 answering's 31.19 M
+  measured the same way (`make cost-x2`, second 15 to 16 of the call).
+  With V.42 running at both ends (`make cost-x2-v42`, our endpoint
+  counted), at 32000 / 56000:
+  58.89 / 61.50 M with no compression, 69.24 / 77.19 M with V.42bis,
+  89.25 / 108.78 M with V.44, on text that compresses far beyond real
+  traffic (a ceiling). Two x2 calls with V.42bis would need 2 x 77.19 =
+  154.37 M of about 122 M, and even without compression 2 x 61.50 =
+  123.0 M: one x2 call per box.
+  The cause of the difference from V.90 is the upstream the client
+  dictates: V.34 with the 64-state trellis, non-linear encoding and
   expanded shaping, which x2 gives the server no way to refuse.
-  (`docs/history/PROGRESS.md`, x2 6 and x2 8.)
-- **K56flex data mode costs about what V.90's does: about a third of the
-  box.** 39.0 M instructions a second at 56000, against V.90 answering's
-  38.9 M measured the same way (`make cost-k56`, ARMv5, second 20 to 21
-  of the call, after V.8bis). It asks the client in its MP for the
-  upstream V.90 has (16 states, linear encoding, minimum shaping), and
-  SM56 honours that. A client that ignored the request and sent with 64
-  states, non-linear encoding and expanded shaping, as an x2 client
-  dictates, could not be decoded today; once the receiver followed its MP
-  instead (configuration: x2's receiver decodes that upstream), it would
-  cost what x2 does, about twice V.90's (some 82 M a second, one call per
-  box). (`docs/history/PROGRESS.md`, k56 10.)
+  (`docs/history/PROGRESS.md`, x2 6 and x2 8; `docs/history/audit-0.6.md`.)
+- **K56flex data mode costs about what V.90's does.** 32.12 M
+  instructions a second at 56000 (0.5.0: 39.27), against V.90 answering's
+  31.19 M (`make cost-k56`, ARMv5, second 20 to 21 of the call,
+  after V.8bis). It asks the client in its MP for the upstream V.90 has
+  (16 states, linear encoding, minimum shaping), and SM56 honours that. A
+  client that ignores the request and sends x2's upstream is decoded (see
+  "K56flex (answering)" above) and costs what x2 does: 58.60 M (0.5.0:
+  84.43).
+- **V.42:** an endpoint at 56 kbit/s both ways costs 5.21 / 9.08 / 9.48 M a
+  second with no compression / V.42bis / V.44 (`make cost-v42`; before
+  0.6.0's V.42 work: 7.96 / 11.81 / 12.19).
 
 ## Not implemented
 
@@ -279,17 +476,32 @@ which makes it about 123 M counted instructions a second.
   ends the call (`V90M_END_NO_COMMON`).
 - The calling V.90 / V.92 modem does not measure the echo delay: it uses
   `v90m_cfg.echo_delay` as a fixed value, -1 taken as 0 (`modem/orig.c`).
+- The answering V.90, V.92, x2 and K56flex modems' echo search (echo delay
+  -1) reaches about 3510 samples (439 ms) after the sample is sent; a far
+  echo later than that is not cancelled. With a round trip over 128 ms it
+  covers only the round trip less 128 ms to the round trip plus 32 ms, so
+  a near echo earlier than that is not cancelled
+  ([line-interface.md](line-interface.md), "Echo delay"). V.34 answering
+  has a second canceller for the far echo and reaches about 500 ms.
+- The answering side (V.34, V.90, V.92) still reads the caller's L2 for
+  460 ms of the 500 V.34 11.2.1.2.8 / V.90 9.2.1.1.5 allow; the calling
+  side reads 280 ms since 0.6.0. Shortening it moves the answerer's Tone A
+  and its probe analysis, which changes 624 of the 636 replays of recorded
+  calls, so it waits for those to be checked against the recordings.
 - After the answering V.92 modem retrains because the upstream did not hold
   even the lowest PCM rate, the call goes on as V.90 for its rest, by
   design (`DESIGN.md`, 4.2a).
 
 ## Ports
 
-- **m68k fails under qemu.** On m68k-uclibc, under qemu-m68k, twelve
-  programs built on the V.34 receiver core (`modem/qamrx`) fail; every
-  other target of the port matrix prints what the host prints. The
-  evidence points at the emulator (the result changes with how qemu cuts
-  the program into blocks); there is no m68k hardware to settle it.
-  ([testing.md](testing.md); `docs/history/PROGRESS.md`, ports-2.)
+- **m68k: build with `-fno-omit-frame-pointer`.** GCC 12.3 for m68k (Bootlin
+  stable-2023.08-1), with the frame pointer omitted (-O1 and up), reads an
+  incoming argument from the wrong stack slot around a 64-bit division.
+  The two places in the library where it did are written so that it
+  compiles them right (an assembly scan of the tree finds no other), and
+  the port matrix builds m68k with the flag as well; other versions of gcc,
+  or new code, may meet it elsewhere.
+  Only qemu-m68k has run it; there is no m68k hardware here.
+  ([testing.md](testing.md); `docs/history/PROGRESS.md`, "m68k".)
 
 The API itself is not stable before 1.0 (`CHANGELOG.md`).

@@ -38,9 +38,15 @@ void v34_precode_pc(const v34_params_t *p, int32_t (*xh)[2],
 /* Nearest valid point of 2D subset s (Figure 9 label) to (re, im) in Q7:
  * a point of the L-point constellation when there is no precoding, any
  * grid point otherwise. Returns the metric, V34_M_BIG if the subset has no
- * valid point. pt receives the point in integer units. */
+ * valid point. pt receives the point in integer units. (The decoder takes
+ * all eight at once, v34_slice_subsets.) */
 uint32_t v34_slice_subset(const v34_params_t *p, int re, int im, unsigned s,
                           int16_t pt[2]);
+
+/* All eight at once (what the decoder calls for the 32- and 64-state
+ * codes): m[s], pt[s] for s = 0..7, the same as v34_slice_subset. */
+void v34_slice_subsets(const v34_params_t *p, int re, int im, uint32_t m[8],
+                       int16_t pt[8][2]);
 
 /* Same for the 4-way partition the 16-state code needs: l = 0..3 is the
  * number of clockwise quarter turns (the two low bits of the subset label). */

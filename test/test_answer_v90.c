@@ -1,7 +1,10 @@
 /* The answering modem with V.90 enabled against a V.90 calling peer (V.8
  * calling side, then the Phase 2 analogue side) through the channel
  * simulator: V.8 must select PCM operation and Phase 2 must complete at both
- * ends. A caller without the PCM category must still get V.22bis. */
+ * ends. A caller without the PCM category must still get V.22bis. The whole
+ * call reaches data mode with clean data both ways; after a click in data
+ * mode (Task 20: 0.75 ms of full scale on the line to us) the upstream is
+ * clean from 10 s on. */
 #include <string.h>
 #include "test.h"
 #include "../modem/answer.h"
@@ -31,6 +34,84 @@ typedef struct { uint32_t s; long n, bad; } t5_prbs;
 static int t5_next(t5_prbs *p) { p->s = p->s * 1103515245u + 12345u; return (int)((p->s >> 16) & 1); }
 int  t5_get(void *u) { t5_prbs *p = (t5_prbs *)((void **)u)[0]; p->n++; return t5_next(p); }
 void t5_put(void *u, int b) { t5_prbs *p = (t5_prbs *)((void **)u)[1]; p->n++; if (t5_next(p) != (b & 1)) p->bad++; }
+
+/* the whole V.90 call through the PCM interface: V.8, Phase 2, Phases 3
+ * and 4, then data both ways, for secs of line. Upstream goes through the
+ * simulated line and the codec's mu-law A/D; downstream the peer reads our
+ * octets. click_ms: a click on the line to us that long after we are
+ * connected (Task 20): six samples of full-scale mu-law, 0x80 and 0x00
+ * alternated; 0 none */
+typedef struct { uint32_t s; long n, bad; } fc_prbs;
+static fc_prbs dsrc, dsink, asrc, asink;
+static p34a_t p34;
+typedef struct { long at, click_at, end_at, bad10, n10; } fc_out;
+static void full_call(answer_t *a, int secs, long click_ms, fc_out *r)
+{
+    static v8call_t v8; static p2a_t p2;
+    static void *aio[2], *dio[2];
+    v8_menu_t cm; p2a_cfg pc; p34a_cfg qc; answer_cfg ac; channel_t ch;
+    uint8_t atx = 0xFF; double ctx = 0;
+    long n;
+    int stage = 0;
+
+    r->at = r->click_at = r->end_at = -1; r->bad10 = r->n10 = 0;
+    chan(&ch);
+    memset(&dsrc, 0, sizeof dsrc); memset(&dsink, 0, sizeof dsink);
+    memset(&asrc, 0, sizeof asrc); memset(&asink, 0, sizeof asink);
+    dsrc.s = asink.s = 5; asrc.s = dsink.s = 9;
+    dio[0] = &dsrc; dio[1] = &dsink; aio[0] = &asrc; aio[1] = &asink;
+    memset(&ac, 0, sizeof ac);
+    ac.level = 3000; ac.modes = V8_MOD_V22 | V8_MOD_V21 | ANS_MODE_V90;
+    ac.getbit = t5_get; ac.putbit = t5_put; ac.user = dio;
+    answer_init(a, &ac);
+
+    memset(&cm, 0, sizeof cm);
+    cm.call_function = V8_CALLF_DATA;
+    cm.modes = V8_MOD_V34 | V8_MOD_V22 | V8_MOD_V21; cm.n_mod_octets = 3;
+    cm.has_pcm = 1; cm.pcm = V8_PCM_ANALOG;
+    /* as a real V.90 client's CM (Conexant CX93001, recorded on the box): LAPM asked for, access octet present */
+    cm.has_prot = 1; cm.prot = V8_PROT_LAPM; cm.has_access = 1; cm.access = 0;
+    v8call_init(&v8, FS, 4000, &cm);
+    memset(&pc, 0, sizeof pc);
+    pc.level = 4000; pc.v90 = 1; pc.up_sr = -1; pc.uinfo = 91;
+    pc.info0a.lo3000 = pc.info0a.hi3000 = 1; pc.info0a.lo3200 = pc.info0a.hi3200 = 1;
+    pc.info0a.pwr_reduce = 1; pc.info0a.max_sr_diff = 5; pc.info0a.c1664 = 1;
+
+    for (n = 0; n < (long)secs * FS; n++) {
+        double crx; uint8_t srv; int16_t x;
+        channel_tick(&ch, atx, ctx, &crx, &srv);
+        if (click_ms && r->at >= 0) {
+            r->click_at = r->at + 8L * click_ms;
+            if (n >= r->click_at && n < r->click_at + 6) srv = (n - r->click_at) & 1 ? 0x00 : 0x80;
+            if (n == r->click_at + 8000L * 10) { r->bad10 = dsink.bad; r->n10 = dsink.n; }
+        }
+        atx = answer_tick_pcm(a, srv);
+        x = (int16_t)lround(crx);
+        if (stage == 0) {
+            int16_t o = 0;
+            if (v8call_tick(&v8, x, &o) == V8C_DONE) { stage = 1; p2a_init(&p2, &pc); }
+            ctx = o;
+        } else if (stage == 1) {
+            ctx = p2a_tick(&p2, x);
+            if (p2.state == P2A_DONE) {
+                int sr = p2.info1a.up_sr, hi = p2.info1d.sr[sr].hi_carrier;
+                memset(&qc, 0, sizeof qc);
+                qc.uinfo = 91; qc.sym_rate = sr == 3 ? 3000 : 3200;
+                qc.fc = sr == 3 ? (hi ? 2000.0 : 1800.0) : (hi ? 1920.0 : 3200.0 * 4 / 7);
+                qc.gain = 4000; qc.sil0 = 70 * qc.sym_rate / 1000; qc.ntrn = 600; qc.jd_wait = 50;
+                qc.dil_n = 8; qc.dil_syms = 1200;
+                qc.Kt = 12; qc.Mt = 4; qc.Kd = 32; qc.Md = 41; qc.up_rates = 0x1FFF;
+                qc.getbit = t5_get; qc.putbit = t5_put; qc.user = aio;
+                p34a_init(&p34, &qc);
+                stage = 2;
+            } else if (p2.state == P2A_FAILED) break;
+        } else {
+            ctx = p34a_tick(&p34, atx);
+        }
+        if (r->at < 0 && a->connected) r->at = n;
+        if (a->phase == ANS_FAILED) { r->end_at = n; break; }
+    }
+}
 
 int main(void)
 {
@@ -171,74 +252,15 @@ int main(void)
         CHECK_EQ_I(v8_selected(&v8.jm), 4);
     }
 
-    /* 5. the whole V.90 call through the PCM interface: V.8, Phase 2, Phases 3
-     * and 4, then data both ways. Upstream goes through the simulated line
-     * and the codec's mu-law A/D; downstream the peer reads our octets. */
+    /* 5. the whole V.90 call (full_call) */
     {
-        static v8call_t v8; static p2a_t p2; static p34a_t p34;
-        static struct { uint32_t s; long n, bad; } dsrc, dsink, asrc, asink;
-        v8_menu_t cm; p2a_cfg pc; p34a_cfg qc;
-        uint8_t atx = 0xFF; double ctx = 0;
-        int n, stage = 0, at = -1;
-        extern int  t5_get(void *u); extern void t5_put(void *u, int b);
-        static void *aio[2], *dio[2];
-
-        chan(&ch);
-        memset(&dsrc, 0, sizeof dsrc); memset(&dsink, 0, sizeof dsink);
-        memset(&asrc, 0, sizeof asrc); memset(&asink, 0, sizeof asink);
-        dsrc.s = asink.s = 5; asrc.s = dsink.s = 9;
-        dio[0] = &dsrc; dio[1] = &dsink; aio[0] = &asrc; aio[1] = &asink;
-        memset(&ac, 0, sizeof ac);
-        ac.level = 3000; ac.modes = V8_MOD_V22 | V8_MOD_V21 | ANS_MODE_V90;
-        ac.getbit = t5_get; ac.putbit = t5_put; ac.user = dio;
-        answer_init(&a, &ac);
-
-        memset(&cm, 0, sizeof cm);
-        cm.call_function = V8_CALLF_DATA;
-        cm.modes = V8_MOD_V34 | V8_MOD_V22 | V8_MOD_V21; cm.n_mod_octets = 3;
-        cm.has_pcm = 1; cm.pcm = V8_PCM_ANALOG;
-        /* as a real V.90 client's CM (Conexant CX93001, recorded on the box): LAPM asked for, access octet present */
-        cm.has_prot = 1; cm.prot = V8_PROT_LAPM; cm.has_access = 1; cm.access = 0;
-        v8call_init(&v8, FS, 4000, &cm);
-        memset(&pc, 0, sizeof pc);
-        pc.level = 4000; pc.v90 = 1; pc.up_sr = -1; pc.uinfo = 91;
-        pc.info0a.lo3000 = pc.info0a.hi3000 = 1; pc.info0a.lo3200 = pc.info0a.hi3200 = 1;
-        pc.info0a.pwr_reduce = 1; pc.info0a.max_sr_diff = 5; pc.info0a.c1664 = 1;
-
-        for (n = 0; n < 16 * FS; n++) {
-            double crx; uint8_t srv; int16_t x;
-            channel_tick(&ch, atx, ctx, &crx, &srv);
-            atx = answer_tick_pcm(&a, srv);
-            x = (int16_t)lround(crx);
-            if (stage == 0) {
-                int16_t o = 0;
-                if (v8call_tick(&v8, x, &o) == V8C_DONE) { stage = 1; p2a_init(&p2, &pc); }
-                ctx = o;
-            } else if (stage == 1) {
-                ctx = p2a_tick(&p2, x);
-                if (p2.state == P2A_DONE) {
-                    int sr = p2.info1a.up_sr, hi = p2.info1d.sr[sr].hi_carrier;
-                    memset(&qc, 0, sizeof qc);
-                    qc.uinfo = 91; qc.sym_rate = sr == 3 ? 3000 : 3200;
-                    qc.fc = sr == 3 ? (hi ? 2000.0 : 1800.0) : (hi ? 1920.0 : 3200.0 * 4 / 7);
-                    qc.gain = 4000; qc.sil0 = 70 * qc.sym_rate / 1000; qc.ntrn = 600; qc.jd_wait = 50;
-                    qc.dil_n = 8; qc.dil_syms = 1200;
-                    qc.Kt = 12; qc.Mt = 4; qc.Kd = 32; qc.Md = 41; qc.up_rates = 0x1FFF;
-                    qc.getbit = t5_get; qc.putbit = t5_put; qc.user = aio;
-                    p34a_init(&p34, &qc);
-                    stage = 2;
-                } else if (p2.state == P2A_FAILED) break;
-            } else {
-                ctx = p34a_tick(&p34, atx);
-            }
-            if (at < 0 && a.connected) at = n;
-            if (a.phase == ANS_FAILED) break;
-        }
+        fc_out r;
+        full_call(&a, 16, 0, &r);
         printf("  answer_v90: full call connected at %.2f s: %d bit/s down, %d bit/s up; "
-               "down %ld bits %ld bad, up %ld bits %ld bad\n", at / 8000.0, a.bitrate, a.rx_bitrate,
+               "down %ld bits %ld bad, up %ld bits %ld bad\n", r.at / 8000.0, a.bitrate, a.rx_bitrate,
                asink.n, asink.bad, dsink.n, dsink.bad);
         if (a.phase == ANS_FAILED) printf("    failed: p2 state %d err %d, p34 state %d err %d\n", a.p2.state, a.p2.error, a.p34.state, a.p34.error);
-        CHECK(at > 0);
+        CHECK(r.at > 0);
         CHECK_EQ_I(a.phase, ANS_V90); CHECK_EQ_I(a.modulation, ANS_MOD_V90);
         /* our JM says what a V.90 client needs to hear before it will try V.90:
          * a digital modem ON a digital connection (V.8 6.5, bit b7), and LAPM
@@ -250,6 +272,18 @@ int main(void)
         CHECK(p34.tx_ready && p34.rx_ready);
         CHECK(asink.n > 100000); CHECK_EQ_I(asink.bad, 0);
         CHECK(dsink.n > 40000); CHECK_EQ_I(dsink.bad, 0);
+    }
+
+    /* 6. a click in data mode (Task 20): 0.75 ms of full scale on the line
+     * to us, 2 s after we are connected. From 10 s after it the upstream
+     * is clean, or the call has ended */
+    {
+        fc_out r;
+        full_call(&a, 30, 2000, &r);
+        printf("  answer_v90: a click 2 s into data mode: up %ld bits %ld bad, %ld bits %ld bad from 10 s after it; end %d\n",
+               dsink.n, dsink.bad, dsink.n - r.n10, dsink.bad - r.bad10, answer_end(&a));
+        CHECK(r.at > 0); CHECK(r.click_at > r.at);
+        CHECK((dsink.bad == r.bad10 && dsink.n - r.n10 >= 4L * a.rx_bitrate) || answer_end(&a) != ANS_END_NONE);
     }
 
     T_REPORT("answer_v90");

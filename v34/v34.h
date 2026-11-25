@@ -40,11 +40,60 @@ enum { V34_GPC = 0,      /* call modem:   1 + x^-18 + x^-23 (7-1) */
        V34_GPA = 1 };    /* answer modem: 1 + x^-5  + x^-23 (7-2); the V.90
                             analogue modem uses this one (V.90 6.5) */
 
+/* sr bit k-1 holds the sequence value k bits ago (scrambler: its own
+ * output, descrambler: its input); tap is the polynomial's middle term
+ * (5 or 18). The one copy of this scrambler: modem/v34train.h (v34scr_*),
+ * v90/v90_scr.c and v32/v32_code.c wrap these. */
 typedef struct { uint32_t sr; uint8_t tap; } v34_scr_t;
 
-void v34_scr_init(v34_scr_t *s, int poly);       /* state all zero */
-int  v34_scramble(v34_scr_t *s, int bit);
-int  v34_descramble(v34_scr_t *s, int bit);
+static inline void v34_scr_init(v34_scr_t *s, int poly)    /* state all zero */
+{
+    s->sr = 0;
+    s->tap = (poly == V34_GPA) ? 5 : 18;
+}
+
+static inline int v34_scramble(v34_scr_t *s, int bit)
+{
+    unsigned o = ((unsigned)bit ^ (s->sr >> (s->tap - 1)) ^ (s->sr >> 22)) & 1;
+    s->sr = ((s->sr << 1) | o) & 0x7FFFFF;
+    return (int)o;
+}
+
+static inline int v34_descramble(v34_scr_t *s, int bit)
+{
+    unsigned i = (unsigned)bit & 1;
+    unsigned o = (i ^ (s->sr >> (s->tap - 1)) ^ (s->sr >> 22)) & 1;
+    s->sr = ((s->sr << 1) | i) & 0x7FFFFF;
+    return (int)o;
+}
+
+/* n bits at once, 1 <= n <= 8: the first in time in bit n - 1 of bits, the
+ * last in bit 0; the n output bits are returned the same way. The same as
+ * n calls of v34_scramble / v34_descramble, state included.
+ *
+ * Laid below sr (bit 0 the newest), bit p of the n new bits sees the
+ * sequence j bits before it at bit p + j of (sr << n) | bits, so all n
+ * come from a few shifts of one word. The descrambler's taps are inputs,
+ * all known. The scrambler's are its outputs: those before these n come
+ * from sr, and where the middle tap (5) falls inside them, o[p] = c[p] ^
+ * o[p + tap] is solved by o ^= o >> tap, o ^= o >> 2 tap, ... (the x^-23
+ * tap is always older than the n bits). */
+static inline unsigned v34_scramble_n(v34_scr_t *s, unsigned bits, int n)
+{
+    uint32_t m = ((uint32_t)1 << n) - 1, y = s->sr << n;
+    uint32_t o = ((uint32_t)bits ^ (y >> s->tap) ^ (y >> 23)) & m;
+    int sh;
+    for (sh = s->tap; sh < n; sh *= 2) o ^= o >> sh;
+    s->sr = (y | o) & 0x7FFFFF;
+    return (unsigned)o;
+}
+
+static inline unsigned v34_descramble_n(v34_scr_t *s, unsigned bits, int n)
+{
+    uint32_t m = ((uint32_t)1 << n) - 1, x = (s->sr << n) | ((uint32_t)bits & m);
+    s->sr = x & 0x7FFFFF;
+    return (unsigned)((x ^ (x >> s->tap) ^ (x >> 23)) & m);
+}
 
 /* ---- training signals, 10.1.3 -------------------------------------- */
 
@@ -59,6 +108,9 @@ v34_pt_t v34_sbar_point(unsigned i);
  * Q14 (1.0 = 16384). */
 #define V34_PP_LEN 288
 void v34_pp_point(unsigned i, int16_t *re_q14, int16_t *im_q14);
+/* PP(i)'s angle in units of 30 degrees (0..11): the one generator of the
+ * sequence, which modem/v34train.c's v34_pp() scales its own way */
+unsigned v34_pp_phase(unsigned i);
 
 /* TRN (10.1.3.8) and the J-type modulation (10.1.3.3 for 4 points,
  * 10.1.3.9 for 16 points), which V.90 uses for Ja, CP, E and SCR.
@@ -186,7 +238,8 @@ v34_pt_t v34_slice(const v34_params_t *p, v34_pt_t r);
  * v34_nl_decode() to its equalised point before v34_rx_put(). */
 v34_pt_t v34_nl_encode(const v34_params_t *p, v34_pt_t x);
 /* (9-34): Phi in Q16 for a point of energy e (units^2 * 2^14) in a signal of
- * mean energy energy_q8 (units^2 * 256) */
+ * mean energy energy_q8 (units^2 * 256). e >= 0 (every caller passes a sum
+ * of squares): a large negative e overflows a signed product inside */
 int64_t  v34_nl_phi_q16(uint32_t energy_q8, int64_t e);
 v34_pt_t v34_nl_decode(const v34_params_t *p, v34_pt_t xp);
 
@@ -259,8 +312,11 @@ typedef struct {
     int16_t   xd[V34_XD_LEN][2]; /* inputs delayed to the decision point */
     uint8_t   xmode;         /* 1: fed through v34_rx_put (x domain) */
     uint8_t   k;             /* 0/1: position inside the 4D symbol */
+#ifdef V34_TEST_API     /* the layout differs under V34_TEST_API: never link
+                           v34/test's objects with the library's */
     uint8_t   hard;          /* 1: trellis decoder bypassed (diagnostic) */
     int16_t   hard_y[2];     /* first point of the 4D symbol in that mode */
+#endif
     uint16_t  xd_w, xd_r;    /* write / read positions in xd */
     uint32_t  m1[8];         /* subset metrics of the first 2D symbol */
     /* Viterbi */
@@ -325,15 +381,42 @@ void v34_rx_put(v34_rx_t *rx, v34_pt_t xhat, v34_pt_t *tent);
  * estimate of y(n) directly. tent receives the nearest valid y point. */
 void v34_rx_put_y(v34_rx_t *rx, v34_pt_t yhat, v34_pt_t *tent);
 
+#ifdef V34_TEST_API     /* v34/test only (v34/Makefile defines it) */
 /* Diagnostic: on != 0 bypasses the trellis decoder, every symbol is decided
  * on its own (nearest valid point) with no delay. This is the
  * "symbol-by-symbol slicing" reference the BER test compares against. Call
  * right after v34_rx_init(). */
 void v34_rx_set_hard(v34_rx_t *rx, int on);
 
-/* Force out the decisions still inside the Viterbi decoder (end of test or
- * before a cleardown). Only whole mapping frames are delivered. */
+/* Force out the decisions still inside the Viterbi decoder (end of a test).
+ * Only whole mapping frames are delivered. */
 void v34_rx_flush(v34_rx_t *rx);
+#endif
+
+/* S in data mode (a rate renegotiation, a cleardown): how many of the newest
+ * inputs to v34_rx_put() are S, two points 90 degrees apart sent
+ * alternately (10.1.3.2); 0 when the newest four are not S, or the inputs
+ * came through v34_rx_put_y(). At most the inputs not yet decided: a run
+ * that reaches back that far leaves no data to flush. The two points are
+ * taken from the newest four, the run's start is where the cumulative
+ * match against them is best, on a point 0 (S begins there: 128 symbols
+ * ending on point 0 turned 90 degrees anticlockwise). */
+unsigned v34_rx_s_run(const v34_rx_t *rx);
+
+/* 1 when the newest two inputs to v34_rx_put() could be S's two points (one
+ * size within about 12 %, 90 degrees apart within about 14 degrees): S may
+ * have just reached the decoder, too new for v34_rx_s_run() */
+int v34_rx_s_begins(const v34_rx_t *rx);
+
+/* Force out the whole mapping frames that end at least one mapping frame
+ * (8 symbols) before the n newest inputs (n = v34_rx_s_run(): the data the
+ * far end sent before S). The margin covers a start of S found late (its
+ * first points turned by the channel): no frame that S cut, or that holds S,
+ * is delivered; an S that began on a frame boundary costs the frame before
+ * it. The path through them is the survivor that
+ * costs least over them, not the one through what followed. Inputs through
+ * v34_rx_put() only; with v34_rx_put_y(), or hard decisions, nothing. */
+void v34_rx_flush_before(v34_rx_t *rx, unsigned n);
 
 /* Smoothed squared distance between the received points and the decoded
  * path, per 2D symbol, in units^2 * 256 (so it estimates the noise variance

@@ -1,0 +1,3 @@
+test_ans_table: every answering phase has a scheme row
+  17 phases, 17 with a scheme and its tick
+test_ans_table: 51 checks, 0 failures

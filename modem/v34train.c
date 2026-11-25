@@ -3,14 +3,13 @@
 #include "qamrx.h"
 #include "sintab.h"
 
-/* QRX_REF * sqrt(2) * cos(n * 30 deg) */
+/* QRX_REF * sqrt(2) * cos(n * 30 deg), rounded: not v34_pp_point()'s Q14
+ * cosines scaled (8192 * 5793 / 16384 is 2896.5 at 60 deg, here 2896) */
 static const int16_t c12[12] = { 5793, 5017, 2896, 0, -2896, -5017, -5793, -5017, -2896, 0, 2896, 5017 };
 
 void v34_pp(int i, int32_t *re, int32_t *im)
 {
-    int k = (i / 4) % 12, I = i % 4;        /* the pattern repeats every 12 values of k */
-    int a = k * I + ((k % 3) == 1 ? 4 : 0);
-    a %= 12;
+    unsigned a = v34_pp_phase((unsigned)i);
     *re = c12[a];
     *im = c12[(a + 9) % 12];                /* sin(x) = cos(x - 90 deg) */
 }
@@ -21,31 +20,23 @@ void v34_rot4(int q, int32_t *re, int32_t *im)
     *re = xr[q & 3] * QRX_REF; *im = xi[q & 3] * QRX_REF;
 }
 
+/* v34.h's S and S-bar, from its Q7 units (point 0 = (V34_ONE, V34_ONE)) to
+ * QRX_REF ones: exact */
+typedef char v34train_qrx_scale[(QRX_REF % V34_ONE == 0) ? 1 : -1];
+static void from_q7(v34_pt_t p, int32_t *re, int32_t *im)
+{
+    *re = (int32_t)p.re * (QRX_REF / V34_ONE);
+    *im = (int32_t)p.im * (QRX_REF / V34_ONE);
+}
+
 void v34_s(int n, int len, int32_t *re, int32_t *im)
 {
-    /* the last symbol is point 0 turned +90 deg (= 270 deg clockwise) */
-    v34_rot4(((len - 1 - n) & 1) ? 0 : 3, re, im);
+    from_q7(v34_s_point((unsigned)n, (unsigned)len), re, im);
 }
 
 void v34_sbar(int n, int32_t *re, int32_t *im)
 {
-    v34_rot4((n & 1) ? 1 : 2, re, im);      /* 180 deg, then 270 deg anticlockwise */
-}
-
-void v34scr_init(v34scr_t *s, int poly) { s->sr = 0; s->tap = poly; }
-
-int v34scr_put(v34scr_t *s, int bit)
-{
-    int o = (bit ^ (int)(s->sr >> (s->tap - 1)) ^ (int)(s->sr >> 22)) & 1;
-    s->sr = ((s->sr << 1) | (uint32_t)o) & 0x7fffff;
-    return o;
-}
-
-int v34scr_get(v34scr_t *s, int bit)
-{
-    int o = (bit ^ (int)(s->sr >> (s->tap - 1)) ^ (int)(s->sr >> 22)) & 1;
-    s->sr = ((s->sr << 1) | (uint32_t)(bit & 1)) & 0x7fffff;
-    return o;
+    from_q7(v34_sbar_point((unsigned)n), re, im);
 }
 
 void v34trn_init(v34trn_t *t, int poly) { v34scr_init(&t->scr, poly); }
@@ -77,8 +68,7 @@ int sdet_tick(sdet_t *d, int16_t x)
     int32_t c = sintab[((d->ph >> 22) + SIN_N / 4) & SIN_MASK], s = sintab[(d->ph >> 22) & SIN_MASK];
     int16_t pr = (int16_t)((x * c) >> 15), pi = (int16_t)(-(x * s) >> 15);
     int32_t or_, oi;
-    int64_t z2, o2, p, thr;
-    int ev = 0, old;
+    int ev = 0, old, on = 0;
 
     d->ph += d->dph;
     old = (d->mpos - d->len) & 31;
@@ -91,20 +81,25 @@ int sdet_tick(sdet_t *d, int16_t x)
     d->zpos = (d->zpos + 1) & 31;
 
     d->pw += ((int64_t)x * x - d->pw) / 64;
-    z2 = (int64_t)d->sr * d->sr + (int64_t)d->si * d->si;
-    o2 = (int64_t)or_ * or_ + (int64_t)oi * oi;
-    p = (int64_t)d->sr * or_ + (int64_t)d->si * oi;
-    /* S carries half its power in the carrier line: |z|^2 = len^2 P / 4 */
-    thr = (d->pw * d->len * d->len) / d->div;
+    if (d->pw > 400) {
+        /* S carries half its power in the carrier line: |z|^2 = len^2 P / 4.
+         * div is 8 or 16 wherever the modem sets it: divisions by those
+         * constants are shifts, not a 64-bit division every sample */
+        int64_t e = d->pw * d->len * d->len;
+        int64_t thr = d->div == 16 ? e / 16 : d->div == 8 ? e / 8 : e / d->div;
+        on = (int64_t)d->sr * d->sr + (int64_t)d->si * d->si > thr;
+    }
 
     if (d->holdoff > 0) d->holdoff--;
-    if (d->pw > 400 && z2 > thr) {
+    if (on) {
         d->present++;
     } else {
         if (d->present >= SDET_PRESENT) d->holdoff = -(d->len + 4);   /* armed */
         d->present = 0;
     }
     if (d->holdoff < 0) {
+        int64_t o2 = (int64_t)or_ * or_ + (int64_t)oi * oi;
+        int64_t p = (int64_t)d->sr * or_ + (int64_t)d->si * oi;
         d->holdoff++;
         /* reversed, and already half-way to full amplitude the other way */
         if (p < -(o2 / 2)) { ev = 1; d->holdoff = 400; }

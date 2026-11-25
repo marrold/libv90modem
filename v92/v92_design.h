@@ -125,6 +125,7 @@ typedef struct {
     int      cut;               /* times the final trial failed */
     uint32_t xpk_q4;            /* largest |x(n)| over its RMS in the final trial, Q4 */
     uint32_t rng;
+    uint32_t usum;              /* sum of u(n)^2 / 2^14 in the trial */
     int64_t  pacc, iacc, xacc, imax;
     int32_t  xh[256];           /* x(n) of a trial, linear * 2^V92_XQ */
     int      pass;              /* 0: first trial, measuring the interference; then

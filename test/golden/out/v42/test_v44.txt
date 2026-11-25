@@ -1,0 +1,11 @@
+  compression ratio (characters in / octets out), mode chosen by the encoder
+                                 | V.42 bis       | V.44
+  data                    octets | 512/32 2048/32 | 512/32/1024 1024/255/3072 2048/32/4096 2048/255/4096
+  text (generated)        300000 |   2.04    2.89 |   2.05    2.40    2.48    2.48
+  html (generated)        300000 |   1.66    2.92 |   1.93    2.51    2.66    2.67
+  random (generated)      300000 |   0.99    0.99 |   0.99    0.99    0.99    0.99
+  binary (generated)      300000 |   2.43    2.21 |   2.24    2.36    2.38    2.38
+  runs (generated)        300000 |   8.94    9.23 |  20.04   39.22   21.56   39.60
+  all256 (generated)      300000 |   0.98    1.49 |   0.98    0.98    0.98    0.98
+  mixed (generated)       300000 |   1.54    1.60 |   1.49    1.55    1.59    1.60
+test_v44: 149078 checks, 0 failures

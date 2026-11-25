@@ -123,7 +123,11 @@ typedef enum {
 #define ORIG_END_CLEARDOWN  6   /* the answerer called for a cleardown (V.32bis R3 or E; V.34 11.7) */
 #define ORIG_END_HANGUP     7   /* we cleared down (orig_cleardown, V.34 11.7) */
 #define ORIG_END_RETRAIN    8   /* V.90 / V.92: a retrain failed, or one more was due past the
-                                   limit (V90A_MAX_RETRAINS; the receiver's then cleared down) */
+                                   limit (V90A_MAX_RETRAINS; the receiver's then cleared down);
+                                   V.34, once connected: too many retrains in a row, or a
+                                   retrain that failed (its Phase 2, or past V34O_RT_P2_MS
+                                   in it; its Phases 3 and 4, the carrier lost in them
+                                   included) */
 
 typedef struct {
     int           level;     /* transmit RMS, 16-bit sample units */
@@ -144,13 +148,17 @@ typedef struct {
 typedef struct {
     orig_cfg   cfg;
     orig_phase phase;
-    int32_t    t;            /* samples in this phase */
+    int32_t    t;            /* samples in this phase (saturates) */
     int        used_v8;      /* the answerer spoke V.8 */
     v8orig_t   v8;
-    v22bis_t   v22;
-    v32_t      v32;
-    v34orig_t  v34;
-    v90a_t     v90;
+    /* the engine after V.8, by phase: one at a time, so they share memory
+     * (each start_* initialises its own). ORIG_LEGACY (Annex A) runs the
+     * V.22bis and V.32bis callers together, and Bell 212A is V.22bis's */
+    union {
+        struct { v22bis_t v22; v32_t v32; } leg;   /* ORIG_LEGACY, ORIG_V22, ORIG_V32 */
+        v34orig_t v34;                             /* ORIG_V34 */
+        v90a_t    v90;                             /* ORIG_V90 */
+    } e;
     v21mod_t   fmod; v21demod_t fdem; arx_t uart;
     int        fbit; int32_t cd_run; int64_t cd_thresh;
     int16_t    bpf[128]; int bpos;  /* V.21 channel 2 receive band-pass history */

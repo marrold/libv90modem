@@ -42,6 +42,7 @@ enum { F_JA, F_CPT, F_SUVU, F_CPU };
 static void load_frame(v92a_t *p, int which, int ack)
 {
     int unit = p->ml.nbits * 12;
+    if (p->in_reneg && p->cfg.reneg_no_ack) ack = 0;
     p->frpos = 0; p->fr_kind = which; p->fr_ack = ack;
     if (which == F_JA) p->frn = v92_ja_build(&p->ja, p->fr);
     else if (which == F_CPT) p->frn = v92_cpu_build(&p->cpt, 12, p->fr);
@@ -149,6 +150,7 @@ static double up_symbol(v92a_t *p)
     case VA_TRN2U:
         a = (double)v92_ml_tx(&p->ml, 0) / sqrt(p->ml.nbits == 3 ? 21.0 : 5.0);
         if (!p->in_reneg && cfg->suvd_wait > 0 && p->un >= cfg->suvd_wait && p->suvd_n == 0) { unext(p, VA_DOWN); break; }
+        if (p->in_reneg && cfg->reneg_no_suvu) break;
         if (p->un % 12 == 0 && (p->un >= (p->in_reneg ? 2400 : cfg->trn2u_min) || p->suvd_n > 0)) {
             p->cpu_sent = 0; p->ack_sent = 0; p->since_cpu = 0; p->since_suvu = 0;
             load_frame(p, F_SUVU, p->cpd_n > 0);
@@ -281,7 +283,8 @@ static void train_frame_done(v92a_t *p, const uint8_t *bits, int D)
             if (r > 0) { p->suvd_n++; if (s.ack) p->suvd_ack = 1; }
         } else {
             r = v92_cpd_parse(p->mb, p->mbn, D, &p->cpd_new);
-            if (r > 0) {
+            if (r > 0 && p->cpd_dropped < p->cfg.drop_cpd) p->cpd_dropped++;     /* missed */
+            else if (r > 0) {
                 p->cpd = p->cpd_new; p->cpd_n++;
                 if (p->cfg.first_cpd_plain && p->cpd_n == 1 && p->cpd.ack) p->us = VA_DOWN;
                 if (p->cpd.ack) p->cpd_ack = 1;

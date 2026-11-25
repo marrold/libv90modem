@@ -4,7 +4,7 @@
  * script", "Records", "Upstream"): RE of D-Modem
  * (https://github.com/D-Modem/D-Modem, docs/dsp/x2-details.md) and of
  * courier-emu (https://github.com/cryan209/courier-emu). Facts only; no code
- * of either. The receive parts are p34d's. */
+ * of either. The receiver is p34d's (v34up). */
 #include <string.h>
 #ifdef X2D_TRACE
 #include <stdio.h>
@@ -13,6 +13,7 @@
 #define TR(...) ((void)0)
 #endif
 #include "x2d.h"
+#include "clock.h"
 #include "x2rec.h"
 #include "v34mp.h"
 #include "p2ans.h"
@@ -42,9 +43,6 @@ int16_t x2d_trace_tx(const x2d_t *d, int16_t y);    /* tools/trace.c: what the b
 #define T_E_MS         6000     /* our first record to its E */
 #define T_B1_MS        3000     /* its E to B1 received and our start segment sent */
 #define T_RENEG_MS     6000     /* the client's S in data mode to data again */
-#define CD_LOSS_SYMS   1600     /* about half a second without signal in data mode */
-#define Q_BAD_SYMS     3200
-#define Q_DEAD_MSE     (65536 / 8)  /* -9 dB: nothing is being received */
 
 enum { RX_WAIT_S, RX_KNOWN, RX_J, RX_SRES, RX_P4, RX_RN, RX_DATA, RX_IDLE };
 
@@ -52,7 +50,7 @@ static void end(x2d_t *d, int err)
 {
     TR("X2D %.3f end %d (state %d, rxmode %d)\n", d->now / 8000.0, err, (int)d->state, d->rxmode);
     d->state = X2D_ENDED; d->error = err; d->t = 0;
-    d->tx_ready = d->rx_ready = 0;
+    d->tx_ready = d->up.rx_ready = 0;
     d->rxmode = RX_IDLE;
 }
 
@@ -67,6 +65,7 @@ int x2d_init(x2d_t *d, const x2d_cfg *cfg)
     x2tx_init(&d->tx);
     ec_init(&d->ec); d->ec_mu = -1;
     ecdly_init(&d->ecd, d->cfg.echo_delay < 0 ? 0 : d->cfg.echo_delay);
+    ecdly_near(&d->ecd, d->cfg.rtd);
     d->sym_rate = v34_symbol_rate(idx);
     v34_carrier(idx, cfg->marker & 1, &d->car_num, &d->car_den);
     d->rxmode = RX_WAIT_S;
@@ -74,8 +73,8 @@ int x2d_init(x2d_t *d, const x2d_cfg *cfg)
     if (d->sym_rate != 3000 && d->sym_rate != 3200) { end(d, X2D_ERR_CFG); return -1; }
     sdet_init(&d->sdet, d->sym_rate, d->car_num, d->car_den);
     d->sdet.div = 16;               /* nothing but S can be on the line */
-    qamrx_init(&d->rx, d->sym_rate, d->car_num, d->car_den);
-    v34_tdem_init(&d->tdem, V34_GPA, 4);
+    qamrx_init(&d->up.rx, d->sym_rate, d->car_num, d->car_den);
+    v34_tdem_init(&d->up.tdem, V34_GPA, 4);
     tonedet_init(&d->tone_a, TONEDET_2400);
     return 0;
 }
@@ -92,6 +91,14 @@ int x2d_cleardown(x2d_t *d)
 
 /* ---- the client's MP ---- */
 
+/* the client's upstream at rate (x2-facts.md "Upstream") */
+static void up_cfg(const x2d_t *d, v34_cfg_t *c, int rate)
+{
+    memset(c, 0, sizeof *c);
+    c->symbol_rate = (uint16_t)d->sym_rate; c->data_rate = (uint16_t)rate;
+    c->trellis = V34_TRELLIS_64; c->expanded = 1; c->nonlinear = 1; c->scrambler = V34_GPA;
+}
+
 /* the highest rate of the client's upstream mask (word 1, bit n - 1 for
  * n x 2400 bit/s; at most 28800, "Upstream") that we can receive */
 static int pick_up_rate(x2d_t *d, uint16_t w1)
@@ -101,10 +108,8 @@ static int pick_up_rate(x2d_t *d, uint16_t w1)
         v34_cfg_t c;
         if (!((w1 >> (n - 1)) & 1)) continue;
         if (d->cfg.max_up_rate && n * 2400 > d->cfg.max_up_rate) continue;
-        memset(&c, 0, sizeof c);
-        c.symbol_rate = (uint16_t)d->sym_rate; c.data_rate = (uint16_t)(n * 2400);
-        c.trellis = V34_TRELLIS_64; c.expanded = 1; c.nonlinear = 1; c.scrambler = V34_GPA;
-        if (v34_params_init(&d->vpar, &c) == 0) return n * 2400;     /* (set again at E) */
+        up_cfg(d, &c, n * 2400);
+        if (v34_params_init(&d->up.par, &c) == 0) return n * 2400;   /* (set again at E) */
     }
     return 0;
 }
@@ -146,34 +151,22 @@ static void put_data(void *user, int bit)
 {
     x2d_t *d = (x2d_t *)user;
     /* from B1 on (as p34d), while our start segment may still be going down */
-    if (d->rx_ready && d->cfg.putbit) d->cfg.putbit(d->cfg.user, bit);
+    if (d->up.rx_ready && d->cfg.putbit) d->cfg.putbit(d->cfg.user, bit);
 }
 
 /* E has just ended: B1 starts with the next symbol */
 static void rx_begin_data(x2d_t *d)
 {
     v34_cfg_t c;
-    memset(&c, 0, sizeof c);
-    c.symbol_rate = (uint16_t)d->sym_rate; c.data_rate = (uint16_t)d->up_rate;
-    c.trellis = V34_TRELLIS_64; c.expanded = 1; c.nonlinear = 1; c.scrambler = V34_GPA;
-    if (v34_params_init(&d->vpar, &c) != 0) { end(d, X2D_ERR_UP); return; }
-    v34_rx_init(&d->vrx, &d->vpar, put_data, d);
-    d->vgain = (int32_t)v34_gain_q14(d->vpar.energy_tx_q8);
+    up_cfg(d, &c, d->up_rate);
+    if (v34up_data_begin(&d->up, &c, put_data, d) != 0) { end(d, X2D_ERR_UP); return; }
     d->rxmode = RX_DATA;
-    d->quiet = 0; d->q_dead = 0;
     d->t_mark = d->now;
     sdet_init(&d->sdet, d->sym_rate, d->car_num, d->car_den);     /* watches for S from here on */
     tonedet_init(&d->tone_a, TONEDET_2400);
 }
 
 /* ---- descrambled bits ---- */
-
-static uint16_t word16(const uint8_t *b)
-{
-    uint16_t w = 0; int i;
-    for (i = 0; i < 16; i++) w |= (uint16_t)(b[i] << i);
-    return w;
-}
 
 /* Phase 3: J (V.34's, either kind) twice in a row */
 static void j_bit(x2d_t *d, int bit)
@@ -207,19 +200,19 @@ static void seq_bit(x2d_t *d, int bit)
             if (d->state == X2D_ENDED) return;
         }
     }
+    int sync = seqhunt_bit(&d->sh, bit);
     if (bit) {
         /* inside a record a zero breaks every run at 16 */
-        if (++d->ones == E_ONES && d->got_mp && !d->got_e) {
+        if (d->sh.ones == E_ONES && d->got_mp && !d->got_e) {
             d->got_e = 1;
             TR("X2D %.3f E\n", d->now / 8000.0);
             rx_begin_data(d);
         }
         return;
     }
-    if (d->ones >= 17) {
+    if (sync) {
         memset(d->fbuf, 1, 17); d->fbuf[17] = 0; d->fn = 18;
     }
-    d->ones = 0;
 }
 
 /* The client's S in data mode: its rate change ("Rate change"). Its S,
@@ -228,9 +221,18 @@ static void seq_bit(x2d_t *d, int bit)
  * carrier is locked: S is believed at once (as p34d). */
 static void reneg_begin(x2d_t *d)
 {
-    d->rx_ready = d->tx_ready = 0;
+    /* the frames its V.34 decoder still holds from before S are data: they
+     * go on now, but for a frame of margin (as p34d's s_heard). Called on
+     * each sample from S heard on: an S too new in the decoder is waited
+     * for (SDET_RUN_WAIT) */
+    if (!v34up_s_flush(&d->up, &d->sdet)) return;
+    /* its S before our data ever moved (our start segment going out): no
+     * bit of the host's goes down until our answer's start segment is out
+     * (ones in its place, should the start end before its MP is in) */
+    if (d->state == X2D_START) x2tx_data(&d->tx, d->tx.index, d->tx.pad_mode, NULL, NULL);
+    d->tx_ready = 0;
     d->got_mp = d->got_e = 0; d->cand_ok = 0;
-    d->fn = d->ones = 0;
+    d->fn = d->sh.ones = 0;
     sres_resume(&d->sres);
     d->rxmode = RX_SRES;
     TR("X2D %.3f S in data mode\n", d->now / 8000.0);
@@ -239,21 +241,15 @@ static void reneg_begin(x2d_t *d)
 
 /* ---- one received symbol ---- */
 
-static int16_t clip16(int32_t v) { return (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v); }
-
 static void rx_symbol(x2d_t *d)
 {
-    qamrx_t *r = &d->rx;
-    int32_t dr, di;
-    int n = r->nsym - 1, k;
+    qamrx_t *r = &d->up.rx;
+    int k;
 
-    d->zpw += (((int64_t)r->zr * r->zr + (int64_t)r->zi * r->zi) - d->zpw) / 16;
     switch (d->rxmode) {
     case RX_KNOWN:
-        if (n < V34_PP_LEN) v34_pp(n, &dr, &di); else v34trn_next(&d->ref, &dr, &di);
-        qamrx_update(r, dr, di, QRX_EQ | QRX_CARRIER | (n > 300 ? QRX_TIMING : 0), n < 600 ? 10 : 11);
-        if (n >= V34_PP_LEN + TRN_KNOWN - 1) {
-            v34_tdem_init(&d->tdem, V34_GPA, 4);
+        if (v34up_known(&d->up, TRN_KNOWN)) {
+            v34_tdem_init(&d->up.tdem, V34_GPA, 4);
             d->jsr = 0; d->jbits = d->j_at = 0; d->j_type = 0;
             d->rxmode = RX_J;
         }
@@ -261,22 +257,18 @@ static void rx_symbol(x2d_t *d)
 
     case RX_J: {
         /* 4-point decisions: TRN, then J */
-        v34_pt_t pt; unsigned bits;
-        dr = r->zr < 0 ? -QRX_REF : QRX_REF; di = r->zi < 0 ? -QRX_REF : QRX_REF;
-        qamrx_update(r, dr, di, QRX_EQ | QRX_CARRIER | QRX_TIMING, 12);
-        pt.re = (int16_t)(dr < 0 ? -V34_ONE : V34_ONE); pt.im = (int16_t)(di < 0 ? -V34_ONE : V34_ONE);
-        bits = v34_tdem_put(&d->tdem, pt);
+        unsigned bits = v34up_dec4(&d->up, QRX_EQ | QRX_CARRIER | QRX_TIMING);
         for (k = 0; k < 2 && d->rxmode == RX_J; k++) j_bit(d, (int)((bits >> k) & 1));
         break;
     }
 
     case RX_SRES:
         if (!sres_symbol(&d->sres, r)) break;
-        d->fn = d->ones = 0;
+        d->fn = d->sh.ones = 0;
         if (d->state == X2D_RENEG) {
             /* a rate change: its TRN, MP, MP' and E on 4 points (the
              * Courier's: x2-facts.md "Rate change") */
-            v34_tdem_init(&d->tdem, V34_GPA, 4);
+            v34_tdem_init(&d->up.tdem, V34_GPA, 4);
             TR("X2D %.3f S-bar ended (rate change)\n", d->now / 8000.0);
             d->rxmode = RX_RN;
             break;
@@ -284,7 +276,7 @@ static void rx_symbol(x2d_t *d)
         /* TRN (4 points, then 16), the MP and E on 16 points (the J
          * words: our disassembly's "0343 must equal 09B0", courier-emu);
          * the descrambler finds its way within 23 bits */
-        v34_tdem_init(&d->tdem, V34_GPA, 16);
+        v34_tdem_init(&d->up.tdem, V34_GPA, 16);
         TR("X2D %.3f S-bar ended\n", d->now / 8000.0);
         d->rxmode = RX_P4;
         d->t_mark = d->now;
@@ -294,11 +286,7 @@ static void rx_symbol(x2d_t *d)
         /* 4-point decisions on what follows the client's S-bar in a rate
          * change. The equaliser stays as data mode left it (the signal's
          * scale is not data's); carrier and timing follow */
-        v34_pt_t pt; unsigned bits;
-        dr = r->zr < 0 ? -QRX_REF : QRX_REF; di = r->zi < 0 ? -QRX_REF : QRX_REF;
-        qamrx_update(r, dr, di, QRX_CARRIER | QRX_TIMING, 12);
-        pt.re = (int16_t)(dr < 0 ? -V34_ONE : V34_ONE); pt.im = (int16_t)(di < 0 ? -V34_ONE : V34_ONE);
-        bits = v34_tdem_put(&d->tdem, pt);
+        unsigned bits = v34up_dec4(&d->up, QRX_CARRIER | QRX_TIMING);
         for (k = 0; k < 2 && d->rxmode == RX_RN; k++) seq_bit(d, (int)((bits >> k) & 1));
         break;
     }
@@ -307,46 +295,20 @@ static void rx_symbol(x2d_t *d)
         /* 16-point decisions. The 4-point part of TRN lands between them
          * (its points are the 16-point signal's power, not its inner ring):
          * the equaliser learns only from decisions close to a point */
-        v34_pt_t pt; unsigned bits;
-        int32_t lev = (int32_t)(((int64_t)QRX_REF * v34_gain_q14(V34_ENERGY_16PT_Q8)) >> 14);
-        int qr = r->zr >= 2 * lev ? 3 : r->zr >= 0 ? 1 : r->zr >= -2 * lev ? -1 : -3;
-        int qi = r->zi >= 2 * lev ? 3 : r->zi >= 0 ? 1 : r->zi >= -2 * lev ? -1 : -3;
-        int32_t er, ei;
-        dr = qr * lev; di = qi * lev;
-        er = r->zr - dr; ei = r->zi - di;
-        if (er < 0) er = -er;
-        if (ei < 0) ei = -ei;
-        qamrx_update(r, dr, di, (er < lev / 2 && ei < lev / 2 ? QRX_EQ : 0) | QRX_CARRIER | QRX_TIMING | QRX_DENSE, 12);
-        pt.re = (int16_t)(qr * V34_ONE); pt.im = (int16_t)(qi * V34_ONE);
-        bits = v34_tdem_put(&d->tdem, pt);
+        unsigned bits = v34up_dec16(&d->up, 1);
         for (k = 0; k < 4 && d->rxmode == RX_P4; k++) seq_bit(d, (int)((bits >> k) & 1));
         break;
     }
 
     case RX_DATA: {
-        v34_pt_t in, tent, sent;
-        int64_t g = d->vgain;
-        in.re = clip16((int32_t)(((int64_t)r->zr * 512) / g)); in.im = clip16((int32_t)(((int64_t)r->zi * 512) / g));
-        in = v34_nl_decode(&d->vpar, in);
-        v34_rx_put(&d->vrx, in, &tent);
-        sent = v34_nl_encode(&d->vpar, tent);
-        dr = (int32_t)(((int64_t)sent.re * g) / 512); di = (int32_t)(((int64_t)sent.im * g) / 512);
-        qamrx_update(r, dr, di, QRX_EQ | QRX_CARRIER | QRX_TIMING | QRX_DENSE, 13);
-        if (!d->rx_ready && d->vrx.b1_bits >= d->vpar.map.N) {
-            TR("X2D %.3f B1 %d of %d bits wrong\n", d->now / 8000.0, (int)d->vrx.b1_errors, (int)d->vrx.b1_bits);
-            if (d->vrx.b1_errors * 8 > d->vrx.b1_bits) { end(d, X2D_ERR_B1); return; }
-            d->rx_ready = 1;
-        }
-        if (d->rx_ready && d->state == X2D_DATA) {
-            /* nothing is being received: there is no retrain in x2 */
-            if (r->mse > Q_DEAD_MSE) { if (++d->q_dead > Q_BAD_SYMS) { end(d, X2D_ERR_CARRIER); return; } }
-            else d->q_dead = 0;
-        }
-        if (d->zpw < (int64_t)QRX_REF * QRX_REF / 8) {
-            if (++d->quiet > CD_LOSS_SYMS) end(d, X2D_ERR_CARRIER);
-        } else {
-            d->quiet = 0;
-        }
+        /* nothing being received in data mode ends the call: there is no
+         * retrain in x2 */
+        int was_ready = d->up.rx_ready;
+        int ev = v34up_data(&d->up, d->state == X2D_DATA, 0);
+        if (ev == V34UP_B1_BAD || (!was_ready && d->up.rx_ready))
+            TR("X2D %.3f B1 %d of %d bits wrong\n", d->now / 8000.0, (int)d->up.vrx.b1_errors, (int)d->up.vrx.b1_bits);
+        if (ev == V34UP_B1_BAD) end(d, X2D_ERR_B1);
+        else if (ev != V34UP_NONE) end(d, X2D_ERR_CARRIER);
         break;
     }
 
@@ -360,22 +322,16 @@ static void rx_symbol(x2d_t *d)
  * our preamble; first the delay (when not known), then the canceller */
 static void ec_schedule(x2d_t *d, int16_t rxs)
 {
-    int32_t n = d->tx.n, from = MS(EC_QUIET_MS) + d->cfg.rtd + MS(EC_GUARD_MS);
-    if (d->cfg.echo_delay < 0) {
-        if (ecdly_measure(&d->ecd, n - from, rxs, 1)) ec_init(&d->ec);
-        from += ECDLY_SAMPLES;
-    }
-    if (n < from) d->ec_mu = -1;
-    else if (n < from + EC_FAST) d->ec_mu = 0;
-    else d->ec_mu = 3;
+    int32_t from = MS(EC_QUIET_MS) + d->cfg.rtd + MS(EC_GUARD_MS);
+    d->ec_mu = v34up_ec_schedule(&d->ec, &d->ecd, d->cfg.echo_delay < 0, 1, rxs, d->tx.n, &from, EC_FAST, 0);
 }
 
 /* the waits of the client's Phase 4 */
 static int p4_late(const x2d_t *d)
 {
     if (d->rxmode == RX_SRES)
-        return d->now - d->t_mark > X2TX_LEAD_N + X2TX_PRE_N + X2TX_TRN_N + MS(T_S4_MS) + 2 * d->cfg.rtd;
-    return !d->got_mp && d->now - d->t_mark > MS(T_MP_MS);
+        return clk_diff(d->now, d->t_mark) > X2TX_LEAD_N + X2TX_PRE_N + X2TX_TRN_N + MS(T_S4_MS) + 2 * d->cfg.rtd;
+    return !d->got_mp && clk_diff(d->now, d->t_mark) > MS(T_MP_MS);
 }
 
 uint8_t x2d_tick(x2d_t *d, int16_t rxs)
@@ -397,20 +353,20 @@ uint8_t x2d_tick(x2d_t *d, int16_t rxs)
 
     /* receiver */
     if (d->rxmode == RX_WAIT_S) {
-        (void)qamrx_tick(&d->rx, x);            /* input level for the AGC */
+        (void)qamrx_tick(&d->up.rx, x);         /* input level for the AGC */
         if (sdet_tick(&d->sdet, x)) {
-            /* PP(0) is centred 16.5 symbols after the S / S-bar boundary,
-             * and the event came SDET_DELAY samples after it */
-            int32_t dl = (int32_t)(((int64_t)132000 * 256) / d->sym_rate) - (SDET_DELAY(&d->sdet) + 1) * 256;
-            qamrx_sync(&d->rx, dl);
-            v34trn_init(&d->ref, V34T_GPA);
+            v34up_sync_pp(&d->up, &d->sdet, d->sym_rate);
+            v34trn_init(&d->up.ref, V34T_GPA);
             d->rxmode = RX_KNOWN;
         }
     } else {
-        if (qamrx_tick(&d->rx, x)) rx_symbol(d);
+        if (v34up_tick(&d->up, x, d->rxmode == RX_DATA)) rx_symbol(d);
         if (d->state == X2D_ENDED) return 0x7f;
-        if (d->rxmode == RX_DATA && d->state == X2D_DATA) {
-            /* the client's S in data mode: its rate change (facts "Rate change") */
+        if (d->rxmode == RX_DATA && (d->state == X2D_DATA || d->state == X2D_START || d->state == X2D_RENEG)) {
+            /* the client's S in data mode: its rate change (facts "Rate
+             * change"); from our start segment on (its B1; its E is a record
+             * before it), ours not yet out too (else its S would be decoded
+             * as data until heard: Task 10d) */
             (void)sdet_tick(&d->sdet, x);
             if (d->sdet.present >= SDET_PRESENT) reneg_begin(d);
         }
@@ -438,23 +394,23 @@ uint8_t x2d_tick(x2d_t *d, int16_t rxs)
     case X2D_REC:
         if (d->got_e && !d->e_sent) { x2tx_go(&d->tx); d->e_sent = 1; }   /* the start after this record */
         if (d->tx.seg == X2TX_START) enter(d, X2D_START);
-        else if (!d->got_e && d->now - d->t_mark > MS(T_E_MS)) end(d, X2D_ERR_NO_E);
+        else if (!d->got_e && clk_diff(d->now, d->t_mark) > MS(T_E_MS)) end(d, X2D_ERR_NO_E);
         break;
     case X2D_START:
         /* data moves from our start's last frame: the owner hears of it
          * (V90M_EV_DATA_MOVING) before the first bit of data is taken */
         if (x2tx_data_next(&d->tx)) d->tx_ready = 1;
-        if (d->tx_ready && d->rx_ready) {
+        if (d->tx_ready && d->up.rx_ready) {
             d->down_rate = x2tx_rate(&d->tx);
             enter(d, X2D_DATA);
-        } else if (d->now - d->t_mark > MS(T_B1_MS)) {
+        } else if (clk_diff(d->now, d->t_mark) > MS(T_B1_MS)) {
             end(d, X2D_ERR_B1);
         }
         break;
     case X2D_RENEG:
         /* our answer is out once x2tx is back in data with no change pending */
         if (d->got_mp && x2tx_data_next(&d->tx)) d->tx_ready = 1;
-        if (d->tx_ready && d->rx_ready) {
+        if (d->tx_ready && d->up.rx_ready) {
             d->down_rate = x2tx_rate(&d->tx);
             enter(d, X2D_DATA);
         } else if (d->t > MS(T_RENEG_MS)) {

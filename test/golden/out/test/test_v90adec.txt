@@ -1,0 +1,38 @@
+round trip through the digital transmitter: B1d (48 frames of ones), then 400 data frames
+  mu-law Sr 0 ld 0: 92736 bits, 0 wrong
+  mu-law Sr 0 ld 1: 92736 bits, 0 wrong
+  mu-law Sr 0 ld 2: 92736 bits, 0 wrong
+  mu-law Sr 0 ld 3: 92736 bits, 0 wrong
+  mu-law Sr 1 ld 0: 90048 bits, 0 wrong
+  mu-law Sr 1 ld 1: 90048 bits, 0 wrong
+  mu-law Sr 1 ld 2: 90048 bits, 0 wrong
+  mu-law Sr 1 ld 3: 90048 bits, 0 wrong
+  mu-law Sr 2 ld 0: 87360 bits, 0 wrong
+  mu-law Sr 2 ld 1: 87360 bits, 0 wrong
+  mu-law Sr 2 ld 2: 87360 bits, 0 wrong
+  mu-law Sr 2 ld 3: 87360 bits, 0 wrong
+  mu-law Sr 3 ld 0: 84672 bits, 0 wrong
+  mu-law Sr 3 ld 1: 84672 bits, 0 wrong
+  mu-law Sr 3 ld 2: 84672 bits, 0 wrong
+  mu-law Sr 3 ld 3: 84672 bits, 0 wrong
+  A-law  Sr 0 ld 0: 92736 bits, 0 wrong
+  A-law  Sr 0 ld 1: 92736 bits, 0 wrong
+  A-law  Sr 0 ld 2: 92736 bits, 0 wrong
+  A-law  Sr 0 ld 3: 92736 bits, 0 wrong
+  A-law  Sr 1 ld 0: 90048 bits, 0 wrong
+  A-law  Sr 1 ld 1: 90048 bits, 0 wrong
+  A-law  Sr 1 ld 2: 90048 bits, 0 wrong
+  A-law  Sr 1 ld 3: 90048 bits, 0 wrong
+  A-law  Sr 2 ld 0: 87360 bits, 0 wrong
+  A-law  Sr 2 ld 1: 87360 bits, 0 wrong
+  A-law  Sr 2 ld 2: 87360 bits, 0 wrong
+  A-law  Sr 2 ld 3: 87360 bits, 0 wrong
+  A-law  Sr 3 ld 0: 84672 bits, 0 wrong
+  A-law  Sr 3 ld 1: 84672 bits, 0 wrong
+  A-law  Sr 3 ld 2: 84672 bits, 0 wrong
+  A-law  Sr 3 ld 3: 84672 bits, 0 wrong
+decision errors
+  one sign wrong in frame 1 (Sr 2): bits wrong per frame 0 2 2 0
+  a Ucode outside the constellation: -34 (D 34)
+  labels of R0 = 7^6 - 1 >= 2^15: -21
+v90adec: 398 checks, 0 failures

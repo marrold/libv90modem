@@ -1,0 +1,6 @@
+V.92 Phase 2: the analogue modem (p2call) against the digital modem (p2d)
+  both V.92, PCM upstream allowed    analogue 13 at 1873 ms, digital 12 at 1877 ms: INFO0a v92 1, INFO0d v92 1, mode 2, pcm 1; INFO1a pcm 1, UINFO 90, MD 0, sections 3, Ltot 384, Lmax 320
+  both V.92, INFO1d bit 70 = 0       analogue 13 at 1873 ms, digital 12 at 1877 ms: INFO0a v92 1, INFO0d v92 1, mode 1, pcm 0; INFO1a pcm 0, UINFO 90, MD 0, sections 0, Ltot 192, Lmax 128
+  the digital modem V.90 only        analogue 13 at 1873 ms, digital 12 at 1877 ms: INFO0a v92 1, INFO0d v92 0, mode 1, pcm 0; INFO1a pcm 0, UINFO 90, MD 0, sections 0, Ltot 192, Lmax 128
+  ours with V.92 off                 analogue 13 at 1873 ms, digital 12 at 1877 ms: INFO0a v92 0, INFO0d v92 1, mode 1, pcm 0; INFO1a pcm 0, UINFO 90, MD 0, sections 0, Ltot 192, Lmax 128
+p2v92a: 46 checks, 0 failures

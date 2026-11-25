@@ -1,0 +1,2 @@
+  V.92 / V.92, PCM upstream: mode 2 after 2.02 s, rtd 46
+p2_v92: 103 checks, 0 failures

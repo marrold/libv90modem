@@ -228,7 +228,9 @@ static int call(const call_t *c, const line_t *ln, int data)
     return ok;
 }
 
-int main(void)
+/* the cases (test/test.h, t_case_arg): each call on each line, then each
+ * fallback call, then each of the three calls that must not connect */
+int main(int argc, char **argv)
 {
     static const call_t calls[] = {
         { "Bell 103, to our answerer",            P_ANSWER, ORIG_MODE_BELL103, ANS_ALL,
@@ -254,33 +256,48 @@ int main(void)
         { "V.22 and Bell, 2225 Hz-only 103 answerer", P_B103A, V8_MOD_V22 | V8_MOD_V21 | ORIG_MODE_BELL212A | ORIG_MODE_BELL103, 0,
           ORIG_MOD_BELL103, ANS_MOD_BELL103, 0, 300 },
     };
+    enum { NC = sizeof calls / sizeof calls[0], NF = sizeof fallbacks / sizeof fallbacks[0],
+           C_FALL = NC * NLINES, C_NONE = C_FALL + NF * 2, NCASES = C_NONE + 3 };
     int i, l;
+    const int only = t_case_arg(argc, argv, NCASES);
 
-    printf("Bell calls, 10.5 s of data each way (bits: data bits compared)\n");
-    for (i = 0; i < (int)(sizeof calls / sizeof calls[0]); i++)
-        for (l = 0; l < NLINES; l++) call(&calls[i], &LINES[l], 1);
+    for (i = 0; i < NC; i++)
+        for (l = 0; l < NLINES; l++) {
+            if (!T_CASE(only, i * NLINES + l + 1)) continue;
+            if (i == 0 && l == 0) printf("Bell calls, 10.5 s of data each way (bits: data bits compared)\n");
+            call(&calls[i], &LINES[l], 1);
+        }
 
-    printf("fallbacks\n");
-    for (i = 0; i < (int)(sizeof fallbacks / sizeof fallbacks[0]); i++)
-        for (l = 0; l < 2; l++) call(&fallbacks[i], &LINES[l], fallbacks[i].want_mod != ORIG_MOD_V22BIS || l == 0);
+    for (i = 0; i < NF; i++)
+        for (l = 0; l < 2; l++) {
+            if (!T_CASE(only, C_FALL + i * 2 + l + 1)) continue;
+            if (i == 0 && l == 0) printf("fallbacks\n");
+            call(&fallbacks[i], &LINES[l], fallbacks[i].want_mod != ORIG_MOD_V22BIS || l == 0);
+        }
 
-    printf("no call\n");
-    /* 212A only, the answerer 103 only: it never plays 2225 Hz, and we never send 1270 Hz */
-    start(P_ANSWER, ORIG_MODE_BELL212A, V8_MOD_V22 | V8_MOD_V21 | ANS_MODE_BELL103, &LINES[1]);
-    run(MS(45000));
-    printf("  212A only, answerer 103 only: phase %d, end %d; answerer phase %d, modulation %d\n", O.phase, O.end, A.phase, A.modulation);
-    CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_NO_CARRIER); CHECK_EQ_I(A.modulation, ANS_MOD_NONE);
-    /* Bell not offered: the 2225 Hz-only answerer is no answer tone to us (as before) */
-    start(P_B212A, V8_MOD_V22 | V8_MOD_V21, 0, &LINES[1]);
-    run(MS(12000));
-    printf("  no Bell offered, 2225 Hz-only answerer: phase %d, end %d\n", O.phase, O.end);
-    CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_NO_TONE);
-    /* Bell offered, no answer at all */
-    start(P_B103A, ORIG_MODE_BELL212A | ORIG_MODE_BELL103, 0, &LINES[1]);
-    peer_kind = -1;
-    run(MS(12000));
-    printf("  Bell offered, nobody answers: phase %d, end %d\n", O.phase, O.end);
-    CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_NO_TONE);
+    if (T_CASE(only, C_NONE + 1)) {
+        printf("no call\n");
+        /* 212A only, the answerer 103 only: it never plays 2225 Hz, and we never send 1270 Hz */
+        start(P_ANSWER, ORIG_MODE_BELL212A, V8_MOD_V22 | V8_MOD_V21 | ANS_MODE_BELL103, &LINES[1]);
+        run(MS(45000));
+        printf("  212A only, answerer 103 only: phase %d, end %d; answerer phase %d, modulation %d\n", O.phase, O.end, A.phase, A.modulation);
+        CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_NO_CARRIER); CHECK_EQ_I(A.modulation, ANS_MOD_NONE);
+    }
+    if (T_CASE(only, C_NONE + 2)) {
+        /* Bell not offered: the 2225 Hz-only answerer is no answer tone to us (as before) */
+        start(P_B212A, V8_MOD_V22 | V8_MOD_V21, 0, &LINES[1]);
+        run(MS(12000));
+        printf("  no Bell offered, 2225 Hz-only answerer: phase %d, end %d\n", O.phase, O.end);
+        CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_NO_TONE);
+    }
+    if (T_CASE(only, C_NONE + 3)) {
+        /* Bell offered, no answer at all */
+        start(P_B103A, ORIG_MODE_BELL212A | ORIG_MODE_BELL103, 0, &LINES[1]);
+        peer_kind = -1;
+        run(MS(12000));
+        printf("  Bell offered, nobody answers: phase %d, end %d\n", O.phase, O.end);
+        CHECK_EQ_I(O.phase, ORIG_FAILED); CHECK_EQ_I(O.end, ORIG_END_NO_TONE);
+    }
 
     T_REPORT("orig_bell");
 }

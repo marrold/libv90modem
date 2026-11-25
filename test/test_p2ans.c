@@ -675,5 +675,25 @@ int main(void)
     CHECK_EQ_I(r.a.error, P2N_ERR_INFO0);
     CHECK(r.n < 8000 * 12);
 
+    /* ---- bounds (spec D5): a caller that repeats INFO0c ---- */
+    memset(&s, 0, sizeof s);
+    s.d_ca = 20; s.d_ac = 24; s.g_ca = 0.5; s.g_ac = 0.5; s.noise = 2.0;
+    caller_cfg(&cc);
+    /* for ever, never answering our Tone A reversal (WAIT_BREV1 -> INFO0
+     * each time): the exchange clock, 20 s from the start */
+    cc.info0_repeat = -1; s.seconds = 60;
+    run(&s, &r, &ac, &cc);
+    printf("  p2ans INFO0c for ever: state %d error %d at %.2f s, INFO0c %d\n",
+           (int)r.a.state, r.a.error, r.n / 8000.0, r.c.n_info0c);
+    CHECK_EQ_I(r.a.state, P2N_FAILED); CHECK_EQ_I(r.a.error, P2N_ERR_TIME);
+    CHECK(r.n >= 8 * P2N_EXCHANGE_MS); CHECK(r.n <= 8 * (20000 + 100));
+    CHECK(r.c.n_info0c > 20);       /* the loop really ran */
+    /* a few repeats are no fault: Phase 2 completes */
+    cc.info0_repeat = 3; s.seconds = 0;
+    run(&s, &r, &ac, &cc);
+    CHECK_EQ_I(r.a.state, P2N_DONE); CHECK_EQ_I(r.c.state, P2C_DONE);
+    CHECK_EQ_I(r.c.n_info0c, 4);
+    caller_cfg(&cc);
+
     T_REPORT("p2ans");
 }

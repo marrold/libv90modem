@@ -1,0 +1,11 @@
+  x2tx TRN: 20004 octets, 0 not at b1 / 31, 20004 ones after the descrambler
+  x2tx J words: 100 of 100 as expected
+  x2tx sync: 1667 frames, 40008 of 40008 bits ones
+  x2tx records: 4 sent, 4 decode as F33C 7FFF 0000
+  x2tx start: 680 of 680 frames ones in levels B
+  x2tx data: 48000 bits, 0 wrong; 32000 bit/s
+  x2tx rate change to index 1, pad mode 0: marker 0 bad; records 10 733C then 33 F33C (0 bad); ones 1 + 681 frames; data 24000 bits on, 0 wrong; 32000 bit/s
+  x2tx rate change to index 12, pad mode 0: marker 0 bad; records 10 733C then 33 F33C (0 bad); ones 1 + 681 frames; data 39000 bits on, 0 wrong; 52000 bit/s
+  x2tx rate change to index 14, pad mode 0: marker 0 bad; records 10 733C then 33 F33C (0 bad); ones 1 + 681 frames; data 41000 bits on, 0 wrong; 54666 bit/s
+  x2tx rate change to index 8, pad mode 2: marker 0 bad; records 10 733C then 33 F33C (0 bad); ones 1 + 681 frames; data 35000 bits on, 0 wrong; 46666 bit/s
+x2tx: 109 checks, 0 failures

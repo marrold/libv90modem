@@ -23,7 +23,12 @@ static vl_t L;
 
 typedef struct { const char *name; double km, ppm, noise, pad; int rbs, alaw; } line_t;
 
-int main(void)
+/* a case (test/test.h, t_case_arg) is one line in V.90 or V.92: V.90's
+ * lines are cases 1 .. 9, V.92's 10 .. 18. A case run alone checks its own
+ * calls; the closing count of a modulation is printed with its last line
+ * (the bad calls of all its lines, or of that case's own when it runs
+ * alone: its calls are the only ones the program then knows of) */
+int main(int argc, char **argv)
 {
     static const line_t LN[] = {
         { "2 km,    0 ppm",                2,    0, -75, 0, 0, 0 },
@@ -41,12 +46,15 @@ int main(void)
 #else
     enum { NS = 6 };
 #endif
+    enum { NL = sizeof LN / sizeof LN[0] };
     int v92, i, s, bad[2] = { 0, 0 }, calls = 0;
+    const int only = t_case_arg(argc, argv, 2 * NL);
     for (v92 = 0; v92 <= 1; v92++) {
-        printf("%s: 9 lines x %d seeds, 10 s of data each way\n", v92 ? "V.92" : "V.90", NS);
-        for (i = 0; i < (int)(sizeof LN / sizeof LN[0]); i++) {
+        for (i = 0; i < NL; i++) {
             char row[160];
             int n = 0, lo = 99999, hi = 0;
+            if (!T_CASE(only, v92 * NL + i + 1)) continue;
+            if (i == 0) printf("%s: 9 lines x %d seeds, 10 s of data each way\n", v92 ? "V.92" : "V.90", NS);
             n += snprintf(row + n, sizeof row - (size_t)n, "  %-30s", LN[i].name);
             for (s = 0; s < NS; s++) {
                 vl_cfg c;
@@ -81,10 +89,13 @@ int main(void)
             }
             snprintf(row + n, sizeof row - (size_t)n, " down %5d .. %5d", lo, hi);
             printf("%s\n", row);
+            if (only) CHECK_EQ_I(bad[v92], 0);
+            if (i == NL - 1) {
+                printf("  %d of %d calls bad\n", bad[v92], 9 * NS);
+                if (!only) CHECK_EQ_I(bad[v92], 0);
+            }
         }
-        printf("  %d of %d calls bad\n", bad[v92], 9 * NS);
-        CHECK_EQ_I(bad[v92], 0);
     }
-    CHECK(calls == 18 * NS);
+    CHECK(calls == (only ? NS : 18 * NS));
     T_REPORT("orig_seeds");
 }

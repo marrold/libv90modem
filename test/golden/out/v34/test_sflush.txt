@@ -1,0 +1,10 @@
+  3200 sym/s 28800 bit/s, 16 states, S clean: S found 14..14 of 14, at most 144 bits lost (72 a frame), 0 wrong
+  3200 sym/s 28800 bit/s, 16 states, S turned 30 deg for 5: S found 8..8 of 14, at most 144 bits lost (72 a frame), 0 wrong
+  3000 sym/s 26400 bit/s, 64 states, S clean: S found 14..14 of 14, at most 141 bits lost (71 a frame), 0 wrong
+  3000 sym/s 26400 bit/s, 64 states, S turned 30 deg for 5: S found 8..8 of 14, at most 141 bits lost (71 a frame), 0 wrong
+  3429 sym/s 33600 bit/s, 32 states, S clean: S found 14..14 of 14, at most 157 bits lost (79 a frame), 0 wrong
+  3429 sym/s 33600 bit/s, 32 states, S turned 30 deg for 5: S found 8..8 of 14, at most 157 bits lost (79 a frame), 0 wrong
+  no S at the end: data 0, 45 degrees 0, unequal sizes 0 (0: nothing flushed); S coming 0 0 0
+  S 2 symbols in: run 0, S coming 1
+  S 3 symbols in: run 0, S coming 1
+test_sflush: 157 checks, 0 failures

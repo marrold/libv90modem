@@ -6,7 +6,8 @@
  *   A-law octet    = (0x80 | Ucode) ^ 0x55      (even bit inversion applied)
  *   A-law linear   = (2s + 1) << 3              for chord 0
  *                    (2s + 33) << (c + 2)       for chords 1..7
- * test/test_pcm.c checks all 128 rows against the printed table. */
+ * test/test_pcm.c checks all 128 rows against the printed table. An octet's
+ * linear value is read from v90_pcm_tab.c, this form tabulated. */
 #include "v90_pcm.h"
 
 uint8_t v90_pcm_octet(int alaw, unsigned ucode, int positive)
@@ -44,9 +45,4 @@ unsigned v90_octet_ucode(int alaw, uint8_t octet)
 int v90_octet_sign(uint8_t octet)
 {
     return (octet >> 7) & 1;
-}
-
-int32_t v90_octet_linear(int alaw, uint8_t octet)
-{
-    return v90_pcm_linear(alaw, v90_octet_ucode(alaw, octet), v90_octet_sign(octet));
 }

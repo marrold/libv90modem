@@ -1,0 +1,5 @@
+the V.90 caller against the answerer, Te moved: 22 calls per line, 10 s of data each
+  0 km, +100 ppm            0 of 22 calls bad, downstream 46666 .. 46666 bit/s
+  2 km,  +30 ppm            0 of 22 calls bad, downstream 49333 .. 52000 bit/s
+  2 km,  -50 ppm, A-law     0 of 22 calls bad, downstream 46666 .. 48000 bit/s
+orig_v90_te: 3 checks, 0 failures

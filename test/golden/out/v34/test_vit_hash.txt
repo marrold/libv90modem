@@ -1,0 +1,13 @@
+  3200/19200 16 states minimum, noise 0: 111112 symbols, 55556 steps, 665904 bits, hash 23abae0f
+  3200/24000 32 states expanded, precoded, noise 0: 111112 symbols, 55556 steps, 832380 bits, hash cea8a495
+  3000/21600 64 states minimum, noise 0: 111112 symbols, 55556 steps, 799142 bits, hash 09dc8dd6
+  3200/19200 16 states minimum, noise 1: 111112 symbols, 55556 steps, 665904 bits, hash 05a8c2f7
+  3200/24000 32 states expanded, precoded, noise 1: 111112 symbols, 55556 steps, 832380 bits, hash db24f85e
+  3000/21600 64 states minimum, noise 1: 111112 symbols, 55556 steps, 799142 bits, hash fa9dfdfb
+  3200/19200 16 states minimum, noise 2: 111112 symbols, 55556 steps, 665904 bits, hash 1be5571b
+  3200/24000 32 states expanded, precoded, noise 2: 111112 symbols, 55556 steps, 832380 bits, hash 722a48cd
+  3000/21600 64 states minimum, noise 2: 111112 symbols, 55556 steps, 799142 bits, hash c4627df0
+  slicer: grid step 40, 10000 random points a set; 50 constellations without precoding (8 of 8 points or fewer)
+  slicer: precoded, ymax 9 47 227
+  slicer: 4367576 points, 0 differences, hash f32f79ac
+vit_hash: 22 checks, 0 failures

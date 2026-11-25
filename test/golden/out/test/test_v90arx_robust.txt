@@ -1,0 +1,24 @@
+1. data mode, then Ucode 0 only, 3 s
+  survived; state 3, decision power 0, ppm +0.03
+2. a tone near 1333 Hz taken for Sd, then reversed
+   1290.00 Hz: state 3, clock -115.74 ppm
+   1300.00 Hz: state 3, clock -21.45 ppm
+   1310.00 Hz: state 3, clock +43.75 ppm
+   1320.00 Hz: state 3, clock +870.66 ppm
+   1330.00 Hz: state 3, clock +905.98 ppm
+   1333.33 Hz: state 3, clock +16.14 ppm
+   1340.00 Hz: state 3, clock -1000.00 ppm
+   1345.00 Hz: state 3, clock -994.64 ppm
+   1347.00 Hz: state 3, clock -1000.00 ppm
+   1348.00 Hz: state 3, clock -966.98 ppm
+   1349.00 Hz: state 3, clock -1000.00 ppm
+   1350.00 Hz: state 3, clock -999.95 ppm
+   1351.00 Hz: state 3, clock -995.08 ppm
+   1352.00 Hz: state 3, clock -1000.00 ppm
+   1354.00 Hz: state 3, clock -1000.00 ppm
+   1356.00 Hz: state 3, clock -93.03 ppm
+   1360.00 Hz: state 3, clock +95.57 ppm
+   1370.00 Hz: state 3, clock -54.41 ppm
+3. a downstream 1500 ppm fast, 4 s
+  clock followed to -1000.00 ppm, always within 1000 ppm: 1
+v90arx_robust: 21 checks, 0 failures

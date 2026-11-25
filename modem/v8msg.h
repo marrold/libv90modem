@@ -75,5 +75,11 @@ void v8_build_jm(const v8_menu_t *cm, const v8_menu_t *local, v8_menu_t *jm);
 #define V8_SEL_V90 100
 #define V8_SEL_V34 1            /* Table 4 item 1: V.34 */
 int v8_selected(const v8_menu_t *jm);
+/* The same, read by the calling (analogue) modem: PCM operation only when
+ * the JM names a digital modem (V8_PCM_DIGITAL), since V.90 / V.92 analogue
+ * operation needs one at the far end; a JM naming "PCM analogue" alone (an
+ * analogue V.90 / V.92 modem answering) leaves V.34 or whatever else is
+ * common. */
+int v8_selected_caller(const v8_menu_t *jm);
 
 #endif

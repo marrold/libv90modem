@@ -2,6 +2,7 @@
  * Recommendation text. Clause numbers in comments refer to V.44. */
 #include <string.h>
 #include "v44_comp.h"
+#include "comp_out.h"
 
 #if V44COMP_MAX_CODEWORDS < 256 || V44COMP_MAX_CODEWORDS > 65535
 #error "V44COMP_MAX_CODEWORDS must be 256..65535"
@@ -51,14 +52,18 @@ static int ext_bits(int n7)
 }
 
 /* ------------------------------------------------- encoder: transfer */
-static void put_octet(v44comp_enc_t *e, unsigned o)
-{
-    e->out_octets++;
-    if (e->ovf_len == e->ovf_pos && e->out && e->out_len < e->out_max)
-        e->out[e->out_len++] = (uint8_t)o;
-    else if (e->ovf_len < V44COMP_OVF)
-        e->ovf[e->ovf_len++] = (uint8_t)o;
-}
+COMP_OUT_WRITER(v44comp_enc_t, V44COMP_OVF)
+
+/* The most one step puts out (comp_out.h): the end of a string extension
+ * where matching is brought to an end (enc_finish_step): up to 7 bits
+ * held, the codeword after every STEPUP from 6 bits up to N1, each with
+ * its prefix bit, a string-extension length (at most 6 + 8 bits, Table 4),
+ * REINIT for the node-tree it filled, ETM or FLUSH, and 0 bits to the
+ * octet boundary. A character in transparent mode is two octets (7.14),
+ * entering compressed mode two (6.5.2). */
+#define N1_MAX COMP_OUT_BITS(V44COMP_MAX_CODEWORDS)
+#define STEP_MAX ((7 + (N1_MAX - 6 + 3) * (N1_MAX + 1) + 14 + 7) / 8)
+COMP_OUT_FITS(v44comp_step_fits_ovf, STEP_MAX, V44COMP_OVF);
 
 /* 6.6: the least significant bit of a code follows the most significant
  * bit of the one before; bit 1 of an octet goes first. In transparent mode
@@ -68,23 +73,14 @@ static void put_bits(v44comp_enc_t *e, uint32_t v, int n)
 {
     e->win_bits += (uint32_t)n;
     if (!e->compressed) return;
-    e->bitbuf |= v << e->nbits;
-    e->nbits += n;
-    while (e->nbits >= 8) {
-        put_octet(e, e->bitbuf & 0xFF);
-        e->bitbuf >>= 8;
-        e->nbits -= 8;
-    }
+    out_bits(e, v, n);
 }
 
 /* 0 bits up to the octet boundary (6.6) */
 static void pad_to_octet(v44comp_enc_t *e)
 {
-    if (e->nbits > 0) {
-        e->win_bits += (uint32_t)(8 - e->nbits);
-        put_octet(e, e->bitbuf & 0xFF);
-        e->bitbuf = 0; e->nbits = 0;
-    }
+    if (e->nbits > 0) e->win_bits += (uint32_t)(8 - e->nbits);
+    out_pad(e);
 }
 
 /* 6.6.1, Table 5: prefix "1", the code in C2 bits */
@@ -300,8 +296,8 @@ static void enc_step(v44comp_enc_t *e)
 static void enter_compressed(v44comp_enc_t *e)
 {
     dict_reset(e);
-    put_octet(e, e->esc);
-    put_octet(e, V44COMP_ECM);
+    out_octet(e, e->esc);
+    out_octet(e, V44COMP_ECM);
     e->compressed = 1;
     e->bitbuf = 0; e->nbits = 0;
     e->win_chars = 0; e->win_bits = 0;
@@ -411,9 +407,9 @@ static int enc_run(v44comp_enc_t *e, const uint8_t *in, size_t inlen, size_t *us
             e->dirty = 1;
             if (!e->compressed) {
                 /* 6.6: as it is, octet aligned; 7.14 */
-                put_octet(e, c);
+                out_octet(e, c);
                 if (c == e->esc) {
-                    put_octet(e, V44COMP_EID);
+                    out_octet(e, V44COMP_EID);
                     e->esc = (uint8_t)(e->esc + ESCAPE_STEP);
                 }
             }
@@ -454,15 +450,7 @@ void v44comp_enc_policy(v44comp_enc_t *e, int policy)
 
 size_t v44comp_enc_pending(const v44comp_enc_t *e)
 {
-    return (size_t)(e->ovf_len - e->ovf_pos);
-}
-
-static void enc_begin(v44comp_enc_t *e, uint8_t *out, size_t outmax, size_t outlen)
-{
-    e->out = out; e->out_max = outmax; e->out_len = outlen;
-    while (e->ovf_pos < e->ovf_len && e->out_len < e->out_max)
-        e->out[e->out_len++] = e->ovf[e->ovf_pos++];
-    if (e->ovf_pos == e->ovf_len) { e->ovf_pos = 0; e->ovf_len = 0; }
+    return out_pending(e);
 }
 
 size_t v44comp_encode(v44comp_enc_t *e, const uint8_t *in, size_t inlen,
@@ -470,10 +458,9 @@ size_t v44comp_encode(v44comp_enc_t *e, const uint8_t *in, size_t inlen,
 {
     size_t used = 0;
 
-    enc_begin(e, out, outmax, *outlen);
+    out_begin(e, out, outmax, *outlen);
     enc_run(e, in, inlen, &used, 0);
-    *outlen = e->out_len;
-    e->out = NULL;
+    *outlen = out_end(e);
     return used;
 }
 
@@ -482,17 +469,16 @@ int v44comp_flush(v44comp_enc_t *e, uint8_t *out, size_t outmax, size_t *outlen)
     size_t used = 0;
     int done;
 
-    enc_begin(e, out, outmax, *outlen);
+    out_begin(e, out, outmax, *outlen);
     done = enc_run(e, NULL, 0, &used, 1);
-    *outlen = e->out_len;
-    e->out = NULL;
+    *outlen = out_end(e);
     return done && e->ovf_len == 0;
 }
 
 void v44comp_enc_put(v44comp_enc_t *e, int type, unsigned value,
                      uint8_t *out, size_t outmax, size_t *outlen)
 {
-    enc_begin(e, out, outmax, *outlen);
+    out_begin(e, out, outmax, *outlen);
     switch (type) {
     case V44COMP_CODE_ORDINAL:  put_ordinal(e, value & 0xFF); break;
     case V44COMP_CODE_CODEWORD: put_codeword(e, value); break;
@@ -506,8 +492,7 @@ void v44comp_enc_put(v44comp_enc_t *e, int type, unsigned value,
         }
         break;
     }
-    *outlen = e->out_len;
-    e->out = NULL;
+    *outlen = out_end(e);
 }
 
 /* --------------------------------------------------------------- decoder */

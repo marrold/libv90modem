@@ -1,0 +1,30 @@
+ANSam, the library's own transmitter (modem/ansam)
+  peak 5602, reversals 0: ANSam at 0.400 s
+  peak 5602, reversals 1: ANSam at 0.400 s
+  peak  223, reversals 0: ANSam at 0.400 s
+  peak  223, reversals 1: ANSam at 0.400 s
+ANSam and ANS, written here from V.8 7.2 and V.25
+  ANSam -12 dBm0, reversals                                  ANSam at 0.400 s
+  ANSam -12 dBm0, no reversals                               ANSam at 0.400 s
+  ANSam -42 dBm0                                             ANSam at 0.400 s
+  ANSam 0 dBm0                                               ANSam at 0.400 s
+  ANSam 10 Hz high (a carrier shift on the line)             ANSam at 0.400 s
+  ANSam 10 Hz low                                            ANSam at 0.400 s
+  ANSam -30 dBm0 in noise 12 dB below                        ANSam at 0.400 s
+  ANSam at the narrowest envelope V.8 allows (0.81..1.19)    ANSam at 0.400 s
+  ANSam starting off the block grid                          ANSam at 0.398 s
+  ANS -12 dBm0, reversals (V.25)                             ANS at 0.400 s
+  ANS -12 dBm0, no reversals                                 ANS at 0.400 s
+  ANS -40 dBm0                                               ANS at 0.400 s
+  ANS -30 dBm0 in noise 12 dB below                          ANS at 0.400 s
+  ANS with a level step and a phase jump (V.8 7.2 NOTE 1)    ANS at 0.800 s
+  ANSam with the same transient                              ANSam at 0.400 s
+ANS is never taken for ANSam, wherever its reversals fall
+  24 starting offsets: 0 not ANS
+not an answer tone
+  ANSam at -50 dBm0, below the floor                         nothing at -1.000 s
+  1800 Hz with the same modulation                           nothing at -1.000 s
+  2250 Hz (a V.22bis answerer's unscrambled ones)            nothing at -1.000 s
+  white noise at -20 dBm0                                    nothing at -1.000 s
+  dial tone 350 + 440 Hz: nothing; 500 + 1300 + some 2100 Hz: nothing
+anstone: 45 checks, 0 failures

@@ -21,8 +21,10 @@
  * beside the echo). The difference takes a flat tail away and leaves the
  * start standing.
  *
- * Fixed-point, no allocation. Used by p34d (V.90), ../v92/v92_p34d (V.92)
- * and v34dx (V.34). */
+ * Fixed-point, no allocation. Used by p34d (V.90), ../v92/v92_p34d (V.92),
+ * x2d (x2), k56d (K56flex), each searching near the round trip
+ * (ecdly_near), and v34dx (V.34), which searches for its own path's delay
+ * and puts a second canceller a round trip after it. */
 #ifndef V90D_MODEM_ECDLY_H
 #define V90D_MODEM_ECDLY_H
 #include <stdint.h>

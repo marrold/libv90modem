@@ -1,0 +1,5 @@
+x2map: data levels, running sum within +-35840 from 500 frames after the switch
+x2map: 45 banks, 0 entries not as the facts, 49 mode 1 levels no octet arrives as; 90000 frames, 0 not as the model or not back
+x2map: mode 2's received lists as mode 0's at 90 of 90 positions
+x2map: D-Modem's mapper's octets (oracle run) at 12 of 12 rate/pad pairs, 4000 frames each
+test_x2map: 59 checks, 0 failures

@@ -6,15 +6,24 @@
 # qemu-ppc-static:-cpu:e500mc; tools/winerun; or - for none), prints what
 # it prints, keeps a copy in OUTDIR/<its path under BUILD>.txt (its exit
 # status in .status, its run time in seconds in .time) for the comparison
-# with the reference target, and returns its exit status. SKIP is a file of such paths, one per line, not
-# to run on this target (or -): a skipped program prints one line and passes.
+# with the reference target, and returns its exit status; a case of a split
+# program (PROGRAM N) is kept as <path>:N. SKIP is a file of such paths
+# (programs, without a case), one per line, not to run on this target (or
+# -): a skipped program prints one line (each case of it one) and passes.
 b=$1; o=$2; skip=$3; run=$4; shift 4
-key=${1#"$b"/}
-if [ "$skip" != - ] && grep -qxF "$key" "$skip"; then
+prog=${1#"$b"/}
+[ "$run" = - ] && run="" || run=$(echo "$run" | tr ':' ' ')
+# a split program's case count (the Makefile's SPLIT_TESTS): asked, not kept
+if [ "${2:-}" = --cases ]; then
+    # shellcheck disable=SC2086
+    exec $run "$@"
+fi
+# one case of it (PROGRAM N) is kept as <path>:N
+key=$prog${2:+:$2}
+if [ "$skip" != - ] && grep -qxF "$prog" "$skip"; then
     echo "portrun: $key skipped on this target"
     exit 0
 fi
-[ "$run" = - ] && run="" || run=$(echo "$run" | tr ':' ' ')
 mkdir -p "$(dirname "$o/$key")"
 t0=$(date +%s)
 # shellcheck disable=SC2086

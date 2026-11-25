@@ -30,6 +30,8 @@ typedef struct {
     double ppm;                 /* the caller's clock against ours */
     double foff_ca, foff_ac;    /* frequency offset of each direction, Hz */
     int mute_ca_from, mute_ca_to;   /* caller -> answer dead in this window (samples) */
+    long click_at;              /* > 0: from this sample, six samples to the answer modem
+                                   replaced by full scale, + and - alternated (0.75 ms) */
 } line34_cfg;
 
 typedef int16_t (*line34_tick_fn)(void *modem, int16_t rx);
@@ -119,6 +121,7 @@ static int16_t line34_step(line34_t *l, line34_tick_fn atick, void *am, line34_t
     v += c->far_a * (0.7 * l34_at(l->la, l->pos, c->io_delay + c->d_ac + c->d_ca + 1)
                      + 0.4 * l34_at(l->la, l->pos, c->io_delay + c->d_ac + c->d_ca + 4));
     v += c->noise * rng_gauss(&l->rng);
+    if (c->click_at > 0 && l->n >= c->click_at && l->n < c->click_at + 6) v = (l->n - c->click_at) & 1 ? -32124.0 : 32124.0;
     l->arx = (int16_t)l34_codec(c->rx_lin ? 0 : c->law, v);
     l->pos = (l->pos + 1) & (L34_MAXD - 1);
     l->n++;

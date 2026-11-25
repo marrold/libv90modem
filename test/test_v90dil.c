@@ -55,6 +55,28 @@ static void test_design(void)
     CHECK_EQ_I(bad, 0);
     CHECK_EQ_I(firsts, 2 * V90DIL_NU);
     CHECK(firsts_ok);
+    /* no training symbol above a third of full scale (either law): a
+     * softphone's gain control held down louder codewords and read what
+     * followed low (modem/v90dil.h); every Ucode up to there is asked for */
+    {
+        int law, i, top[2] = { -1, -1 }, all = 1;
+        uint8_t seen[128];
+        for (law = 0; law < 2; law++) {
+            int32_t fs = v90_ucode_linear(law, 127);
+            memset(seen, 0, sizeof seen);
+            for (i = 0; i < d.n; i++) {
+                int u = d.train[i] & 127;
+                seen[u] = 1;
+                if (u > top[law]) top[law] = u;
+            }
+            CHECK(3 * v90_ucode_linear(law, (unsigned)top[law]) <= fs);
+            for (i = 0; i < 128 && 3 * v90_ucode_linear(law, (unsigned)i) <= fs; i++) if (!seen[i]) all = 0;
+        }
+        printf("  loudest Ucode asked for %d (mu-law %d, A-law %d of full scale %d, %d)\n", top[0],
+               (int)v90_ucode_linear(0, (unsigned)top[0]), (int)v90_ucode_linear(1, (unsigned)top[1]),
+               (int)v90_ucode_linear(0, 127), (int)v90_ucode_linear(1, 127));
+        CHECK(all);
+    }
 }
 
 /* the level Ucode u arrives at through pad and robbed bit (Table 1 units) */

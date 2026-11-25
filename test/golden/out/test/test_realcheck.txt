@@ -1,0 +1,41 @@
+real callers' sequences: our parser, and our builders given what it read (32 extracts)
+V.8 CM (V.8 6, 7.3)
+  cxa       CM c1 65 13 94 2a 0d 27: modes 0x141a, pcm 1, protocol 1, access 0; ours from it c1 65 13 94 2a 27 0d
+  usr7      CM c1 65 13 10 27 0d: modes 0x001a, pcm 1, protocol -1, access 0; ours from it c1 65 13 10 27 0d
+  x2r2      CM c1 65 13 10 27 0d: modes 0x001a, pcm 1, protocol -1, access 0; ours from it c1 65 13 10 27 0d
+  v34a      CM c1 45 13 94 2a: modes 0x141a, pcm -1, protocol 1, access -1; ours from it c1 45 13 94 2a
+  ours      CM c1 65 13 90 2a 27 0d
+Phase 2: INFO0a / INFO0c (Table 14/V.34, 16/V.92), INFO1a (10/V.90, 18/V.92), INFO1c (15/V.34)
+  cxa       INFO0a: rates all 1, V.92 1; ours from it the same bits
+  usr7      INFO0a: rates all 1, V.92 1; ours from it the same bits
+  x2r2      INFO0a: rates all 1, V.92 0; ours from it the same bits
+  v34a      INFO0c: rates all 1, V.92 0; ours from it the same bits
+  ours      INFO0a: 3000 and 3200 both carriers, power reduction, 1664 points, V.92 0
+  ours      INFO0a (V.92): 3000 and 3200 both carriers, power reduction, 1664 points, V.92 1
+  cxa       INFO1a: kind 2, bits 12:17 0x00, md 0, UINFO 79, up_sr 6, bits 40:49 0x3fd; ours from it differs in 40:49 and the CRC only
+  usr7      INFO1a: kind 2, bits 12:17 0x04, md 0, UINFO 78, up_sr 6, bits 40:49 0x3ff; ours from it the same bits
+  ab_cc_v90 INFO1a: kind 1, bits 12:17 0x00, md 0, UINFO 79, up_sr 4, bits 40:49 0x3fd; ours from it the same bits
+  usr7      INFO1a: kind 1, bits 12:17 0x00, md 0, UINFO 78, up_sr 4, bits 40:49 0x000; ours from it the same bits
+  x2r2      INFO1a: kind 1, bits 12:17 0x00, md 0, UINFO 78, up_sr 4, bits 40:49 0x000; ours from it the same bits
+  v34a      INFO1c: power reduction 3, 3000 / 3200 at 11 / 13 x 2400, 0.06 Hz low; ours from it the same bits
+Phase 3: Ja (8.3.1/V.90, 8.5.4/V.92)
+  ab_cc_v90 Ja (V.90, 1498 bits): DIL N 119, Lsp 124, Ltp 126, H1 22, REF 79; ours from it the same bits
+  f1        Ja (V.90, 2058 bits): DIL N 197, Lsp 66, Ltp 66, H1 10, REF 0; ours from it the same bits
+  x2r2      Ja (V.90, 2058 bits): DIL N 197, Lsp 66, Ltp 66, H1 10, REF 0; ours from it the same bits
+  cxa       Ja (V.92, 1536 bits): DIL N 119, rates 0x7ffff; ours from it the same bits
+  usr7      Ja (V.92, 2092 bits): DIL N 197, rates 0x7ffff; ours from it the same bits, then the zero fill to 12 bits the modem leaves out
+Phases 3 and 4: CPt, CP (Table 14/V.90); CPt, CPu (Table 23/V.92), SUVu (Table 27/V.92); MP (Table 18/V.34)
+  ab_cc_v90 CPT (290 bits): drn 9, Sr 1, ld 1, a1 1.0, 4 points in constellation 0; ours from it the same bits and two more fill bits (Table 14 has three)
+  f1        CPT (292 bits): drn 16, Sr 1, ld 3, a1 1.0, 9 points in constellation 0; ours from it the same bits
+  f1        CP  (1516 bits): drn 21, Sr 1, ld 3, a1 1.0, 65 points in constellation 0; ours from it the same bits
+  x2r2      CPT (1788 bits): drn 16, Sr 1, ld 3, a1 1.0, 9 points in constellation 0; ours from it the same bits
+  x2r2      CP  (1788 bits): drn 21, Sr 1, ld 3, a1 1.0, 65 points in constellation 0; ours from it the same bits
+  cxa       CPT92 (300 bits): drn 9, ld 1, 4 points in constellation 0; ours from it the same bits
+  usr7      CPT92 (300 bits): drn 16, ld 3, 9 points in constellation 0; ours from it the same bits
+  cxa       CPU   (432 bits): drn 18, ld 1, 46 points in constellation 0; ours from it the same bits
+  usr7      CPU   (984 bits): drn 21, ld 3, 65 points in constellation 0; ours from it the same bits
+  cxa       SUVu (72 bits): no level measured, no wait, no silence; ours from it the same bits
+  usr7      SUVu (72 bits): no level measured, no wait, no silence; ours from it the same bits
+  v34a      MP' type 1 (188 bits): 12 / 13 x 2400, rates 0x3fff; ours from it the same bits
+  x2b       MP' type 1 (188 bits): 12 / 12 x 2400, rates 0x0ffe; ours from it the same bits
+realcheck: 666 checks, 0 failures

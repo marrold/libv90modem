@@ -1,0 +1,39 @@
+  names: 117 codes in 17 families, each named once
+  V.90, the answerer hears nothing from its Phase 2 on:
+    answerer end 1: P2D_ERR_INFO0, phase2, V.90, data reached 0
+    caller end 1: P2L_ERR_REV, phase2, V.90, data reached 0
+  V.90, the answerer hears nothing from its Phase 3 on:
+    answerer end 1: P34_ERR_NO_S, phase3, V.90, data reached 0
+    caller end 1: V90A_ERR_SD, phase3, V.90, data reached 0
+  V.92, the answerer hears nothing from its Phase 3 on (a retrain, which fails):
+    answerer end 1: P2D_ERR_REV, phase3, V.92, data reached 0
+    caller end 1: V90A_ERR_SD, phase3, V.92, data reached 0
+  V.34, the answerer hears nothing from its Phase 3 on (a retrain, which fails):
+    answerer end 1: P2N_ERR_REV, phase3, V.34, data reached 0
+    caller end 1: P2L_ERR_REV, phase3, V.34, data reached 0
+  V.32bis, the caller silent after V.8:
+    answerer end 1: V32_ERR_NO_TONE, train, V.32bis, data reached 0
+    caller end 1: V32_ERR_NO_TONE, train, V.32bis, data reached 0
+  V.8, nothing in common:
+    answerer end 7: V8_ERR_NO_COMMON, v8, none, data reached 0
+    caller end 7: V8_ERR_NO_COMMON, v8, none, data reached 0
+  a V.22bis caller without V.8, silent once heard: chosen after 5927 ms
+    ... its end:
+    answerer end 1: V22_ERR_NO_ANSWER, train, V.22bis, data reached 0
+  x2, the server hears nothing from its Phase 4 on:
+    answerer end 9: X2D_ERR_NO_S4, phase4, x2, data reached 0
+  V.32bis caller, no answer:
+    caller end 5: V8_ERR_NO_TONE, tone, none, data reached 0
+    in data mode: answerer data V.90, error none, data reached 1; caller data V.90, error none, data reached 1
+  V.90 to data mode, then our cleardown:
+    answerer end 4: none, data, V.90, data reached 1
+    caller end 3: none, data, V.90, data reached 1
+    in data mode: answerer data V.90, error none, data reached 1; caller data V.90, error none, data reached 1
+  V.90 to data mode, then our retrain into silence:
+    answerer end 8: P2D_ERR_REV, data, V.90, data reached 1
+    caller end 8: V90A_ERR_RETRAINS, data, V.90, data reached 1
+    in data mode: answerer data V.22bis, error none, data reached 1; caller data V.22bis, error none, data reached 1
+  V.22bis to data mode (no cleardown signal: the call goes on):
+    answerer end 0: none, data, V.22bis, data reached 1
+    caller end 0: none, data, V.22bis, data reached 1
+diag: 7410 checks, 0 failures

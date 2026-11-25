@@ -1,32 +1,8 @@
-/* v90d/v34 - small shared pieces: scrambler (clause 7), the tables of
- * 9.6.3 as printed in the Recommendation, the three convolutional encoders,
- * the precoder arithmetic and the mapper's point <-> label conversion. */
+/* v90d/v34 - small shared pieces: the tables of 9.6.3 as printed in the
+ * Recommendation, the three convolutional encoders, the precoder arithmetic
+ * and the mapper's point <-> label conversion. The scrambler (clause 7) is
+ * in v34.h. */
 #include "v34_priv.h"
-
-/* ---- scrambler, clause 7 -------------------------------------------- */
-/* sr bit k-1 holds the sequence value k bits ago (scrambler: its own
- * output, descrambler: its input). */
-
-void v34_scr_init(v34_scr_t *s, int poly)
-{
-    s->sr = 0;
-    s->tap = (poly == V34_GPA) ? 5 : 18;
-}
-
-int v34_scramble(v34_scr_t *s, int bit)
-{
-    unsigned o = ((unsigned)bit ^ (s->sr >> (s->tap - 1)) ^ (s->sr >> 22)) & 1;
-    s->sr = ((s->sr << 1) | o) & 0x7FFFFF;
-    return (int)o;
-}
-
-int v34_descramble(v34_scr_t *s, int bit)
-{
-    unsigned i = (unsigned)bit & 1;
-    unsigned o = (i ^ (s->sr >> (s->tap - 1)) ^ (s->sr >> 22)) & 1;
-    s->sr = ((s->sr << 1) | i) & 0x7FFFFF;
-    return (int)o;
-}
 
 /* ---- Figure 9 and Table 13 ------------------------------------------ */
 

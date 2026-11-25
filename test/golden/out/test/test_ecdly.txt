@@ -1,0 +1,5 @@
+  echo at 60: found 52 (plain), done at sample 1857 of 1858
+  echo at 1200: found 1192
+  echo at 270 under a slow tail: found 262 (differences)
+  2400 Hz: on after 479 samples
+ecdly: 1019 checks, 0 failures

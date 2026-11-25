@@ -19,6 +19,7 @@
  */
 #include "v32_priv.h"
 #include "sintab.h"
+#include "fixmath.h"
 
 #define U           V32_UNIT
 #define TARGET_PW   ((int64_t)40 * U * U)       /* mean |point|^2 */
@@ -88,7 +89,7 @@ void v32rx_set_mode(v32rx_t *r, v32_rxmode mode)
 
 int v32rx_level(const v32rx_t *r)
 {
-    return (int)(v32_isqrt64((uint64_t)r->pw_raw / 2) >> 4);     /* envelope^2 / 2 = RMS^2 */
+    return (int)(isqrt_u64((uint64_t)r->pw_raw / 2) >> 4);     /* envelope^2 / 2 = RMS^2 */
 }
 
 /* ---------------- bits ---------------- */
@@ -386,7 +387,7 @@ static void half_symbol(v32rx_t *r, int32_t yr, int32_t yi, int p)
         if (++r->agc_n == 48) {
             uint64_t avg = (uint64_t)(r->agc_acc >> 5);
             if (avg < 1) avg = 1;
-            r->gain = (int32_t)v32_isqrt64((((uint64_t)S_PW) << 32) / avg);
+            r->gain = (int32_t)isqrt_u64((((uint64_t)S_PW) << 32) / avg);
             if (r->gain < 1) r->gain = 1;
         }
         r->half ^= 1;

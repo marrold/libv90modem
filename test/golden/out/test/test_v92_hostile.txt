@@ -1,0 +1,10 @@
+test_v92_hostile: a CPd a sane digital modem would not send, under a running upstream encoder
+  no change                         : upstream as without it
+  stored map: M0 = 0                : upstream as without it
+  stored map: index 15              : upstream as without it
+  stored map: trellis 3             : upstream as without it
+  CPd: M0 = 0                       : upstream as without it; CPd refused, stored CPd unchanged
+  CPd: index 15                     : upstream as without it; CPd refused, stored CPd unchanged
+  CPd: trellis 3                    : upstream as without it; CPd refused, stored CPd unchanged
+  CPd: valid (the one in use again) : upstream as without it; CPd taken, stored CPd unchanged
+test_v92_hostile: 47 checks, 0 failures

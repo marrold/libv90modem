@@ -84,9 +84,38 @@ static int run(const cond *c, int *compared, v22rx_t *rxout)
     return best;
 }
 
+/* a full-scale click into a receiver whose gain was set high on a weak
+ * carrier, early in the data (48 < ndata <= 600): the carrier loop's and the
+ * equaliser's products overflow 32 bits (an undefined behaviour that
+ * check-ubsan traps; 64-bit products give the same bits on every target) */
+static void test_click(void)
+{
+    static const int lvl[3] = {180, 220, 250}, at[4] = {60, 100, 200, 400};
+    int li, ai, mode16, runs = 0;
+    for (li = 0; li < 3; li++)
+    for (ai = 0; ai < 4; ai++)
+    for (mode16 = 0; mode16 < 2; mode16++) {
+        v22tx_t tx; v22rx_t rx; int n, clicked = 0;
+        lfsr = 99; ntx = nrx = 0;
+        v22tx_init(&tx, V22_FC_LOW, lvl[li], getbit, NULL);
+        v22rx_init(&rx, V22_FC_LOW, putbit, NULL);
+        v22tx_set_mode(&tx, V22_TX_SB1_1200);
+        for (n = 0; n < 8000; n++) {
+            int16_t v = v22tx_tick(&tx);
+            if (n == 2400) { v22tx_set_mode(&tx, mode16 ? V22_TX_DATA_2400 : V22_TX_DATA_1200); rx.mode16 = mode16; rx.data_on = 1; }
+            if (!clicked && rx.ndata == (uint32_t)at[ai]) { v = 32767; clicked = 1; }
+            v22rx_tick(&rx, v);
+        }
+        runs += clicked;
+    }
+    CHECK_EQ_I(runs, 24);
+}
+
 int main(void)
 {
     cond c; int cmp, err; v22rx_t rx;
+
+    test_click();
 
     /* 1. clean, 1200 bit/s, low channel */
     memset(&c, 0, sizeof c);

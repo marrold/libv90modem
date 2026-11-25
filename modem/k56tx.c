@@ -8,8 +8,9 @@
  * scrambler V.34's GPA (v90/v90_scr). */
 #include <string.h>
 #include "k56tx.h"
+#include "clock.h"
 #include "k56tab.h"
-#include "v90_pcm.h"
+#include "../v90/v90_pcm.h"
 
 #define R_MAG       0x54
 #define R_BAR_FROM  264     /* R's last 24 symbols are R-bar */
@@ -85,10 +86,13 @@ void k56tx_init(k56tx_t *t)
     enter(t, K56TX_SIL1);
 }
 
+/* the client looks for R in our data, at a frame boundary: in the middle
+ * of a frame, or with our MP out but our data not yet begun (its S in its
+ * B1: Task 10d), R2 follows that frame, or our data's first */
 void k56tx_reneg(k56tx_t *t)
 {
     t->mp_in = 0;
-    if (t->seg == K56TX_DATA && t->fpos != K56ENC_N) {
+    if ((t->seg == K56TX_DATA && t->fpos != K56ENC_N) || (t->seg >= K56TX_MP && t->seg < K56TX_DATA)) {
         t->reneg_due = 1;
         return;
     }
@@ -187,8 +191,9 @@ static uint8_t data_symbol(k56tx_t *t)
         int nb = k56enc_bits(&t->enc), i;
         for (i = 0; i < nb; i++) {
             int b = t->b1 || !t->getbit ? 1 : t->getbit(t->user) & 1;
-            bits[i] = (uint8_t)v90_scramble_gpa(&t->dscr, b);
+            bits[i] = (uint8_t)b;
         }
+        v90_scramble_gpa_bits(&t->dscr, bits, nb);
         k56enc_frame(&t->enc, bits, t->frame);
         if (t->b1)
             t->b1--;
@@ -253,8 +258,8 @@ uint8_t k56tx_tick(k56tx_t *t)
         break;
     }
 
-    t->n++;
-    t->alt++;
+    t->n = clk_sat_inc(t->n);              /* (neither is read in data) */
+    t->alt = clk_sat_inc(t->alt);
     if (++t->sym >= 2 * SYM_WRAP)
         t->sym -= SYM_WRAP;
     if (t->seg == K56TX_DATA) {

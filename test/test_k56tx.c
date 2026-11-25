@@ -470,6 +470,42 @@ static void test_reneg_training(void)
            (int)seg_len(K56TX_TRN2A), (int)seg_len(K56TX_E));
 }
 
+/* k56tx_reneg with our MP, MP' or E going out (its S in its B1, Task
+ * 10d): R2 not before our data has begun, at the end of its first frame
+ * (the client looks for R in our data, at a frame boundary) */
+static void test_reneg_in_e(void)
+{
+    static const k56tx_seg in[3] = { K56TX_MP, K56TX_MPA, K56TX_E };
+    static k56tx_t t;
+    v34_mp_t mp;
+    int32_t n, data_n, r2_n;
+    int i;
+    for (i = 0; i < 3; i++) {
+        k56tx_init(&t);
+        our_mp(&mp);
+        k56tx_data(&t, 13, 0, 0, NULL, NULL);
+        k56tx_set_mp(&t, &mp);
+        for (n = 0; n < 200000 && k56tx_segment(&t) < in[i]; n++) {
+            if (k56tx_segment(&t) == K56TX_SIL2) k56tx_got_j(&t, 0x00);
+            (void)k56tx_tick(&t);
+        }
+        CHECK_EQ_I(k56tx_segment(&t), in[i]);
+        (void)k56tx_tick(&t);
+        k56tx_reneg(&t);
+        CHECK_EQ_I(k56tx_segment(&t), in[i]);
+        data_n = r2_n = -1;
+        for (n = 0; n < 4000 && r2_n < 0; n++) {
+            (void)k56tx_tick(&t);
+            if (data_n < 0 && k56tx_segment(&t) == K56TX_DATA) data_n = n;
+            if (k56tx_segment(&t) == K56TX_R2) r2_n = n;
+        }
+        printf("  renegotiation in our %s: data after %d symbols, R2 after %d\n",
+               i == 0 ? "MP" : i == 1 ? "MP'" : "E", (int)data_n, (int)r2_n);
+        CHECK(data_n >= 0);
+        CHECK_EQ_I(r2_n - data_n, K56ENC_N);
+    }
+}
+
 /* silence 2: max(12288, the J's symbol) rounded up to 8 */
 static int32_t sil2_for(int32_t j_at, uint8_t j, int32_t extra, int *left_sil2)
 {
@@ -596,5 +632,6 @@ int main(void)
     test_reneg_bits();
     test_early_j();
     test_reneg_training();
+    test_reneg_in_e();
     T_REPORT("k56tx");
 }

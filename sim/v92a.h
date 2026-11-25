@@ -45,6 +45,10 @@ typedef struct {
                                B1u (8.7.1: 0; the CX93001 after a rate renegotiation: any) */
     int z2_dead;            /* a prefilter coefficient z2(k) the modem takes as zero,
                                0 = none (the CX93001: 64) */
+    int drop_cpd;           /* the first so many CPds of the call are missed (read as
+                               nothing): the repeat of 9.6.1.1.3 is needed */
+    int reneg_no_suvu;      /* in a rate renegotiation TRN2u goes on and no SUVu follows */
+    int reneg_no_ack;       /* in a rate renegotiation no CPu or SUVu carries the acknowledge bit */
     int  (*getbit)(void *user);
     void (*putbit)(void *user, int bit);
     void *user;
@@ -89,7 +93,7 @@ typedef struct {
     v92_jd_t jd; v92_jp_t jp; v92_cpd_t cpd, cpd_new;
     /* events and results */
     int sdbar_seen, jd_ok, jp_ok, jpp_seen, ri_seen, ribar_seen, ed_seen;
-    int suvd_n, suvd_ack, cpd_n, cpd_ack;
+    int suvd_n, suvd_ack, cpd_n, cpd_ack, cpd_dropped;
     int trn1d_n, trn1d_bad, sign_bad, dil_n_ok, dil_bad, scr_n, scr_bad, ri_n, ri_bad, trn2d_frames, trn2d_bad;
     int b1d_bad, b1d_frames, dec_bad, seq_bad;
     int tx_ready, rx_ready, up_rate, down_rate;

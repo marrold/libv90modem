@@ -1,0 +1,66 @@
+the channel model
+  6 km: -7.5 dB at 300 Hz, -20.8 at 3400 Hz (1 kHz: -12)
+  +100 ppm: 199988 octets for 200000 A/D samples
+training: Sd, TRN1d (4800 T), 2 km, noise -75 dBm0
+  state DD 1, mse after TRN1d -60.0 dB re UINFO^2 (rms 6.61 units), TRN1d decided wrong 0
+  TRN1d at its shortest (2040 T, 1800 taken as known): mse -57.8 dB
+timing: 40000 bit/s, 2 km, noise -75 dBm0, A/D clock offset and phase
+  -100 ppm phase 0.00: measured  -99.98 ppm, mse after TRN1d -48.2 dB, at the end -52.4 dB, errors 0 of 16000
+  -100 ppm phase 0.37: measured -100.00 ppm, mse after TRN1d -50.2 dB, at the end -56.4 dB, errors 0 of 16000
+  -100 ppm phase 0.73: measured -100.00 ppm, mse after TRN1d -53.9 dB, at the end -53.1 dB, errors 0 of 16000
+   -50 ppm phase 0.00: measured  -50.04 ppm, mse after TRN1d -52.3 dB, at the end -53.0 dB, errors 0 of 16000
+   -50 ppm phase 0.37: measured  -50.04 ppm, mse after TRN1d -52.9 dB, at the end -58.7 dB, errors 0 of 16000
+   -50 ppm phase 0.73: measured  -50.06 ppm, mse after TRN1d -48.3 dB, at the end -57.0 dB, errors 0 of 16000
+    +0 ppm phase 0.00: measured   +0.04 ppm, mse after TRN1d -60.0 dB, at the end -60.5 dB, errors 0 of 16000
+    +0 ppm phase 0.37: measured   +0.00 ppm, mse after TRN1d -60.5 dB, at the end -60.7 dB, errors 0 of 16000
+    +0 ppm phase 0.73: measured   +0.00 ppm, mse after TRN1d -58.5 dB, at the end -60.2 dB, errors 0 of 16000
+   +50 ppm phase 0.00: measured  +49.99 ppm, mse after TRN1d -56.8 dB, at the end -53.4 dB, errors 0 of 16000
+   +50 ppm phase 0.37: measured  +49.98 ppm, mse after TRN1d -51.3 dB, at the end -54.6 dB, errors 0 of 16000
+   +50 ppm phase 0.73: measured  +50.01 ppm, mse after TRN1d -50.4 dB, at the end -58.1 dB, errors 0 of 16000
+  +100 ppm phase 0.00: measured +100.02 ppm, mse after TRN1d -46.7 dB, at the end -54.9 dB, errors 0 of 16000
+  +100 ppm phase 0.37: measured +100.03 ppm, mse after TRN1d -53.2 dB, at the end -51.3 dB, errors 0 of 16000
+  +100 ppm phase 0.73: measured +100.03 ppm, mse after TRN1d -49.5 dB, at the end -57.6 dB, errors 0 of 16000
+loops: 40000 bit/s, noise -75 dBm0, +60 ppm
+  0 km: mse after TRN1d -48.0 dB, end -49.0 dB (rms 23.58 units, dmin 384), errors 0 of 16000
+  2 km: mse after TRN1d -52.5 dB, end -55.5 dB (rms 11.13 units, dmin 384), errors 0 of 16000
+  4 km: mse after TRN1d -54.2 dB, end -58.2 dB (rms 8.14 units, dmin 384), errors 0 of 16000
+  6 km: mse after TRN1d -52.4 dB, end -57.7 dB (rms 8.68 units, dmin 384), errors 0 of 16000
+echo of our own upstream (V.34, 3000 baud, 16 points; the canceller trained on noise first), 40000 bit/s, 4 km, -20 ppm
+  no echo: mse end -58.6 dB, errors 0 of 16000
+  echo +8.4 dB re the downstream, ERLE 69.4 dB: mse end -57.5 dB, errors 0 of 16000
+  echo +18.3 dB re the downstream, ERLE 79.5 dB: mse end -58.5 dB, errors 0 of 16000
+data: Ucode decision error rate (against what the digital modem sent), 16000 symbols each
+  channel \ bit/s                   28000    32000    36000    40000    44000    48000    52000    56000
+    dmin, mu-law (units)             1280      896      544      384      256      176      128       64
+  2 km, -75 dBm0,    0 ppm              0        0        0        0        0        0        0        0
+  0 km, -75 dBm0,  +80 ppm              0        0        0        0        0        0  3.7e-01  9.6e-01
+  6 km, -75 dBm0,  -80 ppm              0        0        0        0        0        0        0  7.2e-01
+  2 km, -65 dBm0,  +30 ppm              0        0        0        0        0        0  9.2e-01  9.5e-01
+  4 km, -60 dBm0,  -30 ppm              0        0        0        0        0  8.7e-01  9.6e-01  9.6e-01
+  2 km, -75 dBm0,  +30 ppm              0        0        0        0        0        0        0  9.4e-01
+    as row 6, 3 dB pad                  0        0  2.5e-04  9.2e-01  9.2e-01  9.3e-01  9.5e-01  9.6e-01
+    ... levels given (DIL)              0        0        0        0        0  3.2e-02  1.6e-01  9.4e-01
+    as row 6, 6 dB pad                  0        0        0        0  9.0e-01  9.4e-01  9.6e-01  9.6e-01
+    ... levels given (DIL)              0        0        0        0        0        0        0  9.4e-01
+    as row 6, RBS                       0        0        0  5.5e-01  7.9e-01  9.0e-01  5.4e-02  5.5e-01
+    ... levels given (DIL)              0        0        0        0  2.3e-02  3.1e-02  5.4e-02  9.4e-01
+    as row 6, A-law                     0        0        0        0        0        0  2.6e-03  9.2e-01
+  mse (dB re UINFO^2) and rms error (units) at 28000 / 40000 bit/s; rms of |y| - |sent| at 36000
+  2 km, -75 dBm0,    0 ppm        -60.4 /  -60.7      6.32 /    6.14       5.90
+  0 km, -75 dBm0,  +80 ppm        -52.2 /  -50.8     16.25 /   19.20      14.54
+  6 km, -75 dBm0,  -80 ppm        -55.6 /  -55.2     11.06 /   11.59      10.37
+  2 km, -65 dBm0,  +30 ppm        -51.0 /  -51.9     18.71 /   16.81      17.53
+  4 km, -60 dBm0,  -30 ppm        -46.7 /  -47.0     30.61 /   29.61      29.87
+  2 km, -75 dBm0,  +30 ppm        -55.8 /  -56.6     10.77 /    9.85      11.20
+    as row 6, 3 dB pad            -40.8 /  -28.6     61.02 /  246.27      86.83
+    ... levels given (DIL)        -54.8 /  -54.4     12.05 /   12.61     109.76
+    as row 6, 6 dB pad            -44.7 /  -42.8     38.94 /   48.06      51.11
+    ... levels given (DIL)        -53.5 /  -53.6     14.13 /   13.86      39.91
+    as row 6, RBS                 -39.7 /  -27.2     68.97 /  289.66      60.02
+    ... levels given (DIL)        -55.3 /  -55.1     11.39 /   11.71      46.68
+    as row 6, A-law               -54.5 /  -56.8     12.85 /    9.79      10.41
+    as row 6, RBS: robbed slot 0; per slot at 36000: errors, mean and rms of |y| - |sent| (units)
+    [0] 0 -59.5 115.6 [1] 0 +1.6 49.9 [2] 0 +1.5 52.4 [3] 0 +1.0 24.9 [4] 0 +1.8 41.9 [5] 0 +1.2 25.1
+    ... levels given (DIL): robbed slot 0; per slot at 36000: errors, mean and rms of |y| - |sent| (units)
+    [0] 0 -60.8 111.6 [1] 0 -0.5 11.2 [2] 0 -0.4 11.3 [3] 0 -0.4 11.0 [4] 0 -0.4 11.3 [5] 0 -0.8 11.2
+v90arx: 488 checks, 0 failures

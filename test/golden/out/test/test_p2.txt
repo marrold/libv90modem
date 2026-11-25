@@ -1,0 +1,3 @@
+  p2 INFO0a for ever: p2d state 13 error 6 at 20.00 s, INFO0a 146
+  p2 no second reversal: p2d state 13 error 2 at 12.98 s, recoveries 4
+p2: 119 checks, 0 failures

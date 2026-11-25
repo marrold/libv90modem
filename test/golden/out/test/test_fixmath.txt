@@ -1,0 +1,8 @@
+test_fixmath: one integer square root
+  every input below 2^20: 0 differ
+  10^6 random 64-bit inputs (and shifted ones): 0 differ
+  edges, 2^k, squares and their neighbours: 0 differ
+  dpsk.c's copy below 2^42: 0 differ
+  every bit sequence up to 24 bits: 0 differ
+  10^6 random 64-bit sequences: 0 differ
+test_fixmath: 13 checks, 0 failures

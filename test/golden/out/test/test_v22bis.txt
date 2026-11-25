@@ -1,0 +1,45 @@
+  start-up in steady noise (level 3000 both ways, echo 0.15, mu-law; 3 noise seeds, 16 s calls):
+    SNR 26.0 dB: up 3/3 (3 at 2400, 0 at 1200), retrains 0; errors c->a 0/99480 (0.0e+00), a->c 0/99480 (0.0e+00); S1 in-band SNR seen 30.9 32.5 32.0 dB
+    SNR 20.0 dB: up 3/3 (3 at 2400, 0 at 1200), retrains 0; errors c->a 0/99480 (0.0e+00), a->c 0/99480 (0.0e+00); S1 in-band SNR seen 25.0 26.3 25.1 dB
+    SNR 16.0 dB: up 3/3 (3 at 2400, 0 at 1200), retrains 0; errors c->a 0/99480 (0.0e+00), a->c 0/99480 (0.0e+00); S1 in-band SNR seen 21.8 23.8 22.3 dB
+    SNR 14.0 dB: up 3/3 (3 at 2400, 0 at 1200), retrains 0; errors c->a 0/99480 (0.0e+00), a->c 3/99480 (3.0e-05); S1 in-band SNR seen 20.1 22.2 20.5 dB
+    SNR 12.0 dB: up 3/3 (3 at 2400, 0 at 1200), retrains 0; errors c->a 3/99480 (3.0e-05), a->c 22/99480 (2.2e-04); S1 in-band SNR seen 18.2 20.3 18.6 dB
+    SNR 10.0 dB: up 3/3 (1 at 2400, 2 at 1200), retrains 0; errors c->a 77/65276 (1.2e-03), a->c 81/65276 (1.2e-03); S1 in-band SNR seen 16.1 18.7 16.8 dB
+    SNR  8.0 dB: up 3/3 (0 at 2400, 3 at 1200), retrains 0; errors c->a 0/47636 (0.0e+00), a->c 0/47636 (0.0e+00); S1 in-band SNR seen 14.3 16.7 14.6 dB
+    SNR  6.0 dB: up 3/3 (0 at 2400, 3 at 1200), retrains 0; errors c->a 0/47804 (0.0e+00), a->c 0/47804 (0.0e+00); S1 in-band SNR seen 12.3 14.8 12.8 dB
+    SNR  4.0 dB: up 3/3 (0 at 2400, 3 at 1200), retrains 0; errors c->a 36/47212 (7.6e-04), a->c 40/47212 (8.5e-04); S1 in-band SNR seen 10.0 12.8 10.8 dB
+  retrain (6.4), quiet line, requested 8 s into the call:
+    by the caller: S1 99.9 ms, answered 19.5 ms after it ended by S1 of 100.0 ms; 2400 bit/s 611.9 / 606.5 ms after the far S1 ended,
+      data again 200.0 / 200.0 ms later; receivers unclamped at 740 / 867 ms; whole retrain 1031 ms
+    caller -> answerer: before 0 errors in 14012 bits, then 0 idle bits (0 not 1); clamp held 825 ms: 1980 bits, 0 of them not 1;
+      DTE bits taken meanwhile 0; after 0 errors in 50256 bits; lost at the cut 16 bits
+    answerer -> caller: before 0 errors in 14128 bits, then 176 idle bits (0 not 1); clamp held 579 ms: 1392 bits, 0 of them not 1;
+      DTE bits taken meanwhile 0; after 0 errors in 50556 bits; lost at the cut 0 bits
+    by us (answerer): S1 99.9 ms, answered 21.1 ms after it ended by S1 of 100.0 ms; 2400 bit/s 607.8 / 608.1 ms after the far S1 ended,
+      data again 200.0 / 200.0 ms later; receivers unclamped at 742 / 864 ms; whole retrain 1029 ms
+    caller -> answerer: before 0 errors in 14140 bits, then 164 idle bits (0 not 1); clamp held 578 ms: 1388 bits, 0 of them not 1;
+      DTE bits taken meanwhile 0; after 0 errors in 50552 bits; lost at the cut 0 bits
+    answerer -> caller: before 0 errors in 14016 bits, then 0 idle bits (0 not 1); clamp held 818 ms: 1964 bits, 0 of them not 1;
+      DTE bits taken meanwhile 0; after 0 errors in 50260 bits; lost at the cut 12 bits
+    by both at once: 2400 bit/s 606.5 / 608.1 ms after the far S1 ended
+    caller -> answerer: before 0 errors in 14012 bits, then 0 idle bits (0 not 1); clamp held 702 ms: 1684 bits, 0 of them not 1;
+      DTE bits taken meanwhile 0; after 0 errors in 50552 bits; lost at the cut 16 bits
+    answerer -> caller: before 0 errors in 14016 bits, then 0 idle bits (0 not 1); clamp held 694 ms: 1668 bits, 0 of them not 1;
+      DTE bits taken meanwhile 0; after 0 errors in 50556 bits; lost at the cut 12 bits
+  retrain at 14 dB SNR, 6 calls: completed at the first attempt 6; towards the modem asked: before 0 errors in 84084 bits,
+    clamped bits not 1: 0, after 16 errors in 157556 bits
+  path change the equaliser follows: retrains 0, 0 errors in 43132 bits from 4 s after it
+  path change that loses equalisation: we sent the retrain signal 2.14 s after it; retrains: answerer 1 (for loss: 1), caller 1
+    by us, for loss: S1 100.0 ms, answered 19.1 ms after it ended by S1 of 100.0 ms; 2400 bit/s 612.1 / 606.1 ms after the far S1 ended,
+      data again 200.0 / 200.0 ms later; receivers unclamped at 740 / 867 ms; whole retrain 1031 ms
+    answerer -> caller: before 0 errors in 19148 bits, then 0 idle bits (0 not 1); clamp held 827 ms: 1984 bits, 0 of them not 1;
+      DTE bits taken meanwhile 0; after 0 errors in 45128 bits; lost at the cut 12 bits
+    caller -> answerer: clamp held 1780 bits, 0 of them not 1; after the retrain 0 errors in 45428 bits; receiver error now 0
+  retrain not answered: 10 retrain signals 1300 ms apart, then state 7; data still arriving meanwhile: 0 errors in 40732 bits; DTE bits taken 0
+  150 ms dropout: retrains 0 (for loss 0); from 8 s after it 0 errors in 33532 bits, other way 0 in 33532
+  start-up with the 2400 bit/s ones lost in a 260 ms hole: retrain signals from the answerer 1, up after 3.76 s at 2400 bit/s; then 0/48496 and 0/48496 errors
+  call with our 1800 Hz guard tone: up at 1.65 s, 2400 bit/s, retrains 1; errors to the caller 0/23932, from it 0/23932; caller's receiver error 5
+  v22bis: 2400 switch 607.8 ms after caller's S1 ended, data mode at 1.66 s
+  v22bis poor line: 0/6000 and 0/6000 bit errors
+  v22bis bursts: receiver error 0.7 s after a burst, worst: answerer 34, caller 28; at the end 0, 0
+v22bis: 267 checks, 0 failures

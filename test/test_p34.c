@@ -128,7 +128,7 @@ static void run(const scen_t *s, out_t *o)
                                : s->gain * 2.0 * (sin(6.283185307179586 * 2400.0 * i / 8000.0) + 0.5 * sin(6.283185307179586 * 1800.0 * i / 8000.0));
         }
         if (o->d_data_at < 0 && d.state == P34_DATA) o->d_data_at = i;
-        if (o->d_data_at >= 0 && i > o->d_data_at + 8000 && d.rx.mse > o->worst_mse) o->worst_mse = d.rx.mse;
+        if (o->d_data_at >= 0 && i > o->d_data_at + 8000 && d.up.rx.mse > o->worst_mse) o->worst_mse = d.up.rx.mse;
         {
             /* milliseconds of data mode, and the first sample of each */
             int ms = o->d_data_at < 0 ? -1 : (i - o->d_data_at) / 8, ev = ms >= 0 && ((i - o->d_data_at) % 8) == 0;
@@ -140,8 +140,8 @@ static void run(const scen_t *s, out_t *o)
             if (ev && first && ms == first - 100) o->up_bad_before = dio.sink.bad;
             /* the two data streams restart with the modems' data pumps */
             if (a.data_starts != a_starts) { a_starts = a.data_starts; aio.src.s = 23; }
-            if (d.rx_ready && !d_rx) { dio.sink.s = 23; sink0_n = dio.sink.n; sink0_bad = dio.sink.bad; }
-            d_rx = d.rx_ready;
+            if (d.up.rx_ready && !d_rx) { dio.sink.s = 23; sink0_n = dio.sink.n; sink0_bad = dio.sink.bad; }
+            d_rx = d.up.rx_ready;
             if (first && ms > first && o->d_data2_at == 0 && d_was != P34_DATA && d.state == P34_DATA) o->d_data2_at = i;
             d_was = d.state;
         }
@@ -172,7 +172,7 @@ static void report(const char *name, const scen_t *s, const out_t *o)
         printf("    peer: up state %d, down state %d; sdbar %d jd %d jd' %d ri %d ribar %d mp %d mp' %d ed %d\n",
                a->us, a->ds, a->sdbar_seen, a->jd_ok, a->jdp_seen, a->ri_seen, a->ribar_seen, a->mp_seen, a->mpack_seen, a->ed_seen);
         printf("    digital: rxmode %d, s_events %d, cpt %d cp %d cp' %d e %d, tx signal %d, mse %d\n",
-               d->rxmode, d->s_events, d->got_cpt, d->got_cp, d->got_cp_ack, d->got_e, (int)v90tx_signal(&d->tx), (int)d->rx.mse);
+               d->rxmode, d->s_events, d->got_cpt, d->got_cp, d->got_cp_ack, d->got_e, (int)v90tx_signal(&d->tx), (int)d->up.rx.mse);
     }
     (void)s;
 }
@@ -199,30 +199,43 @@ static void check_good(const scen_t *s, const out_t *o)
     CHECK(o->up_bits > 5000); CHECK_EQ_I(o->up_bad, 0);
 }
 
-int main(void)
+/* each run and its checks is a case (test/test.h, t_case_arg); the scenario
+ * is set up as the whole program sets it up, whichever case runs */
+#define NCASES 32
+
+int main(int argc, char **argv)
 {
     out_t o;
     scen_t s;
+    const int only = t_case_arg(argc, argv, NCASES);
 
     /* 1. no DIL, clean line */
     memset(&s, 0, sizeof s);
     s.rate = 3200; s.cn = 3; s.cd = 5; s.gain = 2000; s.d_down = 20; s.d_up = 24; s.seconds = 8;
-    run(&s, &o); report("no DIL, clean", &s, &o); check_good(&s, &o);
+    if (T_CASE(only, 1)) {
+        run(&s, &o); report("no DIL, clean", &s, &o); check_good(&s, &o);
+    }
 
     /* 2. DIL, echo of our own signal, noise, clock offset, carrier phase jump */
     s.dil_n = 12; s.echo = 0.1; s.snr_db = 38; s.ppm = 60; s.rot = 2.2; s.seconds = 10;
-    run(&s, &o); report("DIL, echo -20 dB, 38 dB, +60 ppm", &s, &o); check_good(&s, &o);
-    CHECK(o.up_rate >= 24000);
+    if (T_CASE(only, 2)) {
+        run(&s, &o); report("DIL, echo -20 dB, 38 dB, +60 ppm", &s, &o); check_good(&s, &o);
+        CHECK(o.up_rate >= 24000);
+    }
 
     /* 3. the same with SCR during the DIL and before CP, shaping in data mode, A-law, 3000 symbols/s */
     s.rate = 3000; s.cn = 2; s.cd = 3; s.scr_in_dil = 1; s.scr_syms = 400; s.sr_d = 1; s.ld_d = 2; s.alaw = 1;
     s.ppm = -60; s.rot = -1.1;
-    run(&s, &o); report("3000, SCR, shaping, A-law", &s, &o); check_good(&s, &o);
+    if (T_CASE(only, 3)) {
+        run(&s, &o); report("3000, SCR, shaping, A-law", &s, &o); check_good(&s, &o);
+    }
 
     /* 4. a poor line: the upstream rate must come down, without errors */
     s.snr_db = 24; s.echo = 0.25;
-    run(&s, &o); report("24 dB line", &s, &o); check_good(&s, &o);
-    CHECK(o.up_rate <= 16800);
+    if (T_CASE(only, 4)) {
+        run(&s, &o); report("24 dB line", &s, &o); check_good(&s, &o);
+        CHECK(o.up_rate <= 16800);
+    }
 
     /* 5. a long call on a good line: the receiver's loops must stay quiet on
      * the dense data constellation (they once wandered and cost a burst of
@@ -230,50 +243,67 @@ int main(void)
     memset(&s, 0, sizeof s);
     s.rate = 3200; s.cn = 3; s.cd = 5; s.gain = 2000; s.d_down = 20; s.d_up = 24; s.seconds = 90;
     s.snr_db = 50; s.echo = 0.1; s.ppm = 30;
-    run(&s, &o); report("90 s, 50 dB", &s, &o); check_good(&s, &o);
-    printf("    worst receiver error in data mode %.1f dB\n", 10 * log10((o.worst_mse + 1e-9) / 65536.0));
-    CHECK(o.worst_mse < 65536 / 5000);      /* -37 dB */
-    CHECK(o.up_rate >= 28800);              /* the rate is not taken from the moments after re-acquisition */
+    if (T_CASE(only, 5)) {
+        run(&s, &o); report("90 s, 50 dB", &s, &o); check_good(&s, &o);
+        printf("    worst receiver error in data mode %.1f dB\n", 10 * log10((o.worst_mse + 1e-9) / 65536.0));
+        CHECK(o.worst_mse < 65536 / 5000);      /* -37 dB */
+        CHECK(o.up_rate >= 28800);              /* the rate is not taken from the moments after re-acquisition */
+    }
 
     /* 6. the echo comes back late: a line driver that buffers 25 ms */
     memset(&s, 0, sizeof s);
     s.rate = 3200; s.cn = 3; s.cd = 5; s.gain = 2000; s.d_down = 20; s.d_up = 24; s.seconds = 10;
     s.snr_db = 45; s.echo = 0.25; s.echo_bulk = 200; s.dil_n = 6;
-    run(&s, &o); report("echo -12 dB, 25 ms late", &s, &o); check_good(&s, &o);
-    CHECK(o.up_rate >= 28800);
+    if (T_CASE(only, 6)) {
+        run(&s, &o); report("echo -12 dB, 25 ms late", &s, &o); check_good(&s, &o);
+        CHECK(o.up_rate >= 28800);
+    }
 
     /* 7. nobody tells us how late: the modem measures it during TRN1d */
     s.echo_bulk = 700; s.echo_auto = 1;
-    run(&s, &o); report("echo 88 ms late, measured", &s, &o); check_good(&s, &o);
-    printf("    echo delay found: %d samples (the echo path starts at %d)\n", o.echo_delay, 700 + 9);
-    CHECK(o.echo_delay >= 700 + 9 - 12 && o.echo_delay <= 700 + 9);
-    CHECK(o.up_rate >= 28800);
+    if (T_CASE(only, 7)) {
+        run(&s, &o); report("echo 88 ms late, measured", &s, &o); check_good(&s, &o);
+        printf("    echo delay found: %d samples (the echo path starts at %d)\n", o.echo_delay, 700 + 9);
+        CHECK(o.echo_delay >= 700 + 9 - 12 && o.echo_delay <= 700 + 9);
+        CHECK(o.up_rate >= 28800);
+    }
     /* the same search on a line without any echo must do no harm */
     s.echo = 0; s.echo_bulk = 0;
-    run(&s, &o); report("no echo, measured", &s, &o); check_good(&s, &o);
-    CHECK(o.up_rate >= 28800);
+    if (T_CASE(only, 8)) {
+        run(&s, &o); report("no echo, measured", &s, &o); check_good(&s, &o);
+        CHECK(o.up_rate >= 28800);
+    }
     /* and a short one */
     s.echo = 0.25; s.echo_bulk = 0;
-    run(&s, &o); report("echo at once, measured", &s, &o); check_good(&s, &o);
-    CHECK(o.echo_delay <= 9);
-    CHECK(o.up_rate >= 28800);
+    if (T_CASE(only, 9)) {
+        run(&s, &o); report("echo at once, measured", &s, &o); check_good(&s, &o);
+        CHECK(o.echo_delay <= 9);
+        CHECK(o.up_rate >= 28800);
+    }
 
     /* a weak echo smeared over many samples, under noise (a U.S. Robotics 5686
      * on the bench: 25 dB below what we send, 34 ms late, no tap standing out
      * and a long tail): the measurement must still find where it starts,
-     * on every one of these lines */
+     * on every one of these lines: each line a case (10 .. 21); the last
+     * one says on how many of those that ran the start was missed */
     {
-        int k, found = 0;
+        int k, missed = 0;
         for (k = 0; k < 12; k++) {
+            if (!T_CASE(only, 10 + k)) continue;
             memset(&s, 0, sizeof s);
             s.rate = 3200; s.cn = 3; s.cd = 5; s.gain = 2000; s.d_down = 20; s.d_up = 24; s.seconds = 10;
             s.snr_db = 22; s.echo_spread = 1; s.echo_bulk = 259; s.echo_auto = 1; s.dil_n = 6; s.nseed = k;
             run(&s, &o);
-            if (o.echo_delay >= 259 + 9 - 12 && o.echo_delay <= 259 + 11) found++;
-            else printf("    weak smeared echo, noise %d: delay found %d (the echo path starts at %d)\n", k, o.echo_delay, 259 + 9);
+            if (!(o.echo_delay >= 259 + 9 - 12 && o.echo_delay <= 259 + 11)) {
+                missed++;
+                printf("    weak smeared echo, noise %d: delay found %d (the echo path starts at %d)\n", k, o.echo_delay, 259 + 9);
+            }
+            if (only) CHECK(missed == 0);
+            if (k == 11) {
+                printf("  weak smeared echo 34 ms late: found on %d of 12 lines\n", 12 - missed);
+                if (!only) CHECK(12 - missed == 12);
+            }
         }
-        printf("  weak smeared echo 34 ms late: found on %d of 12 lines\n", found);
-        CHECK(found == 12);
     }
 
     /* ---- rate renegotiation (9.6) and cleardown (9.7) ---- */
@@ -283,137 +313,159 @@ int main(void)
 
     /* 8. the caller renegotiates and asks for a lower downstream rate */
     s.a_reneg_ms = 1000; s.a_reneg_kd = 30;
-    run(&s, &o); report("caller renegotiates, K 32 -> 30", &s, &o);
-    printf("    back in data mode %.0f ms after the request; peer saw Rd %d + %d units (%d bad); up after: %ld bits, %ld bad\n",
-           (o.d_data2_at - o.ev_at) / 8.0, o.a->rd_units, o.a->rdbar_units, o.a->rd_bad, o.up_bits2, o.up_bad2);
-    CHECK_EQ_I(o.req_rc, 0);
-    CHECK_EQ_I(o.state, P34_DATA); CHECK_EQ_I(o.error, 0);
-    CHECK_EQ_I(o.a->renegs, 1);
-    CHECK_EQ_I(o.a->rd_units, 64); CHECK_EQ_I(o.a->rdbar_units, 4); CHECK_EQ_I(o.a->rd_bad, 0);   /* 384 T and 24 T */
-    CHECK_EQ_I(o.down_rate, (30 + 6) * 8000 / 6);
-    CHECK_EQ_I(o.a->dec_bad, 0); CHECK_EQ_I(o.a->b1d_bad, 0);
-    CHECK(o.ev_at > 0 && o.d_data2_at > o.ev_at && o.d_data2_at < o.ev_at + 8000);
-    /* downstream: data frame alignment kept, no bit lost or invented across it */
-    CHECK(o.down_bits > 265000); CHECK_EQ_I(o.down_bad, 0);
-    /* upstream: clean before, clean after */
-    CHECK_EQ_I(o.up_bad_before, 0);
-    CHECK(o.up_bits2 > 80000); CHECK_EQ_I(o.up_bad2, 0);
-    CHECK(o.a_tx); CHECK(o.a_rx);
+    if (T_CASE(only, 22)) {
+        run(&s, &o); report("caller renegotiates, K 32 -> 30", &s, &o);
+        printf("    back in data mode %.0f ms after the request; peer saw Rd %d + %d units (%d bad); up after: %ld bits, %ld bad\n",
+               (o.d_data2_at - o.ev_at) / 8.0, o.a->rd_units, o.a->rdbar_units, o.a->rd_bad, o.up_bits2, o.up_bad2);
+        CHECK_EQ_I(o.req_rc, 0);
+        CHECK_EQ_I(o.state, P34_DATA); CHECK_EQ_I(o.error, 0);
+        CHECK_EQ_I(o.a->renegs, 1);
+        CHECK_EQ_I(o.a->rd_units, 64); CHECK_EQ_I(o.a->rdbar_units, 4); CHECK_EQ_I(o.a->rd_bad, 0);   /* 384 T and 24 T */
+        CHECK_EQ_I(o.down_rate, (30 + 6) * 8000 / 6);
+        CHECK_EQ_I(o.a->dec_bad, 0); CHECK_EQ_I(o.a->b1d_bad, 0);
+        CHECK(o.ev_at > 0 && o.d_data2_at > o.ev_at && o.d_data2_at < o.ev_at + 8000);
+        /* downstream: data frame alignment kept, no bit lost or invented across it */
+        CHECK(o.down_bits > 265000); CHECK_EQ_I(o.down_bad, 0);
+        /* upstream: clean before, clean after */
+        CHECK_EQ_I(o.up_bad_before, 0);
+        CHECK(o.up_bits2 > 80000); CHECK_EQ_I(o.up_bad2, 0);
+        CHECK(o.a_tx); CHECK(o.a_rx);
+    }
 
     /* 9. the same with SCR before the CP, as 9.6.2.1.2 allows */
     s.a_reneg_kd = 0; s.a_reneg_scr = 300;
-    run(&s, &o); report("caller renegotiates, SCR first", &s, &o);
-    CHECK_EQ_I(o.state, P34_DATA); CHECK_EQ_I(o.a->renegs, 1);
-    CHECK_EQ_I(o.down_bad, 0); CHECK(o.up_bits2 > 80000); CHECK_EQ_I(o.up_bad2, 0);
+    if (T_CASE(only, 23)) {
+        run(&s, &o); report("caller renegotiates, SCR first", &s, &o);
+        CHECK_EQ_I(o.state, P34_DATA); CHECK_EQ_I(o.a->renegs, 1);
+        CHECK_EQ_I(o.down_bad, 0); CHECK(o.up_bits2 > 80000); CHECK_EQ_I(o.up_bad2, 0);
+    }
     s.a_reneg_ms = 0; s.a_reneg_scr = 0;
 
     /* 10. the caller clears down: CP with drn = 0 */
     s.a_clear_ms = 1000;
-    run(&s, &o); report("caller clears down", &s, &o);
-    printf("    call ended %.0f ms after the request\n", (o.d_end_at - o.ev_at) / 8.0);
-    CHECK_EQ_I(o.state, P34_FAILED); CHECK_EQ_I(o.error, P34_ERR_CLEARDOWN);
-    CHECK(o.ev_at > 0 && o.d_end_at > o.ev_at && o.d_end_at < o.ev_at + 4000);
-    CHECK_EQ_I(o.up_bad_before, 0); CHECK_EQ_I(o.down_bad, 0);
-    CHECK(o.silent_after_end);
+    if (T_CASE(only, 24)) {
+        run(&s, &o); report("caller clears down", &s, &o);
+        printf("    call ended %.0f ms after the request\n", (o.d_end_at - o.ev_at) / 8.0);
+        CHECK_EQ_I(o.state, P34_FAILED); CHECK_EQ_I(o.error, P34_ERR_CLEARDOWN);
+        CHECK(o.ev_at > 0 && o.d_end_at > o.ev_at && o.d_end_at < o.ev_at + 4000);
+        CHECK_EQ_I(o.up_bad_before, 0); CHECK_EQ_I(o.down_bad, 0);
+        CHECK(o.silent_after_end);
+    }
     s.a_clear_ms = 0;
 
     /* 11. we renegotiate (9.6.1.1) */
     s.d_reneg_ms = 1000;
-    run(&s, &o); report("we renegotiate", &s, &o);
-    printf("    back in data mode %.0f ms after the request\n", (o.d_data2_at - o.ev_at) / 8.0);
-    CHECK_EQ_I(o.req_rc, 0);
-    CHECK_EQ_I(o.state, P34_DATA); CHECK_EQ_I(o.error, 0);
-    CHECK_EQ_I(o.a->renegs, 1);
-    CHECK_EQ_I(o.a->rd_units, 64); CHECK_EQ_I(o.a->rdbar_units, 4); CHECK_EQ_I(o.a->rd_bad, 0);
-    CHECK(o.ev_at > 0 && o.d_data2_at > o.ev_at && o.d_data2_at < o.ev_at + 8000);
-    CHECK(o.down_bits > 295000); CHECK_EQ_I(o.down_bad, 0);
-    CHECK_EQ_I(o.up_bad_before, 0);
-    CHECK(o.up_bits2 > 80000); CHECK_EQ_I(o.up_bad2, 0);
+    if (T_CASE(only, 25)) {
+        run(&s, &o); report("we renegotiate", &s, &o);
+        printf("    back in data mode %.0f ms after the request\n", (o.d_data2_at - o.ev_at) / 8.0);
+        CHECK_EQ_I(o.req_rc, 0);
+        CHECK_EQ_I(o.state, P34_DATA); CHECK_EQ_I(o.error, 0);
+        CHECK_EQ_I(o.a->renegs, 1);
+        CHECK_EQ_I(o.a->rd_units, 64); CHECK_EQ_I(o.a->rdbar_units, 4); CHECK_EQ_I(o.a->rd_bad, 0);
+        CHECK(o.ev_at > 0 && o.d_data2_at > o.ev_at && o.d_data2_at < o.ev_at + 8000);
+        CHECK(o.down_bits > 295000); CHECK_EQ_I(o.down_bad, 0);
+        CHECK_EQ_I(o.up_bad_before, 0);
+        CHECK(o.up_bits2 > 80000); CHECK_EQ_I(o.up_bad2, 0);
+    }
     s.d_reneg_ms = 0;
 
     /* 12. we clear down: MP with drn = 0, then silence */
     s.d_clear_ms = 1000;
-    run(&s, &o); report("we clear down", &s, &o);
-    printf("    call ended %.0f ms after the request\n", (o.d_end_at - o.ev_at) / 8.0);
-    CHECK_EQ_I(o.req_rc, 0);
-    CHECK_EQ_I(o.state, P34_FAILED); CHECK_EQ_I(o.error, P34_ERR_HANGUP);
-    CHECK(o.a->clear_seen);
-    CHECK_EQ_I(o.a->rd_units, 64); CHECK_EQ_I(o.a->rdbar_units, 4);
-    CHECK(o.ev_at > 0 && o.d_end_at > o.ev_at && o.d_end_at < o.ev_at + 8000);
-    CHECK_EQ_I(o.down_bad, 0); CHECK_EQ_I(o.up_bad_before, 0);
-    CHECK(o.silent_after_end);
+    if (T_CASE(only, 26)) {
+        run(&s, &o); report("we clear down", &s, &o);
+        printf("    call ended %.0f ms after the request\n", (o.d_end_at - o.ev_at) / 8.0);
+        CHECK_EQ_I(o.req_rc, 0);
+        CHECK_EQ_I(o.state, P34_FAILED); CHECK_EQ_I(o.error, P34_ERR_HANGUP);
+        CHECK(o.a->clear_seen);
+        CHECK_EQ_I(o.a->rd_units, 64); CHECK_EQ_I(o.a->rdbar_units, 4);
+        CHECK(o.ev_at > 0 && o.d_end_at > o.ev_at && o.d_end_at < o.ev_at + 8000);
+        CHECK_EQ_I(o.down_bad, 0); CHECK_EQ_I(o.up_bad_before, 0);
+        CHECK(o.silent_after_end);
+    }
     s.d_clear_ms = 0;
 
     /* 14. the caller asks for silence in the renegotiation, to work on its
      * echo canceller (CPs, 9.6.1.2.4 to 9.6.1.2.6, Figure 10) */
     s.a_reneg_ms = 1000; s.a_reneg_sil = 1; s.a_reneg_kd = 31;
-    run(&s, &o); report("caller renegotiates with silence", &s, &o);
-    printf("    back in data mode %.0f ms after the request; silence %d octets (%d not silent), Rt %d + %d units\n",
-           (o.d_data2_at - o.ev_at) / 8.0, o.a->sil_octets, o.a->sil_bad, o.a->rt_units, o.a->rtbar_units);
-    CHECK_EQ_I(o.state, P34_DATA); CHECK_EQ_I(o.error, 0);
-    CHECK_EQ_I(o.a->renegs, 1);
-    CHECK(o.a->sil_octets >= 6 * 20); CHECK_EQ_I(o.a->sil_bad, 0);
-    CHECK_EQ_I(o.a->sil_octets % 6, 0);                     /* data frame alignment kept */
-    CHECK_EQ_I(o.a->rt_units, 64); CHECK_EQ_I(o.a->rtbar_units, 4); CHECK_EQ_I(o.a->rd_bad, 0);
-    CHECK_EQ_I(o.down_rate, (31 + 6) * 8000 / 6);
-    CHECK_EQ_I(o.a->dec_bad, 0); CHECK_EQ_I(o.a->b1d_bad, 0);
-    CHECK(o.down_bits > 250000); CHECK_EQ_I(o.down_bad, 0);
-    CHECK_EQ_I(o.up_bad_before, 0);
-    CHECK(o.up_bits2 > 60000); CHECK_EQ_I(o.up_bad2, 0);
+    if (T_CASE(only, 27)) {
+        run(&s, &o); report("caller renegotiates with silence", &s, &o);
+        printf("    back in data mode %.0f ms after the request; silence %d octets (%d not silent), Rt %d + %d units\n",
+               (o.d_data2_at - o.ev_at) / 8.0, o.a->sil_octets, o.a->sil_bad, o.a->rt_units, o.a->rtbar_units);
+        CHECK_EQ_I(o.state, P34_DATA); CHECK_EQ_I(o.error, 0);
+        CHECK_EQ_I(o.a->renegs, 1);
+        CHECK(o.a->sil_octets >= 6 * 20); CHECK_EQ_I(o.a->sil_bad, 0);
+        CHECK_EQ_I(o.a->sil_octets % 6, 0);                     /* data frame alignment kept */
+        CHECK_EQ_I(o.a->rt_units, 64); CHECK_EQ_I(o.a->rtbar_units, 4); CHECK_EQ_I(o.a->rd_bad, 0);
+        CHECK_EQ_I(o.down_rate, (31 + 6) * 8000 / 6);
+        CHECK_EQ_I(o.a->dec_bad, 0); CHECK_EQ_I(o.a->b1d_bad, 0);
+        CHECK(o.down_bits > 250000); CHECK_EQ_I(o.down_bad, 0);
+        CHECK_EQ_I(o.up_bad_before, 0);
+        CHECK(o.up_bits2 > 60000); CHECK_EQ_I(o.up_bad2, 0);
+    }
     s.a_reneg_ms = 0; s.a_reneg_sil = 0; s.a_reneg_kd = 0;
 
     /* 15. the line gets worse in mid-call: the upstream rate we allowed no
      * longer fits. We renegotiate it down (MP with a lower drn) until the
      * receiver is clean again. */
     s.snr2_ms = 1000; s.snr2_db = 28; s.seconds = 11;
-    run(&s, &o); report("line drops to 28 dB in mid-call", &s, &o);
-    printf("    rate lowered %d time(s); after the last: %ld bits, %ld bad\n", o.d->rate_drops, o.up_bits2, o.up_bad2);
-    CHECK_EQ_I(o.state, P34_DATA); CHECK_EQ_I(o.error, 0);
-    CHECK(o.d->rate_drops >= 1 && o.d->rate_drops <= 3);
-    CHECK(o.up_rate <= 19200 && o.up_rate >= 9600);
-    CHECK_EQ_I(o.up_rate, o.a->up_rate);
-    CHECK(o.up_bits2 > 40000); CHECK_EQ_I(o.up_bad2, 0);
-    CHECK_EQ_I(o.down_bad, 0);
-    CHECK_EQ_I(o.up_bad_before, 0);
+    if (T_CASE(only, 28)) {
+        run(&s, &o); report("line drops to 28 dB in mid-call", &s, &o);
+        printf("    rate lowered %d time(s); after the last: %ld bits, %ld bad\n", o.d->rate_drops, o.up_bits2, o.up_bad2);
+        CHECK_EQ_I(o.state, P34_DATA); CHECK_EQ_I(o.error, 0);
+        CHECK(o.d->rate_drops >= 1 && o.d->rate_drops <= 3);
+        CHECK(o.up_rate <= 19200 && o.up_rate >= 9600);
+        CHECK_EQ_I(o.up_rate, o.a->up_rate);
+        CHECK(o.up_bits2 > 40000); CHECK_EQ_I(o.up_bad2, 0);
+        CHECK_EQ_I(o.down_bad, 0);
+        CHECK_EQ_I(o.up_bad_before, 0);
+    }
     s.snr2_ms = 0; s.seconds = 6;
 
     /* 16. and when it becomes unusable altogether: the renegotiation cannot
      * complete either, and that is a retrain */
     s.snr2_ms = 1000; s.snr2_db = 3; s.seconds = 27;
-    run(&s, &o); report("line drops to 3 dB in mid-call", &s, &o);
-    printf("    retrain asked for %.1f s after the line went bad\n", (o.d_end_at - o.ev_at) / 8000.0);
-    CHECK_EQ_I(o.state, P34_RETRAIN); CHECK(o.d->retrain_ours);
-    CHECK(o.ev_at > 0 && o.d_end_at > o.ev_at && o.d_end_at < o.ev_at + 15000 * 8);
+    if (T_CASE(only, 29)) {
+        run(&s, &o); report("line drops to 3 dB in mid-call", &s, &o);
+        printf("    retrain asked for %.1f s after the line went bad\n", (o.d_end_at - o.ev_at) / 8000.0);
+        CHECK_EQ_I(o.state, P34_RETRAIN); CHECK(o.d->retrain_ours);
+        CHECK(o.ev_at > 0 && o.d_end_at > o.ev_at && o.d_end_at < o.ev_at + 15000 * 8);
+    }
     s.snr2_ms = 0; s.seconds = 6;
 
     /* 17. the caller gives the start-up up in Phase 4 and asks for a retrain
      * (as a U.S. Robotics 56K did, 0.7 s into our MP): we hear its Tone A
      * there too, not only in data mode */
     s.a_tone_ms = 1; s.seconds = 30;
-    run(&s, &o); report("Tone A during our MP", &s, &o);
-    printf("    retrain taken up %.0f ms after the tone began\n", (o.d_end_at - o.tone_at) / 8.0);
-    CHECK_EQ_I(o.state, P34_RETRAIN); CHECK_EQ_I(o.error, 0); CHECK(!o.d->retrain_ours);
-    CHECK(o.tone_at > 0 && o.d_end_at > o.tone_at + 50 * 8 && o.d_end_at < o.tone_at + 200 * 8);
+    if (T_CASE(only, 30)) {
+        run(&s, &o); report("Tone A during our MP", &s, &o);
+        printf("    retrain taken up %.0f ms after the tone began\n", (o.d_end_at - o.tone_at) / 8.0);
+        CHECK_EQ_I(o.state, P34_RETRAIN); CHECK_EQ_I(o.error, 0); CHECK(!o.d->retrain_ours);
+        CHECK(o.tone_at > 0 && o.d_end_at > o.tone_at + 50 * 8 && o.d_end_at < o.tone_at + 200 * 8);
+    }
     s.a_tone_ms = 0; s.seconds = 9;        /* no mid-call event here: the whole run */
 
     /* 18. a caller that needs 0.8 s of TRN2d before the MP (a U.S. Robotics
      * 56K of 1998 gave up with 0.3 s and connected with 0.9 s) */
     s.a_trn2d_ms = 800;
-    run(&s, &o); report("a caller that needs 0.8 s of TRN2d", &s, &o);
-    CHECK_EQ_I(o.state, P34_DATA); CHECK_EQ_I(o.error, 0);
-    CHECK(o.up_bits > 10000); CHECK_EQ_I(o.up_bad, 0); CHECK_EQ_I(o.down_bad, 0);
+    if (T_CASE(only, 31)) {
+        run(&s, &o); report("a caller that needs 0.8 s of TRN2d", &s, &o);
+        CHECK_EQ_I(o.state, P34_DATA); CHECK_EQ_I(o.error, 0);
+        CHECK(o.up_bits > 10000); CHECK_EQ_I(o.up_bad, 0); CHECK_EQ_I(o.down_bad, 0);
+    }
     s.a_trn2d_ms = 0;
 
     /* 13. a renegotiation that never gets anywhere (the caller sends S,
      * S-bar and then SCR for ever): 9.6.1 asks for a retrain */
     s.a_reneg_ms = 500; s.a_reneg_scr = 1000000; s.seconds = 7;
-    run(&s, &o); report("renegotiation stalls", &s, &o);
-    CHECK_EQ_I(o.state, P34_RETRAIN); CHECK_EQ_I(o.error, 0);
-    CHECK(o.d->retrain_ours);
+    if (T_CASE(only, 32)) {
+        run(&s, &o); report("renegotiation stalls", &s, &o);
+        CHECK_EQ_I(o.state, P34_RETRAIN); CHECK_EQ_I(o.error, 0);
+        CHECK(o.d->retrain_ours);
+    }
     s.a_reneg_ms = 0; s.a_reneg_scr = 0; s.seconds = 6;
 
-    /* not in data mode: both requests are refused */
-    {
+    /* not in data mode: both requests are refused (with the last case) */
+    if (T_CASE(only, 32)) {
         static p34d_t d0; p34d_cfg c0;
         memset(&c0, 0, sizeof c0);
         c0.sym_rate = 3200; c0.car_num = 3; c0.car_den = 5; c0.uinfo = 91;

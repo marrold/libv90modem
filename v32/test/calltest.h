@@ -4,9 +4,9 @@
 #ifndef V32_CALLTEST_H
 #define V32_CALLTEST_H
 #include <string.h>
-#include "v32.h"
-#include "v32call.h"
-#include "v32line.h"
+#include "../v32.h"
+#include "../../sim/v32call.h"
+#include "../../sim/v32line.h"
 
 /* data source: 64 zeros, a one, then a pseudo-random stream; the checker
  * finds the one after the zeros and counts mismatches from there */

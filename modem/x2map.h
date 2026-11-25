@@ -30,10 +30,20 @@ typedef struct {
                                frames, last and rds carry on */
     int     last;           /* the differential sign: 1 positive */
     int64_t rds;            /* the running sum of the linear values sent */
+    /* the bank of index, pad_mode and levels_a as they were when last
+     * seen (x2map_init, x2map_frame): its bits per frame (0: no bank), and
+     * the lists of position 0 and of positions 1..5. x2map_frame takes
+     * them again when the owner has changed one of the three. */
+    int     c_index, c_pad_mode, c_levels_a, c_bits;
+    int     c_n[2];
+    const uint8_t *c_recv[2], *c_sent[2];
 } x2map_t;
 
 /* last positive, the running sum zero: the first sync frame, and again
- * after a rate change's scrambler reset */
+ * after a rate change's scrambler reset. Every x2map_t must be given this
+ * before any other call: it sets the bank cache (c_*) that x2map_frame and
+ * x2map_bits rely on; after it the owner may write index, pad_mode and
+ * levels_a directly */
 void x2map_init(x2map_t *m, int index, int pad_mode, int levels_a);
 
 /* bits per frame, B + MD (24 at index 1, 42 at 15); 0 for a bank that

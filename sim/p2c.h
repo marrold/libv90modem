@@ -22,6 +22,9 @@ typedef struct {
     int k56;                /* INFO1c's frequency offset (bits 79:88) as a K56flex client sends
                                it (k56-facts.md "Phase 2"): P2C_K56_ACCEPT 0x001, mu-law and its
                                codec check passed; P2C_K56_DECLINE 0x200; 0 = the offset measured */
+    int info0_repeat;       /* a misbehaving caller: once INFO0 is exchanged, send INFO0c
+                               (acknowledged) this many times more before waiting for the
+                               Tone A reversal; -1 = for ever, 0 = well behaved */
 } p2c_cfg;
 
 #define P2C_K56_ACCEPT  1
@@ -50,6 +53,7 @@ typedef struct {
     /* what the test looks at: sample times of events as this end saw them */
     int32_t   t_rev1, t_rev2, t_rev3, t_tone_a2, t_info1a;
     int       mute;         /* test hook: transmit nothing while set */
+    int       rep_left;     /* cfg.info0_repeat still to send */
 } p2c_t;
 
 void    p2c_init(p2c_t *p, const p2c_cfg *cfg);

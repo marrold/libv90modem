@@ -6,6 +6,9 @@
 #include "test.h"
 #include "dxline.h"
 #include "../modem/v34ans.h"
+#include "../modem/clock.h"
+#include <inttypes.h>
+#include "wctr.h"
 
 typedef struct {
     v34dx_t a, c; bend_t ua, uc; dxline_t line;
@@ -72,6 +75,16 @@ static int pair_to_data(int max_ms)
 
 static void sinks_reset(void) { P.ua.sink.n = P.ua.sink.errs = P.uc.sink.n = P.uc.sink.errs = 0; P.pw_a = P.pw_c = 0; P.pw_n = 0; }
 
+/* counter words (test/wctr.h) each way: what an end sends, what it receives */
+typedef struct { wctr_t out, in; } wend_t;
+static wend_t WA, WC;
+static int w_get(void *u) { return wctr_get(&((wend_t *)u)->out); }
+static void w_put(void *u, int bit) { wctr_put(&((wend_t *)u)->in, bit); }
+
+/* modem/v34dx.c FAR_LEAD: the far canceller's reference starts this many
+ * samples before the round trip (keep the two equal) */
+#define V34DX_FAR_LEAD 16
+
 static const dxline_cfg CLEAN = { 20, 24, 0.5, 0.5, 0.3, 0.3, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 static void report(const char *what)
@@ -108,9 +121,9 @@ int main(void)
         /* 11.3.2.2.1: the caller's S / S-bar within 600 ms + a round trip of the start of our J
          * (the call modem may wait 500 ms; this one does not) */
         t_sbar_c = P.c.tx_first[DXS_PP];
-        CHECK(t_sbar_c - P.a.tx_first[DXS_J] < 8 * 600);
+        CHECK(clk_diff((uint32_t)t_sbar_c, P.a.tx_first[DXS_J]) < 8 * 600);
         /* 11.4.2.2.1: J' within 100 ms + a round trip of our S / S-bar transition */
-        CHECK(P.a.t_jp - (P.a.tx_first[DXS_TRN4]) < 8 * 100 + P.a.cfg.rtd + 8 * 20);
+        CHECK(clk_diff(P.a.t_jp, P.a.tx_first[DXS_TRN4]) < 8 * 100 + P.a.cfg.rtd + 8 * 20);
         /* 11.4.1.x.2: TRN of Phase 4 at least 512 T, at most 2000 ms */
         CHECK(P.a.tx_count[DXS_TRN4] >= 512 && P.a.tx_count[DXS_TRN4] * 1000L / S <= 2000);
         CHECK(P.c.tx_count[DXS_TRN4] >= 512 && P.c.tx_count[DXS_TRN4] * 1000L / S <= 2000);
@@ -119,7 +132,7 @@ int main(void)
         CHECK(P.a.mpa_sent >= 1 && P.c.mpa_sent >= 1);
         CHECK_EQ_I(P.a.tx_count[DXS_E], 10); CHECK_EQ_I(P.c.tx_count[DXS_E], 10);
         /* 11.4.2.x.2: E within 2500 ms of the start of Phase 4 */
-        CHECK(P.data_a - P.a.tx_first[DXS_S] < 8 * 2500 + 3 * P.a.cfg.rtd);
+        CHECK(P.data_a - (long)P.a.tx_first[DXS_S] < 8 * 2500 + 3 * P.a.cfg.rtd);
         /* the rates: the same at both ends, the top of Table 8 for this symbol rate */
         CHECK_EQ_I(P.a.tx_rate, P.c.rx_rate); CHECK_EQ_I(P.a.rx_rate, P.c.tx_rate);
         if (S == 2400) {
@@ -230,6 +243,43 @@ int main(void)
         CHECK(P.erle_a > 40);
     }
 
+    /* ---- the answering side of a digital modem behind an ATA or a VoIP
+     * gateway (ISP calls of 2026-11-23: a Cisco IOS FXS port's hybrid at
+     * 302 ms, 19.5 dB down): no echo of its own, the far hybrid's a round
+     * trip late, 20 dB down; our own path's delay not known, so Phase 2's
+     * round trip still holds it (as answer.c gives it). The far canceller
+     * sits on the echo; the upstream error below -30 dB. And a round trip
+     * of 100 ms: inside the search, so the near canceller takes the echo
+     * and the far one is off ---- */
+    {
+        static const int ms[3] = { 300, 400, 100 };
+        for (k = 0; k < 3; k++) {
+            int e, lag;
+            double mse_db;
+#ifdef TEST_SHORT
+            if (k > 0) break;
+#endif
+            lc = CLEAN; lc.echo_a = 0; lc.d_ca = lc.d_ac = ms[k] * 4; lc.far_a = 0.124;
+            e = lc.d_ca + lc.d_ac + 2;                  /* (the echo path's first tap) */
+            mkcfg(&a, &c, 4, 1, 0, &lc); a.echo_delay = -1; a.rtd_has_io = 1; a.rtd = lc.d_ca + lc.d_ac + 3;
+            pair_init(&a, &c, &lc);
+            CHECK_EQ_I(pair_to_data(9000), 1);
+            CHECK_EQ_I(P.a.far_on, ms[k] > 160);
+            /* where the canceller's taps begin: the far one's (v34dx.c FAR_LEAD), or the near one's */
+            lag = P.a.far_on ? P.a.ecd.delay + P.a.cfg.rtd - V34DX_FAR_LEAD : P.a.ecd.delay;
+            sinks_reset(); pair_run(8000L * 4);
+            mse_db = 10 * log10((P.a.up.rx.mse + 1e-9) / 65536.0);
+            /* (the report's A->C is the calling side's downstream, not checked here: 31200 at
+             * 100 ms, 28800 at 300, 12000 at 400 ms is known and not yet investigated,
+             * docs/limits.md and docs/history/audit-0.6.md, ISP-1; a fix moves the golden line) */
+            printf("  far echo %d ms, 20 dB down, nothing near: canceller from %d (the echo at %d), echo down %.0f dB,"
+                   " upstream error %.1f dB;", ms[k], lag, e, P.erle_a, mse_db); report("");
+            CHECK(lag >= e - 30 && lag <= e);
+            CHECK(mse_db < -30);
+            CHECK_EQ_I(P.ua.sink.errs, 0); CHECK_EQ_I(P.uc.sink.errs, 0); CHECK(P.a.rx_rate >= 28800);
+        }
+    }
+
     /* ---- ceilings, symmetric and asymmetric rates (MP bits 20:27, 50) ---- */
     {
         mkcfg(&a, &c, 4, 1, 0, &CLEAN); c.max_rx_rate = 19200; a.max_rx_rate = 26400;
@@ -274,6 +324,47 @@ int main(void)
         CHECK_EQ_I(P.ua.sink.errs, 0); CHECK_EQ_I(P.uc.sink.errs, 0);
         printf("  renegotiation took %ld ms;", (P.n - 8000L * 3 - t0) / 8);
         report(k == 0 ? "begun by the answer modem" : k == 1 ? "begun by both at once" : "answer modem, new ceiling 14400");
+    }
+    /* ---- the data whole across a rate renegotiation (11.6), begun by either
+     * end: counter words each way. Each transmitter sends its mapping frame
+     * under way whole before its S; each receiver delivers the frames its
+     * decoder still held at the far S but one, the margin against an S
+     * found late (v34_rx_flush_before): exactly one mapping frame is lost
+     * each way, nothing repeated or wrong ---- */
+    for (k = 0; k < 2; k++) {
+        static const char *const who[2] = { "the answer modem", "the call modem" };
+        wend_t *rx[2] = { &WC, &WA };   /* A -> C, C -> A */
+        int64_t w0[2], l0[2], b0[2], g0[2], frame[2];
+        int d;
+        mkcfg(&a, &c, 4, 1, 0, &CLEAN);
+        a.getbit = c.getbit = w_get; a.putbit = c.putbit = w_put; a.user = &WA; c.user = &WC;
+        memset(&WA, 0, sizeof WA); memset(&WC, 0, sizeof WC);
+        WA.out.gen = 0x5a00; WC.out.gen = 0x2c00;
+        pair_init(&a, &c, &CLEAN);
+        CHECK_EQ_I(pair_to_data(8000), 1); pair_run(8000);
+        frame[0] = (int64_t)P.a.tx_rate * 8 / P.a.cfg.sym_rate; frame[1] = (int64_t)P.a.rx_rate * 8 / P.a.cfg.sym_rate;
+        for (d = 0; d < 2; d++) {
+            w0[d] = rx[d]->in.words; l0[d] = rx[d]->in.lost; b0[d] = rx[d]->in.breaks; g0[d] = rx[d]->in.gap_bits;
+        }
+        CHECK_EQ_I(v34dx_renegotiate(k ? &P.c : &P.a, 0), 0);
+        pair_run(80);
+        CHECK_EQ_I(pair_to_data(3000), 1);
+        CHECK_EQ_I(P.a.n_reneg, 1); CHECK_EQ_I(P.c.n_reneg, 1);
+        pair_run(8000L * 2);
+        printf("  renegotiation begun by %s, counter words:\n", who[k]);
+        for (d = 0; d < 2; d++) {
+            const wctr_t *w = &rx[d]->in;
+            int64_t gap = w->gap_bits - g0[d];
+            printf("    %s words before %" PRId64 ", after %" PRId64 ", lost %" PRId64 ", again %" PRId64 "; breaks %" PRId64
+                   " (%" PRId64 " bits missing, the mapping frame %" PRId64 ")\n", d ? "C->A" : "A->C", w0[d], w->words - w0[d],
+                   w->lost - l0[d], w->again, w->breaks - b0[d], gap, frame[d]);
+            CHECK(w0[d] > 1000); CHECK(w->words - w0[d] > 1000);
+            CHECK_EQ_I(w->again, 0);
+            CHECK_EQ_I(w->breaks - b0[d], 1);
+            CHECK(gap >= frame[d] - 1 && gap <= frame[d]);
+            CHECK(16 * (w->lost - l0[d]) >= gap && 16 * (w->lost - l0[d]) < gap + 32);
+            CHECK_EQ_I(w->locked, 1);
+        }
     }
     {
         /* A renegotiation whose MP is Type 0 (a Conexant CX93001 does that) leaves the
@@ -323,6 +414,36 @@ int main(void)
         CHECK(me->mp_sent >= 1 && far->mpa_sent >= 1);
     }
 
+    /* ---- our cleardown is not turned into a retrain, either side: the far
+     * modem's retrain tone heard during it, or the renegotiation's time-out
+     * in it, ends it as our cleardown ---- */
+    for (k = 0; k < 2; k++) {
+        v34dx_t *me = k ? &P.c : &P.a;
+        long t;
+        mkcfg(&a, &c, 4, 1, 0, &CLEAN);
+        pair_init(&a, &c, &CLEAN);
+        CHECK_EQ_I(pair_to_data(8000), 1); pair_run(4000);
+        CHECK_EQ_I(v34dx_cleardown(me), 0);
+        /* the far modem stops at once for its tone: Tone B to the answer
+         * modem, Tone A to the call modem */
+        if (k) { P.line.c.mute_ac = 1; P.line.c.tone_c_hz = 2400; }
+        else { P.line.c.mute_ca = 1; P.line.c.tone_a_hz = 1200; }
+        P.line.c.tone_amp = 1500;
+        t = P.n; while (P.n < t + 8000 && me->state != DX_FAILED && me->state != DX_RETRAIN) pair_run(8);
+        printf("  %s's cleardown, the far tone during it: state %d, error %d after %ld ms\n", k ? "caller" : "answerer",
+               (int)me->state, me->error, (P.n - t) / 8);
+        CHECK_EQ_I(me->state, DX_FAILED); CHECK_EQ_I(me->error, DX_ERR_HANGUP);
+        CHECK(P.n - t < 8 * 1000);
+        /* the renegotiation's time-out (11.6) one sample away */
+        pair_init(&a, &c, &CLEAN);
+        CHECK_EQ_I(pair_to_data(8000), 1); pair_run(4000);
+        CHECK_EQ_I(v34dx_cleardown(me), 0);
+        CHECK_EQ_I(me->state, DX_P4_TRN);
+        me->t_neg = me->now - 8 * 6000;
+        (void)v34dx_tick(me, 0);
+        CHECK_EQ_I(me->state, DX_FAILED); CHECK_EQ_I(me->error, DX_ERR_HANGUP);
+    }
+
     /* ---- what must end in a retrain ---- */
     {
         long t;
@@ -356,7 +477,7 @@ int main(void)
         pair_init(&a, &c, &lc);
         t = 0; while (P.n < 8000L * 6 && P.a.state != DX_RETRAIN) pair_run(8);
         CHECK_EQ_I(P.a.state, DX_RETRAIN); CHECK_EQ_I(P.a.retrain_ours, 1);
-        CHECK_NEAR((P.n - P.a.tx_first[DXS_J]) / 8.0, 600 + 44 / 8.0, 4);
+        CHECK_NEAR((P.n - (long)P.a.tx_first[DXS_J]) / 8.0, 600 + 44 / 8.0, 4);
         /* 11.3.2.2.2: the caller's S comes but its J does not */
         pair_init(&a, &c, &CLEAN);
         while (P.n < 8000L * 6 && P.a.state != DX_P3_RX) pair_run(8);

@@ -1,0 +1,7 @@
+  V.34 renegotiation: caller 28800/16800 bit/s, renegotiations 1 / 1, retrains 0 / 0
+  V.90 renegotiation: caller 28800/36000 bit/s, renegotiations 1 / 1, retrains 0 / 0
+  V.92 renegotiation: caller 40000/36000 bit/s, renegotiations 1 / 1, retrains 0 / 0
+  V.34 renegotiation cut off: ends 8 / 8, renegotiations 1 / 1
+  V.90 renegotiation cut off: ends 8 / 8, renegotiations 1 / 1
+  V.92 renegotiation cut off: ends 8 / 8, renegotiations 1 / 1
+renegotiations: 51 checks, 0 failures

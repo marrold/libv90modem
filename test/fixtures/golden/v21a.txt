@@ -1,0 +1,15 @@
+recording: companded receive, 163760 samples
+answer tone at 6.456 s in the recording; the modem starts 0.200 s before it
+  6.256 s  modem phase V8 (V.34 engine state 0 error 0)
+  6.256 s    V.8 state 0
+  6.256 s    V.42 state -1, retrains 0, p34 state 0
+  6.256 s    modem connected 0 moving 0 retraining 0
+  6.456 s    V.8 state 1
+ 11.456 s    V.8 state 3
+ 11.531 s  modem phase V22 (V.34 engine state 0 error 0)
+ 19.531 s  modem phase V21 (V.34 engine state 0 error 0)
+ 20.450 s    V.42 state 0, retrains 0, p34 state 0
+ 20.450 s    modem connected 1 moving 1 retraining 0
+modulation 1, 300 bit/s down, 300 up, SNR -0.1 dB, round trip -1, echo delay -1, 0 retrains, 0 renegotiations; 0 bits received
+  second 20: 121 samples differ
+163760 samples; after the answer our transmit differs from the recording in 121 (first at 20.455 s)

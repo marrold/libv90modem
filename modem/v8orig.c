@@ -153,7 +153,7 @@ v8o_state v8orig_tick(v8orig_t *v, int16_t rx, int16_t *tx)
     case V8O_CJ:
         *tx = v21mod_tick(&v->mod, v->bits[v->pos], &done);
         if (done && ++v->pos >= v->nbits) {
-            v->selected = v8_selected(&v->jm);
+            v->selected = v8_selected_caller(&v->jm);
             v->result = v->selected ? V8O_RES_OK : V8O_RES_NO_COMMON;
             v->at_post = v->n + 1;
             go(v, V8O_POST);

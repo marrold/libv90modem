@@ -1,6 +1,7 @@
 /* See orig.h. */
 #include <string.h>
 #include "orig.h"
+#include "clock.h"
 #include "v21h_bpf.h"
 #include "bell103h_bpf.h"
 #include "v23h_bpf.h"
@@ -40,7 +41,7 @@ static void fail(orig_t *o, int why) { o->phase = ORIG_FAILED; o->connected = 0;
 
 static void start_v22(orig_t *o)
 {
-    v22m_init(&o->v22, V22_CALLER, 1, o->cfg.level, o->cfg.getbit, o->cfg.putbit, o->cfg.user);
+    v22m_init(&o->e.leg.v22, V22_CALLER, 1, o->cfg.level, o->cfg.getbit, o->cfg.putbit, o->cfg.user);
     o->cd_run = 0;
     o->phase = ORIG_V22; o->t = 0;
 }
@@ -57,7 +58,7 @@ static void start_v32(orig_t *o)
     c.rates = V32_R4800;
     for (i = 1; i < V32_NRATES; i++) if (o->cfg.max_bps <= 0 || rate[i] <= o->cfg.max_bps) c.rates |= 1u << i;
     c.getbit = o->cfg.getbit; c.putbit = o->cfg.putbit; c.user = o->cfg.user;
-    v32_init_call(&o->v32, &c);
+    v32_init_call(&o->e.leg.v32, &c);
 }
 
 /* V.34 (11.2.1.1.1): INFO0c now, the 75 ms of silence after CJ being over */
@@ -70,7 +71,7 @@ static void start_v34(orig_t *o)
     c.io_delay = o->cfg.echo_delay;
     c.max_tx_rate = o->cfg.max_tx_bps; c.max_rx_rate = o->cfg.max_rx_bps;
     c.getbit = o->cfg.getbit; c.putbit = o->cfg.putbit; c.user = o->cfg.user;
-    v34orig_init(&o->v34, &c);
+    v34orig_init(&o->e.v34, &c);
     o->phase = ORIG_V34; o->t = 0;
 }
 
@@ -86,14 +87,14 @@ static void start_v90(orig_t *o)
     c.table1 = o->cfg.v90_table1;
     c.v92 = (o->cfg.modes & ORIG_MODE_V92) != 0;    /* PCM upstream if the answerer offers it */
     c.getbit = o->cfg.getbit; c.putbit = o->cfg.putbit; c.user = o->cfg.user;
-    v90a_init(&o->v90, &c);
+    v90a_init(&o->e.v90, &c);
     o->phase = ORIG_V90; o->t = 0;
 }
 
 /* why a V.90 call ended */
 static int v90_end(const orig_t *o)
 {
-    switch (o->v90.error) {
+    switch (o->e.v90.error) {
     case V90A_ERR_CLEARDOWN: return ORIG_END_CLEARDOWN;
     case V90A_ERR_HANGUP: return ORIG_END_HANGUP;
     case V90A_ERR_RETRAINS: return ORIG_END_RETRAIN;
@@ -105,13 +106,15 @@ static int v90_end(const orig_t *o)
 /* why a V.34 call ended */
 static int v34_end(const orig_t *o)
 {
-    switch (o->v34.error) {
+    switch (o->e.v34.error) {
     case V34O_ERR_CLEARDOWN: return ORIG_END_CLEARDOWN;
     case V34O_ERR_HANGUP: return ORIG_END_HANGUP;
+    case V34O_ERR_RETRAINS: return o->connected ? ORIG_END_RETRAIN : ORIG_END_NO_CARRIER;
     case V34O_ERR_PHASE2:
         /* nothing to offer in INFO1c, or an INFO1a we cannot follow */
-        if (!o->connected && o->v34.p2.error == P2L_ERR_NO_RATE) return ORIG_END_NO_COMMON;
-        return o->connected ? ORIG_END_LOST : ORIG_END_NO_CARRIER;
+        if (!o->connected && o->e.v34.p2.error == P2L_ERR_NO_RATE) return ORIG_END_NO_COMMON;
+        /* connected: only a retrain has a Phase 2 (as V.90's, V90A_ERR_RETRAINS) */
+        return o->connected ? ORIG_END_RETRAIN : ORIG_END_NO_CARRIER;
     default: return o->connected ? ORIG_END_LOST : ORIG_END_NO_CARRIER;
     }
 }
@@ -119,9 +122,9 @@ static int v34_end(const orig_t *o)
 /* why a V.32bis call ended */
 static int v32_end(const orig_t *o)
 {
-    if (o->v32.error == V32_ERR_NO_RATE)
+    if (o->e.leg.v32.error == V32_ERR_NO_RATE)
         /* our R2 asked for the cleardown (nothing in common), or the answerer's R3 / E did */
-        return o->v32.r2_word && !v32_word_rates(o->v32.r2_word) ? ORIG_END_NO_COMMON : ORIG_END_CLEARDOWN;
+        return o->e.leg.v32.r2_word && !v32_word_rates(o->e.leg.v32.r2_word) ? ORIG_END_NO_COMMON : ORIG_END_CLEARDOWN;
     return o->connected ? ORIG_END_LOST : ORIG_END_NO_CARRIER;
 }
 
@@ -221,9 +224,9 @@ static void start_b103(orig_t *o)
 /* Bell 212A (orig.h): the V.22 caller at 1200 bit/s, its scrambled ones now */
 static void start_b212(orig_t *o)
 {
-    v22m_init(&o->v22, V22_CALLER, 0, o->cfg.level, o->cfg.getbit, o->cfg.putbit, o->cfg.user);
-    v22tx_set_mode(&o->v22.tx, V22_TX_SB1_1200);
-    o->v22.state = V22S_TRAIN;
+    v22m_init(&o->e.leg.v22, V22_CALLER, 0, o->cfg.level, o->cfg.getbit, o->cfg.putbit, o->cfg.user);
+    v22tx_set_mode(&o->e.leg.v22.tx, V22_TX_SB1_1200);
+    o->e.leg.v22.state = V22S_TRAIN;
     o->via_bell = 1;
     o->cd_run = 0;
     o->phase = ORIG_V22; o->t = 0;
@@ -355,7 +358,7 @@ static int16_t tick_v23(orig_t *o, int16_t rx)
 int16_t orig_tick(orig_t *o, int16_t rx)
 {
     int16_t tx = 0;
-    o->t++;
+    o->t = clk_sat_inc(o->t);
     switch (o->phase) {
     case ORIG_V8:
         /* Bell offered: 2225 Hz before a 2100 Hz tone was told is a pre-V.8
@@ -376,7 +379,7 @@ int16_t orig_tick(orig_t *o, int16_t rx)
              * channel-2 receiver detects a steady mark; tune it to V.23's
              * forward channel when V.23, not V.21, is on offer (V.21 first,
              * then V.23, per the fallback order). */
-            if (o->cfg.modes & V8_MOD_V22) v22m_init(&o->v22, V22_CALLER, 1, o->cfg.level, o->cfg.getbit, o->cfg.putbit, o->cfg.user);
+            if (o->cfg.modes & V8_MOD_V22) v22m_init(&o->e.leg.v22, V22_CALLER, 1, o->cfg.level, o->cfg.getbit, o->cfg.putbit, o->cfg.user);
             if (!(o->cfg.modes & V8_MOD_V21) && (o->cfg.modes & V8_MOD_V23)) v23_rx_init(o);
             else v21_rx_init(o);
             o->mark_run = 0;
@@ -417,10 +420,10 @@ int16_t orig_tick(orig_t *o, int16_t rx)
         int carrier, level = v21_rx(o, rx, &carrier), v32 = (o->cfg.modes & V8_MOD_V32) != 0;
         if ((o->cfg.modes & BELL_MODES) && belltone_tick(&o->btone, rx)) { bell_on_tone(o); break; }
         if (v32) {
-            int16_t t32 = v32_tick(&o->v32, rx);
+            int16_t t32 = v32_tick(&o->e.leg.v32, rx);
             annex_a(o, rx);
             /* A.2.1.1, A.2.1.3: AC (64 T of it), or already its reversal */
-            if (o->v32.state != V32S_FAILED && (o->v32.rx.ac_run >= 2 * 64 || o->v32.state != V32S_C_AA)) {
+            if (o->e.leg.v32.state != V32S_FAILED && (o->e.leg.v32.rx.ac_run >= 2 * 64 || o->e.leg.v32.state != V32S_C_AA)) {
                 o->aa = 1;
                 o->phase = ORIG_V32; o->t = 0;
                 tx = t32;
@@ -432,18 +435,18 @@ int16_t orig_tick(orig_t *o, int16_t rx)
         if (o->cfg.modes & V8_MOD_V22) {
             /* A.2.1.2: during Tc the V.22bis caller waits; then it hears
              * the unscrambled binary 1 for 155 ms once more */
-            if (v32 && o->tc == MS(TC_MS - 155)) v22m_init(&o->v22, V22_CALLER, 1, o->cfg.level, o->cfg.getbit, o->cfg.putbit, o->cfg.user);
-            if (!v32 || o->tc < 0 || o->tc >= MS(TC_MS - 155)) tx += v22m_tick(&o->v22, rx);
+            if (v32 && o->tc == MS(TC_MS - 155)) v22m_init(&o->e.leg.v22, V22_CALLER, 1, o->cfg.level, o->cfg.getbit, o->cfg.putbit, o->cfg.user);
+            if (!v32 || o->tc < 0 || o->tc >= MS(TC_MS - 155)) tx += v22m_tick(&o->e.leg.v22, rx);
             /* it is V.22bis once its caller has heard 155 ms of the
              * unscrambled binary 1 and left V22S_WAIT (its carrier flag
              * alone also rises on a V.21 channel 2 mark) */
-            if (o->v22.state != V22S_WAIT) {
+            if (o->e.leg.v22.state != V22S_WAIT) {
                 if (v32 && o->tc < 0 && !(o->t_aa >= 0 && (o->ans_rest < 0 || o->ans_rest > MS(ANS_LONG_MS)))) {
                     /* A.2.1.3 with ANS no longer than 800 ms from the
                      * start of AA, or no AA at all: A.2.1.2, Tc (the
                      * V.22bis caller waits again, held) */
                     o->tc = 0;
-                    v22m_init(&o->v22, V22_CALLER, 1, o->cfg.level, o->cfg.getbit, o->cfg.putbit, o->cfg.user);
+                    v22m_init(&o->e.leg.v22, V22_CALLER, 1, o->cfg.level, o->cfg.getbit, o->cfg.putbit, o->cfg.user);
                 } else {
                     /* AA stops (the V.32bis caller is left), 456 ms of
                      * silence, S1 (v22m) */
@@ -461,24 +464,24 @@ int16_t orig_tick(orig_t *o, int16_t rx)
     }
 
     case ORIG_V22:
-        tx = v22m_tick(&o->v22, rx);
+        tx = v22m_tick(&o->e.leg.v22, rx);
         if (!o->connected) {
-            if (o->v22.tx_ready && o->v22.rx_ready) {
-                o->connected = 1; o->bitrate = o->v22.bitrate;
+            if (o->e.leg.v22.tx_ready && o->e.leg.v22.rx_ready) {
+                o->connected = 1; o->bitrate = o->e.leg.v22.bitrate;
                 o->modulation = o->bitrate == 2400 ? ORIG_MOD_V22BIS : o->via_bell ? ORIG_MOD_BELL212A : ORIG_MOD_V22;
                 o->cd_run = 0;
-            } else if (o->via_bell && (o->cfg.modes & ORIG_MODE_BELL103) && o->v22.state == V22S_TRAIN
+            } else if (o->via_bell && (o->cfg.modes & ORIG_MODE_BELL103) && o->e.leg.v22.state == V22S_TRAIN
                        && o->t > MS(B212_WAIT_MS)) {
                 /* no 1200 bit/s answer to our scrambled ones: a Bell 103 answerer */
                 o->b212_failed = 1;
                 start_b103(o);
                 tx = 0;
-            } else if (o->t > MS(V22_TOTAL_MS) || o->v22.state == V22S_FAILED) {
+            } else if (o->t > MS(V22_TOTAL_MS) || o->e.leg.v22.state == V22S_FAILED) {
                 fail(o, ORIG_END_NO_CARRIER);
             }
         } else {
-            if (o->v22.state == V22S_FAILED) fail(o, ORIG_END_LOST);     /* a retrain (6.4) that never completed */
-            else if (o->v22.rx.carrier) o->cd_run = 0;
+            if (o->e.leg.v22.state == V22S_FAILED) fail(o, ORIG_END_LOST);     /* a retrain (6.4) that never completed */
+            else if (o->e.leg.v22.rx.carrier) o->cd_run = 0;
             else if (++o->cd_run > MS(CD_LOSS_MS)) fail(o, ORIG_END_LOST);
         }
         break;
@@ -492,31 +495,31 @@ int16_t orig_tick(orig_t *o, int16_t rx)
         break;
 
     case ORIG_V32:
-        tx = v32_tick(&o->v32, rx);
-        if (o->v32.state == V32S_FAILED) { fail(o, v32_end(o)); tx = 0; break; }   /* carrier loss included */
-        if (o->v32.connected) {
+        tx = v32_tick(&o->e.leg.v32, rx);
+        if (o->e.leg.v32.state == V32S_FAILED) { fail(o, v32_end(o)); tx = 0; break; }   /* carrier loss included */
+        if (o->e.leg.v32.connected) {
             o->connected = 1; o->modulation = ORIG_MOD_V32BIS;
-            o->bitrate = o->v32.bitrate;          /* may change at a retrain */
+            o->bitrate = o->e.leg.v32.bitrate;          /* may change at a retrain */
         } else if (o->t > MS(V32_TOTAL_MS)) fail(o, ORIG_END_NO_CARRIER);
         break;
 
     case ORIG_V34:
-        tx = v34orig_tick(&o->v34, rx);
-        if (o->v34.state == V34O_ENDED) { fail(o, v34_end(o)); tx = 0; break; }   /* carrier loss included */
-        if (o->v34.state == V34O_DATA) {
+        tx = v34orig_tick(&o->e.v34, rx);
+        if (o->e.v34.state == V34O_ENDED) { fail(o, v34_end(o)); tx = 0; break; }   /* carrier loss included */
+        if (o->e.v34.state == V34O_DATA) {
             /* also after a rate renegotiation or a retrain */
             o->connected = 1; o->modulation = ORIG_MOD_V34;
-            o->bitrate = v34orig_tx_rate(&o->v34); o->rx_bitrate = v34orig_rx_rate(&o->v34);
+            o->bitrate = v34orig_tx_rate(&o->e.v34); o->rx_bitrate = v34orig_rx_rate(&o->e.v34);
         } else if (!o->connected && o->t > MS(V34_TOTAL_MS)) fail(o, ORIG_END_NO_CARRIER);
         break;
 
     case ORIG_V90:
-        tx = v90a_tick(&o->v90, rx);
-        if (o->v90.state == V90A_ENDED) { fail(o, v90_end(o)); tx = 0; break; }
-        if (o->v90.state == V90A_DATA) {
+        tx = v90a_tick(&o->e.v90, rx);
+        if (o->e.v90.state == V90A_ENDED) { fail(o, v90_end(o)); tx = 0; break; }
+        if (o->e.v90.state == V90A_DATA) {
             /* bitrate: what we send (V.34 or PCM upstream), rx_bitrate: the PCM downstream */
-            o->connected = 1; o->modulation = o->v90.pcm ? ORIG_MOD_V92 : ORIG_MOD_V90;
-            o->bitrate = v90a_tx_rate(&o->v90); o->rx_bitrate = v90a_rx_rate(&o->v90);
+            o->connected = 1; o->modulation = o->e.v90.pcm ? ORIG_MOD_V92 : ORIG_MOD_V90;
+            o->bitrate = v90a_tx_rate(&o->e.v90); o->rx_bitrate = v90a_rx_rate(&o->e.v90);
         } else if (!o->connected && o->t > MS(V90_TOTAL_MS)) fail(o, ORIG_END_NO_CARRIER);
         break;
 
@@ -546,30 +549,33 @@ int16_t orig_tick(orig_t *o, int16_t rx)
 int orig_moving(const orig_t *o)
 {
     if (!o->connected) return 0;
-    if (o->phase == ORIG_V22) return !o->v22.retraining && o->v22.tx_ready && o->v22.rx_ready;
-    if (o->phase == ORIG_V32) return !o->v32.retraining && o->v32.tx_ready && o->v32.rx_ready;
-    if (o->phase == ORIG_V34) return o->v34.state == V34O_DATA;
-    if (o->phase == ORIG_V90) return o->v90.state == V90A_DATA;
+    if (o->phase == ORIG_V22) return !o->e.leg.v22.retraining && o->e.leg.v22.tx_ready && o->e.leg.v22.rx_ready;
+    if (o->phase == ORIG_V32) return !o->e.leg.v32.retraining && o->e.leg.v32.tx_ready && o->e.leg.v32.rx_ready;
+    if (o->phase == ORIG_V34) return o->e.v34.state == V34O_DATA;
+    if (o->phase == ORIG_V90) return o->e.v90.state == V90A_DATA;
     return 1;
 }
 
 int orig_retraining(const orig_t *o)
 {
-    if (o->phase == ORIG_V22) return o->v22.retraining != 0;
-    if (o->phase == ORIG_V32) return o->v32.retraining != 0;
-    if (o->phase == ORIG_V34) return o->connected && o->v34.state != V34O_DATA && o->v34.state != V34O_RENEG;
+    if (o->phase == ORIG_V22) return o->e.leg.v22.retraining != 0;
+    if (o->phase == ORIG_V32) return o->e.leg.v32.retraining != 0;
+    if (o->phase == ORIG_V34) return o->connected && o->e.v34.state != V34O_DATA && o->e.v34.state != V34O_RENEG;
     /* V.90, V.92: a renegotiation is not one */
-    if (o->phase == ORIG_V90) return o->connected && o->v90.state != V90A_DATA && o->v90.state != V90A_RENEG;
+    if (o->phase == ORIG_V90) return o->connected && o->e.v90.state != V90A_DATA && o->e.v90.state != V90A_RENEG;
     return 0;
 }
 
+/* After the end the engine the call last ran is still in memory (nothing
+ * starts another once the phase is ORIG_FAILED), and the modulation names
+ * it: V.34 and V.90 / V.92 are only ever set by their own engines */
 int orig_retrains(const orig_t *o)
 {
-    if (o->phase == ORIG_V22) return o->v22.retrains;
-    if (o->phase == ORIG_V32) return o->v32.retrains;
-    if (o->phase == ORIG_V34 || (o->phase == ORIG_FAILED && o->modulation == ORIG_MOD_V34)) return o->v34.retrains;
+    if (o->phase == ORIG_V22) return o->e.leg.v22.retrains;
+    if (o->phase == ORIG_V32) return o->e.leg.v32.retrains;
+    if (o->phase == ORIG_V34 || (o->phase == ORIG_FAILED && o->modulation == ORIG_MOD_V34)) return o->e.v34.retrains;
     if (o->phase == ORIG_V90 || (o->phase == ORIG_FAILED && (o->modulation == ORIG_MOD_V90 || o->modulation == ORIG_MOD_V92)))
-        return o->v90.retrains;
+        return o->e.v90.retrains;
     return 0;
 }
 
@@ -580,53 +586,53 @@ int orig_snr_db10(const orig_t *o)
     static const int v32_pw[V32_NRATES] = { 40, 40, 40, 42, 41 };
     int v;
     if (!o->connected) return -1;
-    if (o->phase == ORIG_V90) return v90a_snr_db10(&o->v90);     /* of the PCM downstream */
+    if (o->phase == ORIG_V90) return v90a_snr_db10(&o->e.v90);     /* of the PCM downstream */
     if (o->phase == ORIG_V34) {
         /* as answer_snr_db10: |e|^2 / |d|^2 in Q16; in data mode only */
-        if (o->v34.state != V34O_DATA) return -1;
-        v = probe_db10(65536, o->v34.dx.rx.mse > 0 ? o->v34.dx.rx.mse : 1);
+        if (o->e.v34.state != V34O_DATA) return -1;
+        v = probe_db10(65536, o->e.v34.dx.up.rx.mse > 0 ? o->e.v34.dx.up.rx.mse : 1);
         return v < 0 ? 0 : v > 600 ? 600 : v;
     }
     if (o->phase == ORIG_V32) {
-        if (o->v32.rate < 0 || o->v32.retraining) return -1;
+        if (o->e.leg.v32.rate < 0 || o->e.leg.v32.retraining) return -1;
         /* 4096 = one unit squared, as v32rx_t.mse */
-        v = probe_db10((int64_t)v32_pw[o->v32.rate] * 4096, o->v32.rx.mse > 0 ? o->v32.rx.mse : 1);
+        v = probe_db10((int64_t)v32_pw[o->e.leg.v32.rate] * 4096, o->e.leg.v32.rx.mse > 0 ? o->e.leg.v32.rx.mse : 1);
         return v < 0 ? 0 : v > 600 ? 600 : v;
     }
     if (o->phase != ORIG_V22) return -1;
     /* as answer_snr_db10: 4096 = one unit squared, the points have a mean
      * power of 10 */
-    v = probe_db10(10 * 4096, o->v22.rx.mse > 0 ? o->v22.rx.mse : 1);
+    v = probe_db10(10 * 4096, o->e.leg.v22.rx.mse > 0 ? o->e.leg.v22.rx.mse : 1);
     return v < 0 ? 0 : v > 600 ? 600 : v;
 }
 
 int orig_retrain(orig_t *o)
 {
-    if (o->phase == ORIG_V34) return o->connected ? v34orig_retrain(&o->v34) : -1;
-    if (o->phase == ORIG_V90) return o->connected ? v90a_retrain(&o->v90) : -1;
-    if (o->phase == ORIG_V32) return o->connected ? v32_retrain(&o->v32) : -1;
-    if (o->phase != ORIG_V22 || !o->connected || o->v22.bitrate != 2400) return -1;
-    v22m_retrain(&o->v22);
+    if (o->phase == ORIG_V34) return o->connected ? v34orig_retrain(&o->e.v34) : -1;
+    if (o->phase == ORIG_V90) return o->connected ? v90a_retrain(&o->e.v90) : -1;
+    if (o->phase == ORIG_V32) return o->connected ? v32_retrain(&o->e.leg.v32) : -1;
+    if (o->phase != ORIG_V22 || !o->connected || o->e.leg.v22.bitrate != 2400) return -1;
+    v22m_retrain(&o->e.leg.v22);
     return 0;
 }
 
 int orig_rtd(const orig_t *o)
 {
-    if (o->phase == ORIG_V34) return o->connected ? o->v34.p2.rtd : -1;
-    if (o->phase == ORIG_V90) return o->connected ? o->v90.p2.rtd : -1;     /* RTDEa */
-    if (o->phase != ORIG_V32 || !o->connected || o->v32.nt <= 0) return -1;
-    return o->v32.nt - 64 * 10 / 3;
+    if (o->phase == ORIG_V34) return o->connected ? o->e.v34.p2.rtd : -1;
+    if (o->phase == ORIG_V90) return o->connected ? o->e.v90.p2.rtd : -1;     /* RTDEa */
+    if (o->phase != ORIG_V32 || !o->connected || o->e.leg.v32.nt <= 0) return -1;
+    return o->e.leg.v32.nt - 64 * 10 / 3;
 }
 
 int orig_renegotiate(orig_t *o, int max_rx_bps)
 {
-    if (o->phase == ORIG_V90) return o->connected ? v90a_renegotiate(&o->v90, max_rx_bps) : -1;
-    return o->phase == ORIG_V34 && o->connected ? v34orig_renegotiate(&o->v34, max_rx_bps) : -1;
+    if (o->phase == ORIG_V90) return o->connected ? v90a_renegotiate(&o->e.v90, max_rx_bps) : -1;
+    return o->phase == ORIG_V34 && o->connected ? v34orig_renegotiate(&o->e.v34, max_rx_bps) : -1;
 }
 
 int orig_cleardown(orig_t *o)
 {
-    if (o->phase == ORIG_V90) return o->connected ? v90a_cleardown(&o->v90) : -1;
-    return o->phase == ORIG_V34 && o->connected ? v34orig_cleardown(&o->v34) : -1;
+    if (o->phase == ORIG_V90) return o->connected ? v90a_cleardown(&o->e.v90) : -1;
+    return o->phase == ORIG_V34 && o->connected ? v34orig_cleardown(&o->e.v34) : -1;
 }
 

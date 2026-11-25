@@ -1,0 +1,23 @@
+V.90 Phase 2: the analogue modem (p2call) against the digital modem (p2d)
+  10 ms each way, echo, noise                  analogue 13 (err 0) at 1873 ms, digital 12 at 1877 ms; rtd 160 / 160 (line 160); up 3200, INFO1a: v90 1, UINFO 90, MD 15, up_sr 4
+    our probing lasted 680 ms
+    our Tone A 289 ms after the start of the digital modem's L2
+  69 ms round trip, 14 / 16 dB loss, strong echo analogue 13 (err 0) at 2112 ms, digital 12 at 2143 ms; rtd 551 / 550 (line 550); up 3200, INFO1a: v90 1, UINFO 90, MD 15, up_sr 4
+  our own sample path 12 ms (io_delay)         analogue 13 (err 0) at 1931 ms, digital 12 at 1941 ms; rtd 161 / 160 (line 160); up 3200, INFO1a: v90 1, UINFO 90, MD 15, up_sr 4
+  the digital modem offers 3000 only           analogue 13 (err 0) at 1873 ms, digital 12 at 1877 ms; rtd 160 / 160 (line 160); up 3000, INFO1a: v90 1, UINFO 90, MD 15, up_sr 3
+recovery
+  our first INFO0a lost (9.2.2.2.1)            analogue 13 (err 0) at 2530 ms, digital 12 at 2535 ms; rtd 160 / 160 (line 160); up 3200, INFO1a: v90 1, UINFO 90, MD 15, up_sr 4
+  INFO1d lost, the caller back at INFO0a (9.2.1.2.1) analogue 13 (err 0) at 4072 ms, digital 12 at 4077 ms; rtd 160 / 160 (line 160); up 3200, INFO1a: v90 1, UINFO 90, MD 15, up_sr 4
+    caller restarted 1 times, digital back to INFO0 1 times, INFO0d sent 4
+  the caller back at INFO0a in WAIT_REV2 (9.2.1.2.1) analogue 13 (err 0) at 2394 ms, digital 12 at 2398 ms; rtd 160 / 160 (line 160); up 3200, INFO1a: v90 1, UINFO 90, MD 15, up_sr 4
+  the caller back at INFO0a in RECOVER (9.2.1.2.1) analogue 13 (err 0) at 4397 ms, digital 12 at 4402 ms; rtd 160 / 160 (line 160); up 3200, INFO1a: v90 1, UINFO 90, MD 15, up_sr 4
+  every INFO1d lost: digital 13, error 4 at 7166 ms, caller restarted 3 times, digital back to INFO0 2 times
+V.92 INFO1a whose first 33 payload bits pass INFO0a's CRC
+  sections 2, Ltot 2, Lmax 2, MD 22, UINFO 88: digital 12 (err 0, mode 2) at 1877 ms, back to INFO0 0 times; INFO1a: pcm 1 sections 2 ltot 2 lmax 2 md 22 uinfo 88
+  the same at noise 700, 100 samples a -> d: digital 12 (err 0, mode 2) at 1885 ms, back to INFO0 0 times
+time-outs
+  no digital modem: analogue 14, error 1 at 8000 ms
+  digital modem gone after INFO0: analogue 14, error 2 at 9038 ms
+a retrain's Phase 2 bounded (spec D5)
+  INFO0d for ever: analogue 14, error 2 at 1807 ms, restarts 4, INFO0a sent 10, digital started 5 times
+p2v90: 132 checks, 0 failures

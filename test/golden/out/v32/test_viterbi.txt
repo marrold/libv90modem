@@ -1,0 +1,5 @@
+   7200 bit/s, sigma 0.870: plain decisions 626 symbol errors in 20000, decoder 0 bit errors in 60000 bits
+   9600 bit/s, sigma 0.615: plain decisions 701 symbol errors in 20000, decoder 0 bit errors in 80000 bits
+  12000 bit/s, sigma 0.435: plain decisions 735 symbol errors in 20000, decoder 0 bit errors in 100000 bits
+  14400 bit/s, sigma 0.307: plain decisions 756 symbol errors in 20000, decoder 0 bit errors in 120000 bits
+test_viterbi: 484 checks, 0 failures

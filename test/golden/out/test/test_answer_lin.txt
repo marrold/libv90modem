@@ -1,0 +1,9 @@
+  V.34 call:                   companded receive: 26400 bit/s up (28800 down), SNR 34.7 dB; linear receive: 31200 bit/s up (28800 down), SNR 45.1 dB
+  V.90, V.34 upstream:         companded receive: 28800 bit/s up (50666 down), SNR 34.3 dB; linear receive: 31200 bit/s up (50666 down), SNR 45.1 dB
+  V.92, PCM upstream:          companded receive: 26666 bit/s up (50666 down), SNR 53.9 dB; linear receive: 42666 bit/s up (50666 down), SNR 60.0 dB
+    echo at the codec 1409 RMS; quantiser variance while the caller is silent: companded 385, linear 0
+    maximum power code 11 (-6 dBm0) announced: V.92 41333 bit/s up, 50666 down
+  linear entry, V.32bis: 14400 bit/s; 43135 / 42433 bits, 0 / 0 bad
+  linear entry, V.22bis: connected after 4.3 s at 2400 bit/s, text both ways intact
+  linear entry, V.21: connected after 2.7 s at 300 bit/s, text both ways intact
+answer_lin: 51 checks, 0 failures

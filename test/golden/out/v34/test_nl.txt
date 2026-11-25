@@ -1,0 +1,4 @@
+  encoder against (9-33): worst 1 / 128 of a unit; decoder(encoder(x)) - x: worst 0 / 128
+  power of the encoded signal: +0.64 dB
+  energy_tx / energy: +0.63 dB by the parameters
+nl: 17 checks, 0 failures

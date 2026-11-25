@@ -11,9 +11,26 @@ void v92aseq_init(v92aseq_t *s)
     s->crc_at = NONE_YET;
 }
 
+void v92aseq_phase4(v92aseq_t *s)
+{
+    v92aseq_init(s);            /* nothing stored */
+}
+
+void v92aseq_restart(v92aseq_t *s)
+{
+    uint8_t has = s->has;
+    v92aseq_init(s);
+    s->has = has;
+}
+
+int v92aseq_cpd_complete(const v92aseq_t *s)
+{
+    return s->has == (V92AS_HAS_MOD | V92AS_HAS_FILT | V92AS_HAS_CONST);
+}
+
 static void hunt(v92aseq_t *s)
 {
-    s->in = 0; s->ones = 0;
+    s->in = 0; s->sh.ones = 0;
 }
 
 static void bad(v92aseq_t *s)
@@ -82,7 +99,7 @@ static void begin(v92aseq_t *s, unsigned v)
 {
     v92_cpd_t *c = &s->cpd;
     s->w0 = (uint16_t)v;
-    s->kind = (int)(v & 1) ? V92_DN_SUVD : V92_DN_CPD;
+    s->kind = (uint8_t)((v & 1) ? V92_DN_SUVD : V92_DN_CPD);
     if (s->kind == V92_DN_SUVD) { s->crc_at = 1; return; }
     memset(c, 0, sizeof *c);
     c->has_mod = (uint8_t)((v >> 1) & 1);
@@ -100,6 +117,59 @@ static void begin(v92aseq_t *s, unsigned v)
     }
 }
 
+/* A CPd whose CRC checked out, into a copy *o of the stored one: what is
+ * always carried and each part it carries replace what was there; a part
+ * it leaves out is kept, or zero (as v92_cpd_parse() leaves it) when none
+ * is stored. The CPd being received (s->cpd) has its absent parts zero
+ * (begin()). Returns the parts *o then holds (V92AS_HAS_*); s->has is the
+ * caller's to set. */
+static uint8_t merge(const v92aseq_t *s, v92_cpd_t *o)
+{
+    uint8_t has;
+    const v92_cpd_t *c = &s->cpd;
+    o->drn = c->drn;
+    o->e2u_extend = c->e2u_extend;
+    o->ack = c->ack;
+    o->map.K = c->map.K;
+    o->map.trellis = c->map.trellis;
+    o->filt.gain4 = c->filt.gain4;
+    if (c->has_mod || !(s->has & V92AS_HAS_MOD)) memcpy(o->map.M, c->map.M, sizeof o->map.M);
+    if (c->has_filt || !(s->has & V92AS_HAS_FILT)) {
+        o->filt.lz1 = c->filt.lz1; o->filt.lp1 = c->filt.lp1;
+        o->filt.lz2 = c->filt.lz2; o->filt.lp2 = c->filt.lp2;
+        memcpy(o->filt.coef, c->filt.coef, sizeof o->filt.coef);
+    }
+    if (c->has_const || !(s->has & V92AS_HAS_CONST)) {
+        memcpy(o->map.cidx, c->map.cidx, sizeof o->map.cidx);
+        memcpy(o->map.lc, c->map.lc, sizeof o->map.lc);
+        memcpy(o->map.pt, c->map.pt, sizeof o->map.pt);
+    }
+    has = (uint8_t)(s->has | (c->has_mod ? V92AS_HAS_MOD : 0) | (c->has_filt ? V92AS_HAS_FILT : 0)
+                    | (c->has_const ? V92AS_HAS_CONST : 0));
+    o->has_mod = (uint8_t)((has & V92AS_HAS_MOD) != 0);
+    o->has_filt = (uint8_t)((has & V92AS_HAS_FILT) != 0);
+    o->has_const = (uint8_t)((has & V92AS_HAS_CONST) != 0);
+    return has;
+}
+
+/* 1 if the merged CPd *o (holding the parts has) may be stored: one that
+ * names an upstream rate must have a usable map once it holds the moduli
+ * and the constellations (v92_map_check: Mi >= 1, the indices name sets of
+ * points, trellis 0..2, ...), and a usable filter once it holds one
+ * (v92_filt_check). A CRC protects against the line, not against the
+ * digital modem: an encoder on a map that fails these divides by zero or
+ * reads past the map. A CPd that names no upstream rate (drn 0, the
+ * cleardown, or 20..31, which Table 30 does not define) is stored
+ * unchecked, as before: nothing is encoded from it, since start_b1u
+ * refuses a drn outside 1..19. */
+static int storable(const v92_cpd_t *o, uint8_t has)
+{
+    if (o->drn < 1 || o->drn > V92_UP_NUM_RATES) return 1;
+    if ((has & V92AS_HAS_MOD) && (has & V92AS_HAS_CONST) && v92_map_check(&o->map) != 0) return 0;
+    if ((has & V92AS_HAS_FILT) && v92_filt_check(&o->filt) != 0) return 0;
+    return 1;
+}
+
 /* the CRC word is in: the sequence, if it checks out */
 static void done(v92aseq_t *s, unsigned v, v92_suvd_t *suvd, v92_cpd_t *cpd)
 {
@@ -110,8 +180,13 @@ static void done(v92aseq_t *s, unsigned v, v92_suvd_t *suvd, v92_cpd_t *cpd)
         s->ev |= V92AS_SUVD;
     } else {
         v92_cpd_t *c = &s->cpd;
+        uint8_t has;
         c->map.K = (uint8_t)(c->drn >= 1 && c->drn <= V92_UP_NUM_RATES ? V92_UP_K(c->drn) : 0);
-        *cpd = *c;
+        s->out = *cpd;
+        has = merge(s, &s->out);
+        if (!storable(&s->out, has)) { bad(s); return; }    /* refused: as a CPd that did not check out */
+        s->has = has;
+        *cpd = s->out;
         s->ev |= V92AS_CPD;
     }
     hunt(s);
@@ -121,17 +196,15 @@ static void done(v92aseq_t *s, unsigned v, v92_suvd_t *suvd, v92_cpd_t *cpd)
 static void bit_in(v92aseq_t *s, int bit, v92_suvd_t *suvd, v92_cpd_t *cpd)
 {
     if (!s->in) {
-        if (bit) { s->ones++; return; }
-        if (s->ones >= 17) {
+        if (seqhunt_bit(&s->sh, bit)) {
             /* the frame sync and the start bit of the header word */
             s->in = 1; s->nb = 1; s->cur = 0; s->nw = 0;
             s->crc = 0xFFFF; s->crc_at = NONE_YET;
         }
-        s->ones = 0;
         return;
     }
     if (s->nb == 0) {               /* a start bit */
-        if (bit) { bad(s); s->ones = 1; return; }
+        if (bit) { bad(s); s->sh.ones = 1; return; }
         if (s->nw == s->crc_at) s->crc_want = s->crc;
         s->nb = 1; s->cur = 0;
         return;

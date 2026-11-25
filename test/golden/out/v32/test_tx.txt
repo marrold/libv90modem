@@ -1,0 +1,12 @@
+   4800 bit/s scrambled ones: line RMS 2997 for level 3000
+   7200 bit/s scrambled ones: line RMS 3005 for level 3000
+   9600 bit/s scrambled ones: line RMS 2998 for level 3000
+  12000 bit/s scrambled ones: line RMS 3073 for level 3000
+  14400 bit/s scrambled ones: line RMS 3023 for level 3000
+   4800 bit/s: 600 Hz -3.7 dB, 3000 Hz -3.7 dB, 200 Hz -42.8 dB, 3500 Hz -46.9 dB re maximum
+   7200 bit/s: 600 Hz -4.4 dB, 3000 Hz -4.4 dB, 200 Hz -43.8 dB, 3500 Hz -47.0 dB re maximum
+   9600 bit/s: 600 Hz -3.2 dB, 3000 Hz -3.2 dB, 200 Hz -43.9 dB, 3500 Hz -46.9 dB re maximum
+  12000 bit/s: 600 Hz -3.8 dB, 3000 Hz -3.7 dB, 200 Hz -42.9 dB, 3500 Hz -46.7 dB re maximum
+  14400 bit/s: 600 Hz -4.5 dB, 3000 Hz -4.5 dB, 200 Hz -42.2 dB, 3500 Hz -46.5 dB re maximum
+  14400 bit/s: worst deviation of a demodulated point 0.130 units (points are 1.41 apart)
+test_tx: 2237 checks, 0 failures

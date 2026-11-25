@@ -27,7 +27,7 @@
 #ifndef V90D_MODEM_V90ADEC_H
 #define V90D_MODEM_V90ADEC_H
 #include <stdint.h>
-#include "v90_enc.h"
+#include "../v90/v90_enc.h"
 
 typedef struct {
     uint8_t K, Sr, D;

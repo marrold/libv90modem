@@ -1,0 +1,13 @@
+test_small_exact: Task 35's exact forms against the code before them
+  octet -> linear: 1024 octets (256 x mu-law, A-law as 1, 2 and -1): 0 differ
+  modulus encoder: Mi 1..128, 12801152 dividends (0, 1, Mi 2^16 - 1 and random), 1000000 random maps: 0 differ
+  GPC scrambler  : 100 states, 1000000 bytes (v34, 1..8 bits a call) and arrays of 1..64 bits (v90): 0 differ
+  GPC descrambler: 100 states, 1000000 bytes (v34, 1..8 bits a call) and arrays of 1..64 bits (v90): 0 differ
+  GPA scrambler  : 100 states, 1000000 bytes (v34, 1..8 bits a call) and arrays of 1..64 bits (v90): 0 differ
+  GPA descrambler: 100 states, 1000000 bytes (v34, 1..8 bits a call) and arrays of 1..64 bits (v90): 0 differ
+  x2map_frame: 46 banks, 46000000 random frames: 0 differ
+  x2map_frame, the bank changed between frames: 1000000 frames: 0 differ
+  ec_tick: 1000000 samples, return value and state: 0 differ
+  v92_enc_symbol, sections padded with zeros: 200 filters (39 sections of more than 255 zeros), 240000 symbols: 0 differ
+  v92_enc_symbol, the filter changed without v92_enc_init: 200 filters, 2400 changes, 240000 symbols: 0 differ
+test_small_exact: 857 checks, 0 failures

@@ -115,8 +115,8 @@ int32_t v92_enc_symbol(v92_enc_t *e, v92_sym_t *s)
             e->forced = 0;
         } else {
             uint8_t bits[V92_MAX_K];
-            for (n = 0; n < m->K; n++)
-                bits[n] = (uint8_t)v90_scramble_gpa(&e->scr, e->get(e->user) & 1);
+            for (n = 0; n < m->K; n++) bits[n] = (uint8_t)(e->get(e->user) & 1);
+            v90_scramble_gpa_bits(&e->scr, bits, m->K);
             v92_mod_encode(&e->mod, bits, e->ki);
         }
     }

@@ -1,0 +1,9 @@
+  130 parameter sets; grid step 256
+  v34_nl_decode: 11145416 points, 0 differences
+  v34_nl_encode: 11145416 points, 0 differences
+  v34_nl_phi_q16: 13745416 energies, 0 differences
+  divlu: 10003160 cases, 0 differences
+  div_s64_u32: 10001972 cases, 0 differences
+  V90M_CLZ32: 10000096 cases, 0 differences
+  0 differences
+nl_exact: 7 checks, 0 failures

@@ -145,7 +145,7 @@ static int flows_ok(void)
 static void test_establish_encodings(void)
 {
     static const uint8_t xid_plain[] = {
-        0x82, 0x80, 0x00, 0x14, 0x03, 0x04, 0x8A, 0x89, 0x00, 0x00,
+        0x82, 0x80, 0x00, 0x13, 0x03, 0x03, 0x8A, 0x89, 0x00,
         0x05, 0x02, 0x04, 0x00, 0x06, 0x02, 0x04, 0x00, 0x07, 0x01, 0x0F, 0x08, 0x01, 0x0F };
     static const uint8_t xid_comp[] = {
         0xF0, 0x00, 0x0F, 0x00, 0x03, 'V', '4', '2', 0x01, 0x01, 0x03,
@@ -187,6 +187,134 @@ static void test_establish_encodings(void)
     CHECK(memcmp(flog[1].f + 2 + sizeof xid_plain, xid_comp, 14) == 0);
     CHECK(A.comp_tx && A.comp_rx && B.comp_tx && B.comp_rx);
     CHECK_EQ_I(A.comp_n2, 512); CHECK_EQ_I(B.comp_n7, 32);
+
+    /* a command in the four-octet form of the 2002 text is answered in that
+     * form */
+    {
+        static const uint8_t x4[] = { 0x03, 0xAF, 0x82, 0x80, 0x00, 0x14, 0x03, 0x04, 0x8A, 0x89, 0x00, 0x00,
+                                      0x05, 0x02, 0x04, 0x00, 0x06, 0x02, 0x04, 0x00, 0x07, 0x01, 0x0F, 0x08, 0x01, 0x0F };
+        setup(); init_pair();
+        v42lapm_rx_frame(&B, x4, sizeof x4, 0);
+        CHECK(B.xid_resp_len >= 12);
+        CHECK(memcmp(B.xid_resp, x4 + 2, 10) == 0);
+    }
+}
+
+/* What a parser that takes the optional functions in three octets only
+ * (as an Agere SV92PP's does) reads of an XID command: it drops the rest
+ * of the frame after a mask of any other length. 1 when it finds the
+ * V.42 bis set ("V42") after the parameter group; *v44 1 when the user
+ * data subfield follows with the V.44 set at once (no group length,
+ * V.42 12.2.1.3). */
+static int strict_reads_comp(const uint8_t *f, int len, int *v44)
+{
+    int pos = 3, gl, end, comp = 0;
+    *v44 = 0;
+    if (len < 6 || f[1] != 0xAF || f[2] != 0x82 || f[3] != 0x80) return 0;
+    gl = (f[4] << 8) | f[5];
+    pos = 6; end = pos + gl;
+    if (end > len) return 0;
+    while (pos + 2 <= end) {
+        if (f[pos] == 3 && f[pos + 1] != 3) return 0;          /* drops everything after */
+        pos += 2 + f[pos + 1];
+    }
+    pos = end;
+    while (pos < len) {
+        if (f[pos] == 0xFF) {
+            *v44 = pos + 5 < len && f[pos + 1] == 0x40 && f[pos + 2] == 3 && f[pos + 3] == 'V'
+                   && f[pos + 4] == '4' && f[pos + 5] == '4';
+            break;
+        }
+        if (pos + 3 > len) break;
+        gl = (f[pos + 1] << 8) | f[pos + 2];
+        if (f[pos] == 0xF0 && pos + 8 <= len && f[pos + 3] == 0 && f[pos + 4] == 3
+            && f[pos + 5] == 'V' && f[pos + 6] == '4' && f[pos + 7] == '2') comp = 1;
+        pos += 3 + gl;
+    }
+    return comp;
+}
+
+/* our XID command carries the optional functions in three octets, bit 16
+ * set, as real modems send them */
+static void test_xid_command_form(void)
+{
+    uint8_t f[V42HDLC_MAX_PAYLOAD]; int fcs, n, v44, fcs32;
+    for (fcs32 = 0; fcs32 <= 1; fcs32++) {
+        setup(); ca.comp_tx = ca.comp_rx = 1; ca.v44_tx = ca.v44_rx = 1; ca.fcs32 = fcs32;
+        cb.v44_tx = cb.v44_rx = 1;
+        init_pair(); v42lapm_start(&A);
+        n = v42lapm_tx_frame(&A, f, &fcs);
+        CHECK(n > 12 && f[1] == 0xAF);
+        CHECK_EQ_I(f[6], 3); CHECK_EQ_I(f[7], 3);                  /* PI 3, PL 3 */
+        CHECK_EQ_I(f[8], 0x8A);
+        CHECK_EQ_I(f[9] & 0x80, 0x80);                             /* bit 16 */
+        CHECK_EQ_I(f[10], fcs32 ? 0x01 : 0x00);                    /* bit 17 */
+        CHECK_EQ_I(f[11], 0x05);                                   /* N401 next */
+        CHECK_EQ_I(strict_reads_comp(f, n, &v44), 1);
+        CHECK_EQ_I(v44, 1);
+        /* and our own answerer takes it */
+        v42lapm_rx_frame(&B, f, n, 0);
+        CHECK_EQ_I(B.state, V42LAPM_IDLE);
+        CHECK_EQ_I(B.v44_rx, 1); CHECK_EQ_I(B.fcs32, 0);
+        CHECK(B.xid_resp_len > 0 && B.xid_resp[4] == 3 && B.xid_resp[5] == 3);
+        CHECK(B.xid_resp_len <= (int)sizeof B.xid_resp);
+    }
+    /* V.42 bis alone: offered, and no user data subfield */
+    setup(); ca.comp_tx = ca.comp_rx = 1; cb.comp_tx = cb.comp_rx = 1;
+    init_pair(); v42lapm_start(&A);
+    n = v42lapm_tx_frame(&A, f, &fcs);
+    CHECK_EQ_I(strict_reads_comp(f, n, &v44), 1);
+    CHECK_EQ_I(v44, 0);
+}
+
+/* 9.2.4: a responder that can take fewer frames, or shorter ones, than we
+ * proposed for our sending direction is taken at its word */
+static void test_xid_response_smaller(void)
+{
+    static const uint8_t rsp[] = { 0x03, 0xAF, 0x82, 0x80, 0x00, 0x13, 0x03, 0x03, 0x8A, 0x89, 0x00,
+                                   0x05, 0x02, 0x04, 0x00, 0x06, 0x02, 0x02, 0x00,   /* N401 rx 64 */
+                                   0x07, 0x01, 0x0F, 0x08, 0x01, 0x04 };             /* k rx 4 */
+    static const uint8_t big[] = { 0x03, 0xAF, 0x82, 0x80, 0x00, 0x13, 0x03, 0x03, 0x8A, 0x89, 0x00,
+                                   0x05, 0x02, 0x04, 0x00, 0x06, 0x02, 0x10, 0x00,   /* N401 rx 512 */
+                                   0x07, 0x01, 0x0F, 0x08, 0x01, 0x1E };             /* k rx 30 */
+    uint8_t f[V42HDLC_MAX_PAYLOAD]; int fcs;
+    setup(); init_pair(); v42lapm_start(&A);
+    v42lapm_tx_frame(&A, f, &fcs);
+    v42lapm_rx_frame(&A, rsp, sizeof rsp, 0);
+    CHECK_EQ_I(A.state, V42LAPM_ESTABLISHING);
+    CHECK_EQ_I(A.k_tx, 4); CHECK_EQ_I(A.n401_tx, 64);
+    CHECK_EQ_I(A.k_rx, 15); CHECK_EQ_I(A.n401_rx, 128);
+    /* more than we proposed: what we proposed */
+    setup(); init_pair(); v42lapm_start(&A);
+    v42lapm_tx_frame(&A, f, &fcs);
+    v42lapm_rx_frame(&A, big, sizeof big, 0);
+    CHECK_EQ_I(A.state, V42LAPM_ESTABLISHING);
+    CHECK_EQ_I(A.k_tx, 15); CHECK_EQ_I(A.n401_tx, 128);
+}
+
+/* XID values longer than they need to be (security pass M3, M4): zero
+ * padding is read through, and a value past an int is out of range, not
+ * absent */
+static void test_xid_long_values(void)
+{
+    /* N401 rx 64 octets (512 bits) in 5 octets; k rx 2^31 in 4 */
+    static const uint8_t rsp[] = { 0x03, 0xAF, 0x82, 0x80, 0x00, 0x11,
+                                   0x06, 0x05, 0x00, 0x00, 0x00, 0x02, 0x00,
+                                   0x08, 0x04, 0x80, 0x00, 0x00, 0x00,
+                                   0x05, 0x02, 0x04, 0x00 };
+    /* V.44 P1T 2048 in 4 octets (V.44 values are read in 3) */
+    static const uint8_t v44[] = { 0x03, 0xAF, 0x82, 0xFF, 0x40, 3, 'V', '4', '4', 0x43, 4, 0x00, 0x00, 0x08, 0x00 };
+    uint8_t f[V42HDLC_MAX_PAYLOAD]; int fcs;
+    setup(); ca.k_tx = 30; init_pair(); v42lapm_start(&A);
+    v42lapm_tx_frame(&A, f, &fcs);
+    v42lapm_rx_frame(&A, rsp, sizeof rsp, 0);
+    CHECK_EQ_I(A.state, V42LAPM_ESTABLISHING);
+    CHECK_EQ_I(A.n401_tx, 64);
+    CHECK_EQ_I(A.k_tx, 30);         /* more than we proposed: what we proposed */
+    setup(); cb.comp_tx = cb.comp_rx = 1; cb.v44_tx = cb.v44_rx = 1; init_pair();
+    v42lapm_rx_frame(&B, v44, sizeof v44, 0);
+    CHECK_EQ_I(B.state, V42LAPM_IDLE);
+    CHECK_EQ_I(B.v44_rx, 1);
 }
 
 static void neg(int akt, int akr, int ant, int anr, int bkt, int bkr, int bnt, int bnr,
@@ -333,6 +461,9 @@ static void test_negotiation(void)
     0x45, 0x01, (p2t), 0x46, 0x01, (p2r), \
     0x47, 0x02, (uint8_t)((p3t) >> 8), (uint8_t)(p3t), 0x48, 0x02, (uint8_t)((p3r) >> 8), (uint8_t)(p3r)
 #define XID_HEAD 0x03, 0xAF, 0x82, 0x80, 0x00, 0x14, 0x03, 0x04, 0x8A, 0x89, 0x00, 0x00, \
+    0x05, 0x02, 0x04, 0x00, 0x06, 0x02, 0x04, 0x00, 0x07, 0x01, 0x0F, 0x08, 0x01, 0x0F
+/* the head of our own command: the optional functions in three octets */
+#define XID_CMD_HEAD 0x03, 0xAF, 0x82, 0x80, 0x00, 0x13, 0x03, 0x03, 0x8A, 0x89, 0x00, \
     0x05, 0x02, 0x04, 0x00, 0x06, 0x02, 0x04, 0x00, 0x07, 0x01, 0x0F, 0x08, 0x01, 0x0F
 #define V42BIS_SET 0xF0, 0x00, 0x0F, 0x00, 0x03, 'V', '4', '2', 0x01, 0x01, 0x03, 0x02, 0x02, 0x02, 0x00, 0x03, 0x01, 0x20
 
@@ -551,8 +682,8 @@ static void test_v44_negotiation(void)
      * V.44 in the user data subfield behind it (V.42 12.2.1.3). T and R
      * are the sender's transmit and receive directions (V.44 7.4). */
     {
-        static const uint8_t want[] = { XID_HEAD, V42BIS_SET, V44_SET(3, 2048, 1024, 255, 64, 4096, 3000) };
-        static const uint8_t want44[] = { XID_HEAD, V44_SET(1, 2048, 1024, 255, 64, 4096, 3000) };
+        static const uint8_t want[] = { XID_CMD_HEAD, V42BIS_SET, V44_SET(3, 2048, 1024, 255, 64, 4096, 3000) };
+        static const uint8_t want44[] = { XID_CMD_HEAD, V44_SET(1, 2048, 1024, 255, 64, 4096, 3000) };
         static const uint8_t both[] = { 0x03, 0xAF, 0x82, V42BIS_SET, V44_SET(3, 512, 512, 32, 32, 1024, 1024) };
         static const uint8_t wrong[] = { 0x03, 0xAF, 0x82, V44_SET(3, 512, 512, 32, 32, 1024, 1024) };
         static const uint8_t low[] = { 0x03, 0xAF, 0x82, V44_SET(2, 512, 100, 32, 32, 1024, 1024) };
@@ -839,6 +970,101 @@ static void test_n400(void)
     CHECK_EQ_I(count_ctrl(1, 0x01), 3);
     CHECK_EQ_I(B.state, V42LAPM_CONNECTED);          /* B heard nothing */
     CHECK_EQ_I(v42lapm_can_send(&A), 0);
+}
+
+/* D9: a peer that answers every poll (RR F=1, N(R) = V(A)) and never
+ * acknowledges an I frame: N400 recoveries without progress release the
+ * link (V.42 restarts the count at each recovery; ours does not) */
+static int drop_i_from_a(int from_a, const uint8_t *f, int len) { return !(from_a && is_i(f, len)); }
+/* B never sees A's I frames and answers each with REJ, N(R) = A's V(A) */
+static int rej_every_i(int from_a, const uint8_t *f, int len)
+{
+    if (from_a && is_i(f, len)) {
+        uint8_t rej[3] = { 0x03, 0x09, 0 };
+        rej[2] = (uint8_t)(A.va << 1);
+        v42lapm_rx_frame(&A, rej, 3, 0);
+        return 0;
+    }
+    return 1;
+}
+static int drop_i_some(int from_a, const uint8_t *f, int len) { return !(from_a && is_i(f, len) && now_ms % 400 < 150); }
+
+static void test_no_progress(void)
+{
+    int t0;
+    setup(); ca.t401_ms = 100; ca.n400 = 3;
+    CHECK(connect_pair());
+    filt = drop_i_from_a; nlog = 0; t0 = now_ms;
+    flow_reset(&ab, 2000, 100);
+    while (A.state == V42LAPM_CONNECTED && now_ms - t0 < 60000) run(1);
+    CHECK_EQ_I(A.state, V42LAPM_DISCONNECTED);
+    CHECK_EQ_I(A.reason, V42LAPM_R_N400);
+    /* N400 whole recoveries, each polled and answered; released as the
+     * next one begins */
+    CHECK_EQ_I(A.t401_expiries, (unsigned long)ca.n400 + 1);
+    CHECK_EQ_I(A.tx_polls, (unsigned long)ca.n400);
+    CHECK(now_ms - t0 <= (ca.n400 + 1) * ca.t401_ms + 20);
+    CHECK_EQ_I(count_ctrl(0, 0x01), ca.n400);        /* the polls were answered */
+    CHECK_EQ_I(B.state, V42LAPM_CONNECTED);
+
+    /* N400 = 1: one lost I frame is still polled for and recovered */
+    setup(); ca.n400 = 1;
+    CHECK(connect_pair());
+    nlog = 0; filt = lose_i_from_a; lose_ns = 0; lose_left = 1;
+    flow_reset(&ab, 60, 100);
+    run(5000);
+    CHECK_EQ_I(A.state, V42LAPM_CONNECTED);
+    CHECK_EQ_I(A.tx_polls, 1);
+    CHECK(flows_ok());
+    /* the same with the line stopped and restored in the middle */
+    setup(); ca.n400 = 1;
+    CHECK(connect_pair());
+    filt = drop_all; flow_reset(&ab, 300, 100);
+    run(50);
+    filt = NULL;
+    v42lapm_line_restored(&A);
+    run(3000);
+    CHECK_EQ_I(A.state, V42LAPM_CONNECTED);
+    CHECK(flows_ok());
+
+    /* a peer that answers every I frame with REJ, N(R) = V(A): each such
+     * go-back is a recovery without progress (T401 never runs out) */
+    setup(); ca.t401_ms = 100; ca.n400 = 3;
+    CHECK(connect_pair());
+    filt = rej_every_i; t0 = now_ms;
+    flow_reset(&ab, 2000, 100);
+    while (A.state == V42LAPM_CONNECTED && now_ms - t0 < 60000) run(1);
+    CHECK_EQ_I(A.state, V42LAPM_DISCONNECTED);
+    CHECK_EQ_I(A.reason, V42LAPM_R_N400);
+    CHECK_EQ_I(A.t401_expiries, 0);
+    CHECK_EQ_I(A.rx_rej, (unsigned long)ca.n400 + 1);
+    CHECK(now_ms - t0 <= 50);
+
+    /* a destructive break (the data path reset) does not start the count
+     * again: no data moved */
+    setup(); ca.t401_ms = 100; ca.n400 = 3;
+    CHECK(connect_pair());
+    filt = drop_i_from_a; t0 = now_ms;
+    flow_reset(&ab, 20000, 100);
+    while (A.t401_expiries < 2 && now_ms - t0 < 5000) run(1);
+    CHECK_EQ_I(v42lapm_send_break(&A, V42_BRK_DESTRUCTIVE_EXPEDITED, 0), 0);
+    while (A.state == V42LAPM_CONNECTED && now_ms - t0 < 60000) run(1);
+    CHECK_EQ_I(A.state, V42LAPM_DISCONNECTED);
+    CHECK_EQ_I(A.reason, V42LAPM_R_N400);
+    CHECK_EQ_I(A.t401_expiries, (unsigned long)ca.n400 + 1);
+    CHECK_EQ_I(A.resets, 1);
+
+    /* progress in between starts the count again: the I frames are lost
+     * for 150 ms of every 400, two recoveries each time, more than N400 in
+     * all; the transfer completes */
+    setup(); ca.t401_ms = 100; ca.n400 = 3;
+    CHECK(connect_pair());
+    filt = drop_i_some; now_ms = 0;
+    flow_reset(&ab, 60000, 100);
+    run(10000);
+    CHECK(flows_ok());
+    CHECK_EQ_I(A.state, V42LAPM_CONNECTED);
+    CHECK(A.t401_expiries > 2 * (unsigned long)ca.n400);
 }
 
 static int ua_drops;
@@ -1245,7 +1471,7 @@ static void test_fcs32(void)
     CHECK_EQ_I(nlog, 4);
     CHECK(flog[0].fcs32 == 0 && flog[1].fcs32 == 0 && flog[2].fcs32 == 1 && flog[3].fcs32 == 1);
     /* optional function bits: 17 asked for; in the response 16 is cleared */
-    CHECK(flog[0].f[10] == 0x01 && flog[0].f[9] == 0x89);
+    CHECK(flog[0].f[10] == 0x01 && flog[0].f[9] == 0x89 && flog[0].f[7] == 3);
     CHECK(flog[1].f[10] == 0x01 && flog[1].f[9] == 0x09);
     CHECK(A.tx_fcs32 && B.tx_fcs32);
     CHECK(A.rx_fcs_mode == V42HDLC_FCS32 && B.rx_fcs_mode == V42HDLC_FCS32);
@@ -1320,6 +1546,9 @@ int main(void)
 {
     test_establish_encodings();
     test_negotiation();
+    test_xid_command_form();
+    test_xid_response_smaller();
+    test_xid_long_values();
     test_v44_negotiation();
     test_data();
     test_window();
@@ -1327,6 +1556,7 @@ int main(void)
     test_t401_recovery();
     test_line_restored();
     test_n400();
+    test_no_progress();
     test_ua_lost();
     test_busy();
     test_release();

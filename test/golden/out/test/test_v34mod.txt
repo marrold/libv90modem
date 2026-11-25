@@ -1,0 +1,14 @@
+  2400 symbols/s, carrier 2/3: power within -0.04 dB of nominal over the 11 filters
+  2400 symbols/s, carrier 3/4: power within -0.04 dB of nominal over the 11 filters
+  3000 symbols/s, carrier 3/5: power within -0.04 dB of nominal over the 11 filters
+  3000 symbols/s, carrier 2/3: power within -0.04 dB of nominal over the 11 filters
+  3200 symbols/s, carrier 4/7: power within +0.04 dB of nominal over the 11 filters
+  3200 symbols/s, carrier 3/5: power within +0.04 dB of nominal over the 11 filters
+  pre-emphasis templates: worst deviation 0.11 dB over 3 symbol rates x 2 carriers x 11 filters
+  2400 symbols/s, carrier 2/3: receiver error -48.2 dB after training
+  2400 symbols/s, carrier 3/4: receiver error -45.2 dB after training
+  3000 symbols/s, carrier 3/5: receiver error -48.2 dB after training
+  3000 symbols/s, carrier 2/3: receiver error -48.2 dB after training
+  3200 symbols/s, carrier 4/7: receiver error -48.2 dB after training
+  3200 symbols/s, carrier 3/5: receiver error -48.2 dB after training
+v34mod: 248 checks, 0 failures

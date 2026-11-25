@@ -1,0 +1,23 @@
+V.90: 9 lines x 6 seeds, 10 s of data each way
+  2 km,    0 ppm                 down 52000 .. 52000
+  0 km, +100 ppm                 down 46666 .. 48000
+  6 km, -100 ppm                 down 46666 .. 46666
+  4 km,  +50 ppm, -65 dBm0       down 40000 .. 40000
+  2 km,  +30 ppm, 3 dB pad       down 44000 .. 48000
+  2 km,  -30 ppm, 6 dB pad       down 41333 .. 45333
+  2 km,  +30 ppm, robbed bit     down 46666 .. 50666
+  2 km,  +30 ppm, 6 dB pad, RBS  down 40000 .. 44000
+  2 km,  -50 ppm, A-law          down 46666 .. 49333
+  0 of 54 calls bad
+V.92: 9 lines x 6 seeds, 10 s of data each way
+  2 km,    0 ppm                 down 50666 .. 52000
+  0 km, +100 ppm                 down 46666 .. 48000
+  6 km, -100 ppm                 down 46666 .. 48000
+  4 km,  +50 ppm, -65 dBm0       down 40000 .. 40000
+  2 km,  +30 ppm, 3 dB pad       down 45333 .. 48000
+  2 km,  -30 ppm, 6 dB pad       down 45333 .. 45333
+  2 km,  +30 ppm, robbed bit     down 45333 .. 49333
+  2 km,  +30 ppm, 6 dB pad, RBS  down 41333 .. 45333
+  2 km,  -50 ppm, A-law          down 46666 .. 50666
+  0 of 54 calls bad
+orig_seeds: 3 checks, 0 failures

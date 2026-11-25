@@ -7,7 +7,7 @@
 #define V90D_MODEM_EC_H
 #include <stdint.h>
 
-#define EC_NTAP 96              /* 12 ms */
+#define EC_NTAP 96              /* 12 ms; a multiple of 8 (ec_tick) */
 
 typedef struct {
     int16_t x[2 * EC_NTAP]; int pos;    /* transmit history, newest first, doubled */

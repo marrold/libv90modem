@@ -48,7 +48,10 @@ typedef struct {
 void v42hdlc_tx_init(v42hdlc_tx_t *t);
 /* True when no frame is loaded and the next bit would start a new flag; this
  * is the moment to load the next frame so it follows the flag directly. */
-int  v42hdlc_tx_need_frame(const v42hdlc_tx_t *t);
+static inline int v42hdlc_tx_need_frame(const v42hdlc_tx_t *t)
+{
+    return t->len == 0 && !t->in_frame && t->nbits == 0;
+}
 /* True while a loaded frame has not been completely sent. */
 int  v42hdlc_tx_busy(const v42hdlc_tx_t *t);
 /* Load one frame (address, control, information); the FCS is appended here.
@@ -58,8 +61,23 @@ int  v42hdlc_tx_frame(v42hdlc_tx_t *t, const uint8_t *data, int len, int fcs32);
 void v42hdlc_tx_flags(v42hdlc_tx_t *t, int n);
 /* Abort the frame in progress (8.1.4); a no-op between frames. */
 void v42hdlc_tx_abort(v42hdlc_tx_t *t);
-/* Next line bit (0 or 1). Flags fill the time between frames (8.1.5). */
-int  v42hdlc_tx_bit(v42hdlc_tx_t *t);
+/* Next line bit (0 or 1). Flags fill the time between frames (8.1.5).
+ * Inline: the next bit of the octet being sent; every other case (a new
+ * octet, a flag, a zero inserted, an abort) is v42hdlc_tx_bit_full's, which
+ * is the whole of it. */
+int  v42hdlc_tx_bit_full(v42hdlc_tx_t *t);
+static inline int v42hdlc_tx_bit(v42hdlc_tx_t *t)
+{
+    int bit;
+    if (t->abort_req || t->nbits == 0 || t->ones == 5) return v42hdlc_tx_bit_full(t);
+    bit = t->cur & 1;
+    t->cur >>= 1;
+    t->nbits--;
+    if (!t->raw) {
+        if (bit) t->ones++; else t->ones = 0;
+    }
+    return bit;
+}
 
 /* ----------------------------------------------------------------- receive */
 enum {
@@ -75,6 +93,9 @@ enum {
 #define V42HDLC_RX_LONG    (-4)
 #define V42HDLC_RX_ALIGN   (-5)
 
+/* v42hdlc_rx_t.flag_run saturates here: only small counts are ever asked */
+#define V42HDLC_FLAG_RUN_MAX 65535
+
 typedef struct {
     uint8_t  buf[V42HDLC_MAX_FRAME];
     int      len;            /* complete octets collected */
@@ -86,7 +107,8 @@ typedef struct {
     int      ones;           /* run of ones on the line */
     int      fcs_mode;
     int      last_fcs32;     /* FCS type of the frame last returned */
-    int      flag_run;       /* consecutive flags with nothing between */
+    int      flag_run;       /* consecutive flags with nothing between, up
+                                to V42HDLC_FLAG_RUN_MAX (an idle link) */
     int      tent;           /* collecting what follows a run of ones, no flag
                                 before it: a frame only if its FCS holds */
     unsigned long good, bad_fcs, runts, aborts, too_long, misaligned;
@@ -107,7 +129,32 @@ void v42hdlc_rx_set_max(v42hdlc_rx_t *r, int max_len);
  * again (a rate change) can leave the frame that was under way with its
  * flag lost and fill ones before it: a U.S. Robotics x2 client's does. What
  * follows the ones and is not such a frame is dropped and not counted, as it
- * would be while hunting for a flag. */
-int  v42hdlc_rx_bit(v42hdlc_rx_t *r, int bit);
+ * would be while hunting for a flag.
+ *
+ * Inline: a bit with fewer than five ones before it on the line; every
+ * other case (a deleted zero, a flag, an abort, the end of a run of ones)
+ * is v42hdlc_rx_bit_full's, which is the whole of it. */
+int  v42hdlc_rx_bit_full(v42hdlc_rx_t *r, int bit);
+
+/* for v42hdlc_rx_bit and v42hdlc_rx_bit_full: one more bit in the
+ * accumulator, an octet to buf (or overflow) when it is full */
+static inline void v42hdlc_rx_collect(v42hdlc_rx_t *r, int bit)
+{
+    r->cur = (uint8_t)(r->cur | ((bit & 1) << r->nbits));
+    if (++r->nbits == 8) {
+        if (r->len < r->max_len) r->buf[r->len++] = r->cur;
+        else r->overflow = 1;
+        r->nbits = 0; r->cur = 0;
+    }
+}
+
+static inline int v42hdlc_rx_bit(v42hdlc_rx_t *r, int bit)
+{
+    int ones = r->ones;
+    if (ones >= 5) return v42hdlc_rx_bit_full(r, bit);
+    r->ones = (bit & 1) ? ones + 1 : 0;
+    if (r->synced) v42hdlc_rx_collect(r, bit);
+    return 0;
+}
 
 #endif

@@ -1,0 +1,14 @@
+  clean round trip, h = mild                        : 0 bit errors
+  clean round trip, h = strong                      : 0 bit errors
+  clean round trip, h = 1+0.9D                      : 0 bit errors
+  clean round trip, h = 1-1.5D (non-minimum phase)  : 0 bit errors
+  clean round trip, h = big                         : 0 bit errors
+  BER with precoding, 3200/19200/16 states (noise level of the same Es/N0 without precoding)
+    Es/N0 dB  h        no precoding  white on y    coloured on x  slicer on y   reseeds
+      21.0    mild     3.063e-03     4.318e-03     4.307e-03      2.407e-01     0
+      22.0    mild     5.403e-05     3.669e-05     6.270e-05      1.395e-01     0
+      23.0    mild     0.000e+00     0.000e+00     0.000e+00      6.392e-02     0
+      21.0    strong   3.063e-03     4.858e-03     4.766e-03      3.114e-01     0
+      22.0    strong   5.403e-05     5.069e-05     5.069e-05      1.952e-01     0
+      23.0    strong   0.000e+00     0.000e+00     0.000e+00      9.480e-02     0
+test_precoder: 685 checks, 0 failures

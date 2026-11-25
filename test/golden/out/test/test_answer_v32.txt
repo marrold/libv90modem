@@ -1,0 +1,3 @@
+  V.8, then V.32bis: 14400 bit/s; 43141 / 42445 bits, 0 / 0 bad
+  no V.8, AA: V.32bis data at 4.13 s
+answer_v32: 34 checks, 0 failures

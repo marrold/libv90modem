@@ -29,7 +29,7 @@
 #ifndef V90D_MODEM_K56ENC_H
 #define V90D_MODEM_K56ENC_H
 #include <stdint.h>
-#include "v34.h"
+#include "../v34/v34.h"
 
 #define K56ENC_N 8          /* symbols (octets) per frame */
 
@@ -51,10 +51,6 @@ typedef struct {
  * running sum 0, shaping counter 0. An invalid rate or pad gives an
  * encoder that takes no bits and sends zeros (0xff). */
 void k56enc_init(k56enc_t *e, int rate, int pad, uint8_t rbs);
-
-/* a renegotiation's new rate: by Ruling C4 a new encoder, as k56enc_init
- * (nothing carries across) */
-void k56enc_set_rate(k56enc_t *e, int rate, int pad, uint8_t rbs);
 
 /* the bits the next frame takes: R / 1000, less on a robbed-bit line */
 int k56enc_bits(const k56enc_t *e);

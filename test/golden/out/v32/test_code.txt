@@ -1,0 +1,6 @@
+   4800 bit/s:   4 points, mean power 40.00
+   7200 bit/s:  16 points, mean power 40.00
+   9600 bit/s:  32 points, mean power 40.00
+  12000 bit/s:  64 points, mean power 42.00
+  14400 bit/s: 128 points, mean power 41.00
+test_code: 5750 checks, 0 failures

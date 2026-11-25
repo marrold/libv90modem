@@ -3,6 +3,7 @@
 #include "pcmtx.h"
 #include "pcmtx_tab.h"
 #include "v34_tabs.h"
+#include "interp2.h"
 
 /* the wide bank (pcmtx_wide) is the receiver's, of the same shape */
 typedef char pcmtx_same_banks[(V34_IP == PCMTX_IP && V34_IN == PCMTX_IN && V34_ID == PCMTX_ID) ? 1 : -1];
@@ -41,8 +42,8 @@ void pcmtx_put(pcmtx_t *t, int16_t sym, int64_t step)
  * PCMTX_ID + 1 - since. Of the two, the one that gives a branch in 0..32. */
 int16_t pcmtx_out(const pcmtx_t *t)
 {
-    int64_t a, acc0 = 0, acc1 = 0, v;
-    int j, p, i, base;
+    int64_t a, acc0, acc1, v;
+    int j, p;
     int32_t f;
     const int16_t *h0, *h1;
     if (t->since < ONE32) { j = 1; a = ONE32 - t->since; }
@@ -52,15 +53,8 @@ int16_t pcmtx_out(const pcmtx_t *t)
     if (p >= PCMTX_IP) { p = PCMTX_IP - 1; f = 0x8000; }
     if (t->wide) { h0 = v34_interp[p]; h1 = v34_interp[p + 1]; }
     else { h0 = pcmtx_interp[p]; h1 = pcmtx_interp[p + 1]; }
-    base = (t->pos - 1 - j) & (PCMTX_RING - 1);
-    /* ring[(base - i) & (RING - 1)], newest first, in the two runs that do
-     * not wrap */
-    {
-        const int16_t *s = t->ring + base;
-        int n1 = base + 1 < PCMTX_IN ? base + 1 : PCMTX_IN;
-        for (i = 0; i < n1; i++, s--) { acc0 += *s * h0[i]; acc1 += *s * h1[i]; }
-        for (s = t->ring + PCMTX_RING - 1; i < PCMTX_IN; i++, s--) { acc0 += *s * h0[i]; acc1 += *s * h1[i]; }
-    }
+    /* ring[(pos - 1 - j - i) & (RING - 1)], newest first */
+    interp2_64(t->ring, t->pos - 1 - j, PCMTX_RING - 1, h0, h1, PCMTX_IN, &acc0, &acc1);
     v = acc0 + (((acc1 - acc0) * f) >> 15);     /* Q14 */
     v = (v + 8192) >> 14;
     return (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);

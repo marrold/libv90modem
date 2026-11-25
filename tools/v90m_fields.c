@@ -255,7 +255,9 @@ static int seg_key(const answer_t *a)
 }
 
 /* ---- what the answering modem decoded ---- */
-static const char *phn[] = { "V8", "V22", "V21", "FAILED", "P2", "P3", "V90", "RETRAIN", "V34", "V32", "V32_SIL", "P3X", "V92", "X2" };
+static const char *phn[] = { "V8", "V22", "V21", "FAILED", "P2", "P3", "V90", "RETRAIN", "V34", "V32", "V32_SIL", "P3X", "V92", "X2", "V8BIS", "K56", "K56RT", "V23" };
+/* one name for each ans_phase (modem/answer.h), as in tools/trace.c */
+typedef char phn_check[sizeof phn / sizeof *phn == ANS_NPHASES ? 1 : -1];
 static void menu(long i, const char *n, const v8_menu_t *m, const uint8_t *oct, int noct)
 {
     int k;

@@ -22,7 +22,27 @@
  * inside v90m_process_*(), at the moment the bit is needed or decided. V.42
  * (below) or a start-stop framer sits on that pump. Callbacks (getbit,
  * putbit, on_event) are only ever made from inside v90m_process_*() on the
- * calling thread. */
+ * calling thread.
+ *
+ * What a callback may do to the modem that calls it: v90m_retrain,
+ * v90m_cleardown, v90m_get_state, v90m_get_stats, v90m_get_diag (and
+ * anything on another object: every v90m_ec_* and v90m_async_* function).
+ * v90m_reset returns V90M_ESTATE and changes nothing. v90m_destroy takes effect at the end of
+ * the sample under way: no event after it, the rest of the block is
+ * silence (linear 0, mu-law 0xFF, A-law 0xD5), the modem is freed (when it
+ * came from v90m_create) and v90m_process_* returns V90M_OK. After a
+ * v90m_destroy from getbit or putbit the rest of that sample still calls
+ * getbit and putbit with the host's user pointer: free the user object
+ * (a v90m_ec_t, a v90m_async_t) only after v90m_process_* returns, and
+ * never from a callback of a modem that goes on. v90m_init on the modem's
+ * own memory is not allowed.
+ *
+ * NULL: every function checks the object it is given (and the struct that
+ * v90m_get_state, v90m_get_stats, v90m_get_diag and v90m_ec_get_status
+ * fill): with NULL a function returning int returns V90M_EINVAL, one
+ * returning size_t or unsigned long 0, a void one does nothing. Except the four called for
+ * every bit, v90m_ec_tx_bit, v90m_ec_rx_bit, v90m_async_getbit and
+ * v90m_async_putbit: their object must not be NULL. */
 #ifndef V90MODEM_H
 #define V90MODEM_H
 
@@ -34,15 +54,16 @@ extern "C" {
 #endif
 
 #define V90M_VERSION_MAJOR 0
-#define V90M_VERSION_MINOR 5
-#define V90M_VERSION_PATCH 0
-/* "0.5.0": the version of the library linked in (may differ from the header) */
+#define V90M_VERSION_MINOR 6
+#define V90M_VERSION_PATCH 1
+/* "0.6.1": the version of the library linked in (may differ from the header) */
 const char *v90m_version(void);
 
 /* error codes (negative returns) */
 #define V90M_OK        0
 #define V90M_EINVAL   -1    /* a NULL or misaligned argument, or a configuration value out of range */
-#define V90M_ENOTSUP  -2    /* a combination not implemented in this version (see v90m_role) */
+#define V90M_ENOTSUP  -2    /* a combination not implemented in this version (see v90m_role and
+                               the V90M_MOD_* rules) */
 #define V90M_ENOMEM   -3    /* create could not allocate, or init was given too little memory */
 #define V90M_ESTATE   -4    /* not possible in the present state of the call */
 
@@ -88,7 +109,8 @@ typedef enum {
 #define V90M_MOD_V92     0x0020u     /* with V90M_MOD_V90 (alone: V90M_ENOTSUP): PCM upstream on
                                         offer (answering), or asked for (calling); not in the
                                         defaults */
-/* Not in the defaults, either role. Answering: Bell 103: a caller without V.8
+/* Not in the defaults, either role. Answering: Bell 212A only with V90M_MOD_V22
+ * (without: V90M_ENOTSUP). Bell 103: a caller without V.8
  * that sends 1270 Hz (the Bell 103 mark) gets 300 bit/s FSK on 2225 / 2025
  * Hz, start-stop and no error control as in V.21. Bell 212A, with
  * V90M_MOD_V22: when the V.22bis answer sequence has gone unanswered for 4 s
@@ -187,6 +209,8 @@ typedef enum {
 } v90m_event;
 typedef void (*v90m_event_fn)(void *user, v90m_event ev);
 
+#define V90M_TX_LEVEL_MAX 16384     /* v90m_cfg.tx_level: x 181/128 (the tones' peak) fits 16 bits */
+
 typedef struct {
     v90m_role      role;
     unsigned       modulations;     /* V90M_MOD_*; default all but V.92 and Bell. Either role:
@@ -198,8 +222,13 @@ typedef struct {
                                        upstream constellation without its share of the noise);
                                        0 = the received samples went through G.711, also when
                                        they are handed over as linear values. Calling: unused */
-    int            tx_level;        /* transmit RMS outside PCM modes, 16-bit units, >= 0; default
-                                       3000 */
+    int            tx_level;        /* transmit RMS outside PCM modes, 16-bit units, 0 ..
+                                       V90M_TX_LEVEL_MAX (else V90M_EINVAL); default 3000. Near
+                                       the top the peaks of V.34-family signals clip: a calling
+                                       V.90 modem's V.34 upstream at 15360 or 16384 goes over
+                                       full scale some tens of samples a call, and whether its
+                                       B1 gets through depends on the upstream rate the answerer
+                                       picks (docs/api.md); 15360 is the level tested to connect */
     int            max_tx_code;     /* answering, V.90 / V.92: the most downstream power the caller
                                        may ask for, -0.5 dBm0 less 0.5 dB per step, 1..31;
                                        0 = 23 (-12 dBm0). Calling: unused (0..31 accepted) */
@@ -208,7 +237,9 @@ typedef struct {
                                        side), in V.34, V.90 and V.92, either role: V.92's PCM upstream
                                        (up to 48000) under max_up answering, max_down calling; 33600
                                        holds it at 33333. V.32bis (either role): one rate both ways,
-                                       under the lower of the two. V.21, V.22, V.22bis, Bell: unused */
+                                       under the lower of the two. V.21, V.22, V.22bis, Bell: unused.
+                                       With x2 or K56flex, max_up 1..2399 is V90M_EINVAL (their
+                                       V.34 upstream starts at 2400) */
     int            echo_delay;      /* samples from a sample leaving to its echo starting back (the
                                        driver's buffering), >= 0; -1 = measure it in every start-up.
                                        Calling V.90 / V.92: never measured, used as given, 0 .. 511
@@ -224,7 +255,7 @@ typedef struct {
  * struct of the caller's (nothing allocated at all): upper bounds of
  * v90m_mem_size() and the others for this version, on every platform. They
  * change with the version; the init functions check the length given. */
-#define V90M_MEM_SIZE        (120u * 1024u)
+#define V90M_MEM_SIZE        (108u * 1024u)
 #define V90M_EC_MEM_SIZE     (50u * 1024u)
 #define V90M_ASYNC_MEM_SIZE  2048u
 /* alignment for that memory:  union { v90m_align a; uint8_t b[V90M_MEM_SIZE]; } mem; */
@@ -245,9 +276,10 @@ size_t   v90m_mem_size(void);
 v90m_t  *v90m_init(void *mem, size_t len, const v90m_cfg *cfg, int *err);
 /* Back to the start of a new call (the line went off-hook), same memory, the
  * role and everything else from cfg. V90M_OK; or V90M_EINVAL (m or cfg NULL,
- * a value out of range) or V90M_ENOTSUP, the modem left as it was. */
+ * a value out of range), V90M_ENOTSUP, or V90M_ESTATE (from a callback of
+ * m's), the modem left as it was. */
 int      v90m_reset(v90m_t *m, const v90m_cfg *cfg);
-void     v90m_destroy(v90m_t *m);           /* NULL is fine */
+void     v90m_destroy(v90m_t *m);           /* NULL is fine; from a callback: see the top */
 
 /* The line: n received samples in, n samples to send out. Any n, 1
  * included: the result does not depend on how the samples are cut into
@@ -258,7 +290,8 @@ void     v90m_destroy(v90m_t *m);           /* NULL is fine */
  *             v90m_g711_decode gives), codewords out; V.90 / V.92 work too
  *   _linear   linear both ways (a PCM modulation then sends the linear value
  *             of its codewords)
- * Return V90M_OK, or V90M_EINVAL (m NULL, or rx or tx NULL with n > 0). */
+ * Return V90M_OK, or V90M_EINVAL (m NULL, or rx or tx NULL with n > 0).
+ * A v90m_destroy from a callback ends the block early (see the top). */
 int      v90m_process_g711(v90m_t *m, const uint8_t *rx, uint8_t *tx, size_t n);
 int      v90m_process_lin_rx(v90m_t *m, const int16_t *rx, uint8_t *tx, size_t n);
 int      v90m_process_linear(v90m_t *m, const int16_t *rx, int16_t *tx, size_t n);
@@ -275,7 +308,9 @@ int      v90m_process_linear(v90m_t *m, const int16_t *rx, int16_t *tx, size_t n
 int      v90m_retrain(v90m_t *m);
 /* Hang up, telling the far modem where the modulation has a way to (V.90
  * 9.7, V.92 9.11, V.34 11.7, either role): V90M_OK when that has begun
- * (V90M_EV_ENDED follows within a fraction of a second); V90M_ESTATE when
+ * (V90M_EV_ENDED follows within a fraction of a second; V.92 answering: the
+ * cleardown is a rate sequence with data rate 0, drn = 0, and a caller that
+ * does not acknowledge it is given up to 3.5 s); V90M_ESTATE when
  * there is nothing to send (V.21, V.22, V.22bis, V.32bis, Bell, or not in
  * data mode): just stop calling v90m_process_*. x2 and K56flex (answering,
  * in data mode or a rate change): V90M_OK, and the call ends at once with
@@ -285,18 +320,19 @@ int      v90m_cleardown(v90m_t *m);
 typedef enum {
     V90M_END_NONE = 0,
     V90M_END_FAILED,            /* no connection was made (start-up failed) */
-    V90M_END_LOST,              /* the connection was lost */
+    V90M_END_LOST,              /* the connection was lost (any loss once connected but
+                                   those below) */
     V90M_END_CLEARDOWN_FAR,     /* the far modem cleared down */
     V90M_END_CLEARDOWN_OURS,    /* after v90m_cleardown() */
-    /* calling only */
-    V90M_END_NO_ANSWER_TONE,    /* no answer tone came */
-    V90M_END_NO_JM,             /* ANSam came, but no JM in answer to CM (V.8) */
-    V90M_END_NO_COMMON,         /* the answerer has no modulation in common with us */
-    V90M_END_RETRAIN_FAILED,    /* (appended) calling V.90 / V.92: a retrain failed, or one
-                                   more was due past the limit (see v90m_retrain);
-                                   answering x2: the client asked for a retrain in data
-                                   mode or in its rate change (its Tone A), which x2
-                                   cannot serve */
+    V90M_END_NO_ANSWER_TONE,    /* calling only: no answer tone came */
+    V90M_END_NO_JM,             /* calling only: ANSam came, but no JM in answer to CM (V.8) */
+    V90M_END_NO_COMMON,         /* V.8 found no modulation in common with the far modem */
+    V90M_END_RETRAIN_FAILED,    /* (appended) V.90 / V.92, V.34 (either role):
+                                   a retrain failed (in its Phase 2, 3 or 4), or one
+                                   more was due past the limit
+                                   (see v90m_retrain); answering x2: the client asked for
+                                   a retrain in data mode or in its rate change (its
+                                   Tone A), which x2 cannot serve */
     V90M_END_X2_FAILED,         /* (appended) answering: the client took up x2 (its marker
                                    came) and the x2 start-up, or a rate change of
                                    the client's, did not complete */
@@ -311,7 +347,7 @@ typedef enum {
 typedef struct {
     int        connected;       /* data mode reached, and kept through retrains */
     int        moving;          /* user data moves both ways now */
-    int        retraining;
+    int        retraining;      /* a retrain is under way; 0 in a rate renegotiation */
     v90m_conn  modulation;      /* in force (during a retrain: the one before) */
     int        tx_bps, rx_bps;  /* our transmit / receive rate (rx = tx where symmetric) */
     int        used_v8;         /* the far modem spoke V.8 */
@@ -324,23 +360,107 @@ void     v90m_get_state(const v90m_t *m, v90m_state *st);
 typedef struct {
     v90m_conn  modulation;
     int        tx_bps, rx_bps;
-    int        snr_db10;        /* receiver signal to error, 0.1 dB, 0..600; -1 = none (not
-                                   connected, or a modulation without the figure) */
+    int        snr_db10;        /* receiver signal to error, 0.1 dB, 0..600; -1 = none.
+                                   While connected, the engine's figure, in a retrain too;
+                                   where it has none, the last measured while data moved.
+                                   After the end of the call, that last value; -1 only if
+                                   none was measured this call. Until v90m_reset */
     int        rtd;             /* round-trip delay measured in the handshake, samples; -1 = none
-                                   (answering: V.34, V.90, V.92; calling: V.32bis, V.34, V.90, V.92) */
-    int        echo_delay;      /* answering V.90 / V.92: in use (configured or measured),
-                                   samples; -1 = none, and always -1 calling */
+                                   (answering: V.34, V.90, V.92, x2, K56flex; calling: V.32bis,
+                                   V.34, V.90, V.92); live or kept as snr_db10 is */
+    int        echo_delay;      /* answering V.90 / V.92 / x2 / K56flex: in use (configured
+                                   or measured) by the engine running now, during a retrain
+                                   or after the end the call's; samples; -1 = none, and
+                                   always -1 calling */
     unsigned   retrains;        /* begun, this call */
-    unsigned   renegotiations;  /* rate renegotiations that stopped the data, this call
-                                   (answering: V.90, V.92; calling: V.32bis, V.34, V.90, V.92) */
+    unsigned   renegotiations;  /* rate renegotiations that stopped the data, this call:
+                                   counted when data moves again, when it becomes a retrain,
+                                   or when the call ends in it (not a cleardown's stop, ours
+                                   or the far end's) (answering: V.34, V.90, V.92, x2, K56flex; calling:
+                                   V.32bis, V.34, V.90, V.92) */
 } v90m_stats;
 void     v90m_get_stats(const v90m_t *m, v90m_stats *st);
+
+/* Start-up diagnostics (added in 0.6.1): how far the call got, what it
+ * chose, and why it ended, in either role, in one place; for a log line
+ * such as "start-up failed (P2D_ERR_INFO1A, phase2, V.92)". Cheap; fine
+ * to read after every sample, and kept after the end until v90m_reset. A
+ * struct and a function of their own: v90m_state and v90m_stats keep their
+ * size within 0.6, and so does v90m_diag from 0.6.1 on.
+ *
+ * The start-up failed if, and only if, the call ended (v90m_state.end is
+ * not V90M_END_NONE) and data_reached is 0. A retrain that fails after
+ * data mode (V90M_END_RETRAIN_FAILED in the retrain's Phase 2, 3 or 4) is
+ * not a start-up failure: data_reached is 1. */
+typedef enum {
+    V90M_PHASE_NONE = 0,    /* before the first sample */
+    V90M_PHASE_TONE,        /* answering: the silence and our answer tone (with
+                               K56flex, V.8bis before them); calling: listening
+                               for the answer tone */
+    V90M_PHASE_V8,          /* V.8: CM, JM, CJ */
+    V90M_PHASE_PHASE2,      /* V.34, V.90, V.92, x2, K56flex: Phase 2, a
+                               retrain's too */
+    V90M_PHASE_PHASE3,      /* ... Phase 3 */
+    V90M_PHASE_PHASE4,      /* ... Phase 4 */
+    V90M_PHASE_TRAIN,       /* V.21, V.22, V.22bis, V.32bis, Bell, which have no
+                               phases: their start-up; also a caller without V.8
+                               being waited for, and calling, the wait for a
+                               pre-V.8 or Bell answerer's signal */
+    V90M_PHASE_DATA         /* data mode, rate renegotiations included (and
+                               V.22bis's and V.32bis's retrains) */
+} v90m_phase;
+typedef struct {
+    int        error;       /* why the call ended, as the modem's engines say
+                               it: v90m_err_name(error). 0 while the call goes
+                               on, and after an orderly cleardown (ours or the
+                               far end's) once data mode was reached. A start-up
+                               that failed: the deepest cause with a name (an
+                               engine's own such as P2D_ERR_INFO1A, or the
+                               modem's own limit such as ANS_ERR_TIMEOUT). After
+                               data mode: how the call was lost
+                               (P34_ERR_CARRIER, ANS_ERR_RETRAINS, ...) */
+    v90m_phase phase;       /* the furthest phase the call reached, in the
+                               order of the enum: it never goes back (a
+                               retrain's Phase 2 leaves it as it was) and is
+                               kept after the end. A V.92 call whose training
+                               failed in Phase 3, retrained and died in that
+                               retrain's Phase 2 reads V90M_PHASE_PHASE3; its
+                               error is the final cause (P2D_ERR_...) */
+    v90m_conn  selected;    /* the modulation chosen: from V.8's JM, or for a
+                               modem without V.8 once its signal is heard,
+                               whether or not its training finishes;
+                               V90M_CONN_NONE before. It then follows the call
+                               to the modulation in force: V.92 once Phase 2
+                               agrees PCM upstream, V.34 once a V.90 caller's
+                               INFO1a selects it, x2 or K56flex at their point
+                               of no return, the connection's once connected.
+                               V.8's V.22 item (V.22 or V.22bis):
+                               V90M_CONN_V22BIS until the connection says
+                               which */
+    int        data_reached;    /* 1 once data mode was reached this call (user
+                                   data moved both ways: v90m_state.moving), kept
+                                   after the end */
+} v90m_diag;
+void     v90m_get_diag(const v90m_t *m, v90m_diag *d);
+/* The name of an error of v90m_diag ("P2D_ERR_INFO1A"), "none" for 0, "?"
+ * for a number that is no error; never NULL. Diagnostic text, not an enum:
+ * the numbers may change in any version, the names do not within 0.6.x
+ * (the list: docs/api.md). */
+const char *v90m_err_name(int code);
+/* Short names for a log line, never NULL, "?" outside the enum; they do
+ * not change within 0.6.x. Phases: "none", "tone", "v8", "phase2",
+ * "phase3", "phase4", "train", "data". Modulations: "none", "V.21",
+ * "V.22", "V.22bis", "V.90", "V.34", "V.32bis", "V.92", "Bell 103",
+ * "Bell 212A", "x2", "K56flex". */
+const char *v90m_phase_name(v90m_phase p);
+const char *v90m_conn_name(v90m_conn c);
 
 /* ------------------------------------- start-stop characters (V.14 basic)
  * Characters (1 start, 8 data LSB first, 1 stop, mark idle) on the bit pump
  * of a connected modem, without error control: pass v90m_async_getbit and
  * v90m_async_putbit as the modem's getbit / putbit with the object as user.
- * Fixed 512-octet queues each way. */
+ * Fixed 512-octet queues each way; a character received with the receive
+ * queue full is dropped, and not counted. */
 typedef struct v90m_async v90m_async_t;
 /* create / init: NULL on failure, *err as for v90m_create / v90m_init */
 v90m_async_t *v90m_async_create(int *err);
@@ -363,23 +483,28 @@ unsigned long v90m_async_frame_errors(const v90m_async_t *a);
  * control) when the far end has no V.42 and fallback is on. */
 typedef struct v90m_ec v90m_ec_t;
 
+/* The ranges: a value outside them is V90M_EINVAL from create, init and
+ * reset. Flags are 0 or 1. */
 typedef struct {
     int originator;         /* 1 = the calling end, 0 = the answering end */
-    int detect;             /* run the detection phase (V.42 7.2.1) */
+    int detect;             /* run the detection phase (V.42 7.2.1), 0..1 */
     int fallback;           /* when detection fails: 1 = start-stop, 0 = disconnect */
-    int t400_ms;            /* detection phase timer, default 750 */
-    int establish_ms;       /* answerer: give up when no SABME comes this long after detection; 0 = never */
-    int comp_policy;        /* V90M_COMP_AUTO / ALWAYS / NEVER for our encoder */
+    int t400_ms;            /* detection phase timer, >= 0; 0 = the default, 750 */
+    int establish_ms;       /* answerer: give up when no SABME comes this long after detection,
+                               >= 0; 0 = never */
+    int comp_policy;        /* V90M_COMP_AUTO / ALWAYS / NEVER (0..2) for our encoder */
     struct {
-        int use_xid;            /* originator: negotiate with XID before SABME */
-        int k_tx, k_rx;         /* window */
-        int n401_tx, n401_rx;   /* information field, octets */
-        int fcs32;
-        int v42bis_tx, v42bis_rx;   /* V.42bis wanted, our send / receive direction */
-        int v42bis_p1, v42bis_p2;   /* codewords (512..), string length (6..250) */
-        int v44_tx, v44_rx;         /* V.44 wanted (preferred over V.42bis) */
-        int v44_p1_tx, v44_p1_rx, v44_p2_tx, v44_p2_rx, v44_p3_tx, v44_p3_rx;
-        int t401_ms, t403_ms, n400;
+        int use_xid;            /* originator: negotiate with XID before SABME, 0..1 */
+        int k_tx, k_rx;         /* window, 1..32 (k_tx), 1..127 (k_rx) */
+        int n401_tx, n401_rx;   /* information field, octets, 1..256 */
+        int fcs32;              /* 0..1 */
+        int v42bis_tx, v42bis_rx;   /* V.42bis wanted, our send / receive direction, 0..1 */
+        int v42bis_p1, v42bis_p2;   /* codewords 512..2048, string length 6..250 */
+        int v44_tx, v44_rx;         /* V.44 wanted (preferred over V.42bis), 0..1 */
+        int v44_p1_tx, v44_p1_rx;   /* codewords 256..2048 */
+        int v44_p2_tx, v44_p2_rx;   /* string length 32..255 */
+        int v44_p3_tx, v44_p3_rx;   /* history, octets 512..4096 */
+        int t401_ms, t403_ms, n400; /* t401_ms >= 1; t403_ms >= 0, 0 = off; n400 >= 1 */
     } lapm;
 } v90m_ec_cfg;
 #define V90M_COMP_AUTO   0
@@ -388,7 +513,10 @@ typedef struct {
 
 enum { V90M_EC_DETECT = 0, V90M_EC_ESTABLISH, V90M_EC_CONNECTED, V90M_EC_ASYNC,
        V90M_EC_RELEASING, V90M_EC_DISCONNECTED };
-/* why an endpoint is V90M_EC_DISCONNECTED (v90m_ec_status.reason) */
+/* why an endpoint is V90M_EC_DISCONNECTED (v90m_ec_status.reason).
+ * V90M_EC_R_N400 also ends a link that made no progress through n400
+ * recoveries (docs/error-control.md "Bounded waits"; a busy peer, RNR,
+ * is not counted). */
 enum { V90M_EC_R_NONE = 0, V90M_EC_R_LOCAL, V90M_EC_R_PEER_DISC, V90M_EC_R_PEER_DM,
        V90M_EC_R_N400, V90M_EC_R_PROTOCOL, V90M_EC_R_NEGOTIATION,
        V90M_EC_R_NO_EC = 16, V90M_EC_R_COMPRESSION, V90M_EC_R_NO_SABME };
@@ -414,9 +542,10 @@ typedef struct {
 } v90m_ec_status;
 
 void        v90m_ec_cfg_default(v90m_ec_cfg *cfg, int originator);
-/* create / init: NULL on failure, *err as for v90m_create / v90m_init (the
- * configuration's values are not checked); reset: V90M_OK, or V90M_EINVAL
- * for cfg NULL */
+/* create / init: NULL on failure, *err as for v90m_create / v90m_init
+ * (V90M_EINVAL for a value outside the ranges above); reset: V90M_OK, or
+ * V90M_EINVAL for e or cfg NULL or a value outside them, the endpoint left
+ * as it was */
 v90m_ec_t  *v90m_ec_create(const v90m_ec_cfg *cfg, int *err);
 size_t      v90m_ec_mem_size(void);
 v90m_ec_t  *v90m_ec_init(void *mem, size_t len, const v90m_ec_cfg *cfg, int *err);
@@ -437,11 +566,12 @@ int         v90m_ec_tx_idle(const v90m_ec_t *e);        /* everything written wa
 int         v90m_ec_tx_busy(const v90m_ec_t *e);        /* a frame is still leaving the transmitter */
 
 void        v90m_ec_release(v90m_ec_t *e);              /* orderly: DISC, wait for UA */
-void        v90m_ec_abort(v90m_ec_t *e);                /* the line is gone: stop without a word */
+void        v90m_ec_abort(v90m_ec_t *e);                /* the line is gone: stop without a word, in
+                                                           every state: V90M_EC_DISCONNECTED on return */
 /* break signals (V.42 12.3.1): opt is one of these, len10ms the length in
  * 10 ms units. send_break: V90M_OK when the break is on its way;
- * V90M_ESTATE when error control is not up (V90M_EC_CONNECTED) or a break of
- * ours is still pending. get_break: 1 with *opt and *len10ms when a break came
+ * V90M_EINVAL for any other opt; V90M_ESTATE when error control is not up
+ * (V90M_EC_CONNECTED) or a break of ours is still pending. get_break: 1 with *opt and *len10ms when a break came
  * (in its place among the octets read), else 0. */
 #define V90M_BRK_NONDESTRUCTIVE_INSEQ      0x00
 #define V90M_BRK_NONDESTRUCTIVE_EXPEDITED  0x40

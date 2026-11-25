@@ -268,7 +268,8 @@ static void test_shaping(void)
     CHECK_EQ_I(bad_data, 0);
 }
 
-/* Ruling C4: k56enc_set_rate restarts everything, as a new encoder */
+/* Ruling C4: a renegotiation's new rate is a new encoder; k56enc_init on a
+ * used one restarts everything (nothing carries across) */
 static void test_restart(void)
 {
     k56enc_t a, b;
@@ -281,7 +282,7 @@ static void test_restart(void)
         for (i = 0; i < k; i++) bits[i] = (uint8_t)rbit();
         k56enc_frame(&a, bits, oa);
     }
-    k56enc_set_rate(&a, 12, 2, 0x07);
+    k56enc_init(&a, 12, 2, 0x07);
     k56enc_init(&b, 12, 2, 0x07);
     for (n = 0; n < 40; n++) {
         int k = k56enc_bits(&a);

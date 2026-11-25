@@ -1,0 +1,22 @@
+V.8 then V.22bis, against the library's answerer
+  clean line: data at 4.51 s, 2400 bit/s, modulation 3, V.8 1
+    2400 bit/s: caller got 63 of 63 octets, answerer got 61 of 61
+    after a retrain started by the answerer: ours 1, theirs 1; moving 1
+    after the retrain: caller got 63 of 63 octets, answerer got 61 of 61
+    the answerer silent: phase 4, end 5
+  10 dB loss, echoes, noise, 1 Hz, 50 ppm: data at 4.64 s, 2400 bit/s
+    2400 bit/s: caller got 63 of 63 octets, answerer got 61 of 61
+V.8 then V.21
+  data at 3.03 s, 300 bit/s, modulation 1
+    300 bit/s: caller got 63 of 63 octets, answerer got 61 of 61
+pre-V.8 answerers: ANS, then
+  V.22bis: data at 5.11 s, 2400 bit/s, modulation 3, V.8 0
+    2400 bit/s: caller got 63 of 63 octets, answerer got 61 of 61
+  V.22 (1200 bit/s only): data at 5.56 s, 1200 bit/s, modulation 2
+    1200 bit/s: caller got 63 of 63 octets, answerer got 61 of 61
+  V.21: data at 3.74 s, modulation 1
+    caller got 63 of 63 octets, answerer 61 of 61
+no call
+  no answer tone: phase 4, end 1
+  nothing in common: phase 4, end 3
+orig: 40 checks, 0 failures

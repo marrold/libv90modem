@@ -33,6 +33,15 @@ It ends the call with `V90M_END_NO_ANSWER_TONE` when no answer tone comes
 (10 s), `V90M_END_NO_JM` when ANSam came but no JM answered CM (5 s of CM),
 and `V90M_END_NO_COMMON` when the answerer has no modulation in common.
 
+**Run V.42 on a calling modem.** Our CM always names LAPM (V.8's protocol
+category), whether or not the program runs a `v90m_ec` endpoint. An
+answerer that takes that at its word expects V.42 frames: a V.92 one that
+named LAPM too skips V.42's detection phase (V.92 9.3.1) and waits for our
+first LAPM frame (v90d, for one, waits 5 s). A calling program should
+therefore run the V.42 endpoint ([error-control.md](error-control.md)),
+with the detection phase unless `v90m_state.odp_bypass` says otherwise;
+its start-stop fallback covers an answerer without V.42.
+
 ## The modulations
 
 `v90m_cfg.modulations`; the default is everything but V.92 and Bell, as
@@ -64,11 +73,18 @@ when answering. At least one is required (0 gives `V90M_EINVAL`).
   designed from the DIL and the noise. Data mode in the simulator was
   reached some 10 to 14 s from the start of the call
   (`docs/history/PROGRESS.md`, C5-2 and C6-2).
+- **Who answers.** V.90 / V.92 needs a digital modem at the far end: PCM
+  is chosen only when the answerer's JM names one. A JM naming only "PCM
+  analogue" (another analogue V.90/V.92 modem) gives V.34, or the lowest
+  other mode in common.
 - **V.92.** With `V90M_MOD_V92` it says V.92 in Phase 2 and selects PCM
   upstream when the digital modem allows it; the upstream is then PCM
   through the precoder and prefilter the digital modem dictates, on the
   network's clock. Otherwise the call is V.90. `v90m_state.modulation` is
-  `V90M_CONN_V92` only when the upstream is PCM.
+  `V90M_CONN_V92` only when the upstream is PCM. The digital modem's CPd
+  (the moduli, the precoder and prefilter, the constellations) must be
+  whole in Phase 4; in a rate renegotiation a CPd may carry only the parts
+  that changed, the others being kept from the CPd before.
 - **Retrains**, either end: `v90m_retrain`, or the answerer's Tone B. Ours
   is 70 ms of silence and Tone A, then Phase 2 to data mode again, some 7
   to 11 s, with the receiver and (V.92) the PCM upstream trained afresh.
@@ -119,11 +135,38 @@ The same events as answering: `V90M_EV_CONNECTED`, `V90M_EV_RATES`,
 `V90M_END_NO_ANSWER_TONE`, `V90M_END_NO_JM`, `V90M_END_NO_COMMON`,
 `V90M_END_RETRAIN_FAILED`.
 
+**When the far end hangs up** in data mode, the end code depends on what
+the line then brings:
+
+- the answerer clears down first (V.90 9.7, V.92 9.11, V.34 11.7, V.32bis's
+  rate signal with no rate): `V90M_END_CLEARDOWN_FAR`;
+- silence (V.90 and V.92: the downstream 12 dB under its level for 0.5 s;
+  V.21, V.22, V.22bis, Bell: no carrier for 0.4 s; V.32bis and V.34: their
+  receivers' carrier loss): `V90M_END_LOST`;
+- a signal as loud as the modem's that is not one (dial tone, reorder, a
+  recorded message, noise), in V.90, V.92 and V.34: the receiver loses
+  lock and the modem retrains; nobody answers the retrain, and its Phase 2
+  fails within its own limits (30 s at most): `V90M_END_RETRAIN_FAILED`;
+  the same when the retrain limit has been used up. V.21, V.22, V.22bis
+  and Bell watch only their carrier: what their receive filter does not
+  pass is silence to them.
+
+A program that sees `V90M_END_LOST` or `V90M_END_RETRAIN_FAILED` after its
+data finished should treat it as the far end gone; only
+`V90M_END_CLEARDOWN_FAR` says the far modem meant it.
+
 For V.90 and V.92, `tx_bps` is the upstream and `rx_bps` the downstream.
 `v90m_get_stats` gives `snr_db10` (the downstream receiver's), `rtd` (V.32bis,
 V.34, V.90, V.92), and the counts of retrains and of rate renegotiations
 that stopped the data (V.32bis, V.34, V.90, V.92). `echo_delay` in the stats
 and `odp_bypass` in the state are always -1 and 0 when calling.
+`v90m_get_diag` (0.6.1) gives, as answering, the cause of the end in the
+engines' words (`V8_ERR_NO_TONE`, `P2L_ERR_REV`, `V90A_ERR_SD`, ...), the
+furthest phase the call reached (it never goes back) and the modulation
+chosen, and `data_reached`, whether data mode was reached. An orderly
+cleardown, ours or the far end's, after data mode reads error 0. The
+start-up failed if, and only if, the call ended and `data_reached` is 0
+(docs/api.md).
 
 ## Configuration that matters here
 
@@ -142,5 +185,5 @@ library's own answerer only. What a real digital modem sends in a retrain's
 Phase 2 is not known: this library's answerer sends no INFO0 there, V.92
 9.7 asks for "the full Phase 2", and the caller takes either form, tried
 only against its own answerer made to send INFO0d. One V.92 call takes
-some 56 to 60 % of an ARM926 at 400 MHz (qemu instruction counts); two do
-not fit. More in [limits.md](limits.md).
+some 51 to 55 % of an ARM926 at 400 MHz (qemu instruction counts); two
+do not fit. More in [limits.md](limits.md).

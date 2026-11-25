@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include "test.h"
 #include "v90link.h"
+#include "../modem/clock.h"
 
 #define MS(x) ((int64_t)(x) * 8)
 
@@ -64,7 +65,7 @@ int main(void)
     CHECK_EQ_I(v90a_rx_rate(&l->va), l->p34.down_rate);
     CHECK_EQ_I(v90a_tx_rate(&l->va), l->p34.up_rate);
     CHECK(v90a_tx_rate(&l->va) >= 24000);
-    /* 9.3.2.4: Sd-bar within 1500 ms of Ja; 9.3.2.7: Jd within 4500 ms of
+    /* 9.3.2.4: Sd-bar within 1500 ms of Ja (we wait 2000); 9.3.2.7: Jd within 4500 ms of
      * its end; 9.3.2.10: the DIL ended within 5000 ms of S; 9.4.2: B1d
      * within 15 s of INFO1a */
     CHECK(l->va.t_info1a < l->va.t_sd && l->va.t_sd < l->va.t_jd && l->va.t_jd < l->va.t_jdp);
@@ -77,6 +78,16 @@ int main(void)
     CHECK(l->va.trn2d_frames > 1000);
     CHECK_EQ_I(l->va.trn2d_bad, 0);
     CHECK_EQ_I(l->va.b1d_bad, 0);
+    /* 8.5.2 allows a CP to name fewer constellations than intervals and
+     * share them; a real server froze in data mode on such a CP (reported
+     * by an independent softmodem's live calls). Ours name one per interval
+     * (six), CPt's too. */
+    {
+        int s, six = v90_cp_nconst(&l->va.cpt) == 6 && v90_cp_nconst(&l->va.cp) == 6;
+        for (s = 0; s < 6; s++) six = six && l->va.cpt.idx[s] == s && l->va.cp.idx[s] == s;
+        printf("  constellations in CPt / CP as sent: %d / %d\n", v90_cp_nconst(&l->va.cpt), v90_cp_nconst(&l->va.cp));
+        CHECK(six);
+    }
     {
         int64_t d0 = l->down.got, u0 = l->up.got;
         run_for(l, MS(4000));
@@ -132,13 +143,100 @@ int main(void)
         run_for(l, MS(3000));
         printf("  ours %d (error %d) after %d ms\n", l->va.state, l->va.error, (int)ms((int32_t)(l->k - t0)));
         CHECK_EQ_I(l->va.error, V90A_ERR_CLEARDOWN);
+        /* every bit the digital modem sent before its Rd arrived (a frame
+         * held back at Rd was dropped, 0.5.0) */
+        printf("  downstream: %" PRId64 " bits sent, %" PRId64 " not received\n", l->down.sent, l->down.sent - l->down.got);
+        CHECK_EQ_I(l->down.sent - l->down.got, 0);
+    }
+
+    printf("our cleardown, answered by a retrain of the digital modem's (R3)\n");
+    c = base(); c.seed = 3;
+    vl_init(l, &c);
+    run_to(l, MS(30000), V90A_DATA);
+    run_for(l, MS(300));
+    CHECK_EQ_I(l->va.state, V90A_DATA);
+    {
+        int64_t t0 = l->k, n0;
+        int entered_p2 = 0, d_p2 = 0;
+        CHECK_EQ_I(v90a_cleardown(&l->va), 0);
+        CHECK_EQ_I(p34d_retrain(&l->p34), 0);       /* on the next sample: silence, then Tone B */
+        n0 = l->n;
+        while (l->k < t0 + MS(3000) && l->va.state != V90A_ENDED) {
+            vl_tick(l);
+            /* the owner's part of the digital modem's retrain: 70 ms of silence, Phase 2 (9.5.1) */
+            if (!d_p2 && l->n - n0 >= MS(70)) {
+                p2d_cfg pc = l->p2.cfg;
+                p2d_init_retrain(&l->p2, &pc);
+                l->dstate = 0; d_p2 = 1;
+            }
+            if (l->va.state == V90A_RETRAIN || l->va.state == V90A_P2) entered_p2 = 1;
+        }
+        printf("  ours %d (error %d) after %d ms; Phase 2 entered %d; digital in Phase 2 %d\n", l->va.state, l->va.error,
+               (int)ms((int32_t)(l->k - t0)), entered_p2, d_p2);
+        CHECK_EQ_I(l->va.error, V90A_ERR_HANGUP);
+        CHECK(!entered_p2);
+        CHECK(l->k - t0 <= MS(2000));
+    }
+
+    printf("a retrain's Phase 2 bounded: %d ms (spec D5)\n", V90A_RT_P2_MS);
+    c = base(); c.seed = 4;
+    vl_init(l, &c);
+    run_to(l, MS(30000), V90A_DATA);
+    run_for(l, MS(300));
+    CHECK_EQ_I(l->va.state, V90A_DATA);
+    CHECK_EQ_I(v90a_retrain(&l->va), 0);
+    run_to(l, l->k + MS(1000), V90A_P2);
+    CHECK_EQ_I(l->va.state, V90A_P2);
+    CHECK(l->va.t < 100);                       /* the clock began with Phase 2 */
+    /* its clock 1 sample short of the limit; two ticks of our own (the
+     * digital modem is no party to this) */
+    l->va.t = (int32_t)MS(V90A_RT_P2_MS) - 1;
+    (void)v90a_tick(&l->va, 0);
+    CHECK_EQ_I(l->va.state, V90A_P2);
+    (void)v90a_tick(&l->va, 0);
+    printf("  ours %d (error %d)\n", l->va.state, l->va.error);
+    CHECK_EQ_I(l->va.state, V90A_ENDED);
+    CHECK_EQ_I(l->va.error, V90A_ERR_RETRAINS);
+
+    /* A live server's habit (reported by an independent softmodem's calls):
+     * TRN1d for about 4 s, Jd at the last moment 9.3.1.4 allows, and S
+     * wanted within 9.3.1.5's 5100 ms of the start of TRN1d. Jd is within
+     * 9.3.2.7's 4500 ms of the end of Ja, S follows it at once. Jd in 4100 ms
+     * (past 9.3.1.4) is still taken; in 4600 ms, past 9.3.2.7's limit, it is
+     * a retrain's (V90A_ERR_JD). */
+    printf("a server's long TRN1d, Jd at its end\n");
+    {
+        static const int TJ[] = { 4000, 4100, 4600 };
+        int i;
+        for (i = 0; i < 3; i++) {
+            int32_t jd_at = -1;
+            c = base(); c.seed = (uint32_t)(30 + i); c.trn1d_ms = TJ[i];
+            vl_init(l, &c);
+            while (l->k < MS(30000) && l->va.state != V90A_DATA && l->va.state != V90A_ENDED) {
+                vl_tick(l);
+                if (jd_at < 0 && l->p34.state == P34_JD) jd_at = (int32_t)(l->p34.now - l->p34.t_trn1d);
+            }
+            printf("  TRN1d %d ms: Jd %d ms into it; ours %d (error %d), Jd read %d ms after the end of Ja, Jd' %d ms after that; digital %d\n",
+                   TJ[i], jd_at < 0 ? -1 : (int)ms(jd_at), l->va.state, l->va.error,
+                   l->va.t_jd != CLK_NONE ? (int)ms(clk_diff(l->va.t_jd, l->va.t_ja_end)) : -1,
+                   l->va.t_jdp != CLK_NONE ? (int)ms(clk_diff(l->va.t_jdp, l->va.t_jd)) : -1, l->p34.state);
+            if (TJ[i] <= 4100) {
+                CHECK(ms(jd_at) >= TJ[i] && ms(jd_at) < TJ[i] + 50);
+                CHECK_EQ_I(l->va.state, V90A_DATA);
+                CHECK(l->p34.state != P34_FAILED);
+                CHECK(clk_diff(l->va.t_jdp, l->va.t_jd) < MS(200));
+            } else {
+                CHECK_EQ_I(l->va.state, V90A_ENDED);
+                CHECK_EQ_I(l->va.error, V90A_ERR_JD);
+            }
+        }
     }
 
     printf("time-outs: the digital modem silent from\n");
     {
         static const struct { const char *name; int at; int err; double lo, hi; } T[] = {
             /* at: 0 the start of its Phase 3, 1 Sd-bar heard, 2 Jd', 3 Ri-bar, 4 data */
-            { "the start of Phase 3 (no Sd): 1500 ms from Ja", 0, V90A_ERR_SD, 1400, 1700 },
+            { "the start of Phase 3 (no Sd): 2000 ms from Ja", 0, V90A_ERR_SD, 1950, 2200 },
             { "TRN1d learnt (no Jd): 4500 ms from Ja's end", 1, V90A_ERR_JD, 4300, 5500 },
             { "Jd' (no DIL)", 2, V90A_ERR_DIL, 0, 6000 },
             { "Ri-bar (no MP): 15 s from INFO1a", 3, V90A_ERR_PHASE4, 0, 16000 },
@@ -146,7 +244,8 @@ int main(void)
         };
         int i;
         for (i = 0; i < (int)(sizeof T / sizeof T[0]); i++) {
-            int32_t from = -1, ref = -1;
+            int32_t from = -1;
+            uint32_t ref;
             c = base(); c.seed = (uint32_t)(10 + i);
             vl_init(l, &c);
             while (l->k < MS(40000) && l->va.state != V90A_ENDED) {
@@ -154,19 +253,19 @@ int main(void)
                 if (from < 0) {
                     int go = T[i].at == 0 ? l->va.state == V90A_P3
                            : T[i].at == 1 ? l->va.rx.state == V90ARX_DD
-                           : T[i].at == 2 ? l->va.t_jdp >= 0
-                           : T[i].at == 3 ? l->va.t_ribar >= 0
+                           : T[i].at == 2 ? l->va.t_jdp != CLK_NONE
+                           : T[i].at == 3 ? l->va.t_ribar != CLK_NONE
                            : l->va.state == V90A_DATA;
                     if (go) { from = (int32_t)l->k; l->dmute = 1; }
                 }
             }
             /* the reference each limit runs from */
-            ref = T[i].at == 0 ? l->va.t_ja : T[i].at == 1 ? l->va.t_ja_end : T[i].at == 3 ? l->va.t_info1a : from;
+            ref = T[i].at == 0 ? l->va.t_ja : T[i].at == 1 ? l->va.t_ja_end : T[i].at == 3 ? l->va.t_info1a : (uint32_t)from;
             printf("  %-48s ended %d, error %d, %d ms after %s\n", T[i].name, l->va.state, l->va.error,
-                   (int)ms(l->va.now - ref), T[i].at == 0 ? "Ja" : T[i].at == 1 ? "the end of Ja" : T[i].at == 3 ? "INFO1a" : "the silence");
+                   (int)ms(clk_diff(l->va.now, ref)), T[i].at == 0 ? "Ja" : T[i].at == 1 ? "the end of Ja" : T[i].at == 3 ? "INFO1a" : "the silence");
             CHECK_EQ_I(l->va.state, V90A_ENDED);
             CHECK_EQ_I(l->va.error, T[i].err);
-            CHECK(ms(l->va.now - ref) >= T[i].lo && ms(l->va.now - ref) <= T[i].hi);
+            CHECK(ms(clk_diff(l->va.now, ref)) >= T[i].lo && ms(clk_diff(l->va.now, ref)) <= T[i].hi);
         }
     }
     T_REPORT("v90a");

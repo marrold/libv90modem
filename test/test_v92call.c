@@ -35,15 +35,32 @@ typedef struct {
     int a_reneg_ms, d_reneg_ms, a_clear_ms, d_clear_ms, tone_a_ms, d_retrain_ms;
     int uinfo, ltot, lmax;      /* from Phase 2, 0 = defaults */
     int mute_ms;                /* the caller's signal stops for good */
+    int deaf_ms;                /* from then on the caller no longer hears us (it gets the idle code) */
+    int dead_ms;                /* from then on the line brings digital silence (no echo either) */
+    int ru_ms, ru_amp;          /* from then on: the caller silent, a clean Ru of this amplitude in its place */
     int echo_search;            /* the echo delay is not given to the digital modem */
     int pace;                   /* samples per step of the CPd design (0: one) */
     int suvd_wait, cpd_wait;    /* the caller's patience in Phase 4, symbols (0: any) */
     int first_cpd_plain;        /* the caller answers a first CPd with the acknowledge bit by silence */
     int b1u_lead, z2_dead, conv_start, ja_no_ones, ntrn1, jd_wait;      /* the caller's ways, see ../sim/v92a.h */
+    int drop_cpd;               /* the caller misses its first so many CPds */
+    int no_suvu;                /* in a rate renegotiation the caller sends no SUVu */
+    int no_ack;                 /* ... it never sets the acknowledge bit */
+    int burst_ms[2]; double burst;          /* the line's noise rises to burst at burst_ms, and is
+                                           back to noise when a rate drop of ours begins */
 } scen_t;
 
 typedef struct {
     int state, error, d_data_at, a_tx, a_rx, up_rate, down_rate, renegs, d_end_at, req_rc;
+    int reneg_at;               /* the first sample in V92D_RENEG (-1: never) */
+    int retrain_at;             /* the first sample in V92D_RETRAIN (-1: never) */
+    int cpd_copies, cpd_run;    /* CPds we sent; the most of them in a row with no SUVd between */
+    int reneg_cpds;             /* ... of them from the first renegotiation on */
+    int cpd_on_suvu;            /* the first of those began after the caller's SUVu was in (-1: none) */
+    char seq[40];               /* what we sent from the first renegotiation on, a letter a signal
+                                   (D data, R Rd, r Rd-bar, T TRN2d, S SUVd, s SUVd', C CPd, c CPd', E Ed) */
+    int drops;                  /* rate drops of ours (bad frames in data mode) */
+    int drop_rate[4], drop_ceil[4];     /* each: the upstream rate then, the design's ceiling */
     long up_bits, up_bad, down_bits, down_bad;
     long up_bits2, up_bad2;     /* upstream after the last (re)start */
     int peak;                   /* where the channel peak ended up, 1/256 sample */
@@ -60,9 +77,12 @@ static void run(const scen_t *s, out_t *o)
     static uint8_t dl_o[MAXD];
     static io_t dio, aio;
     v92d_cfg dc; v92a_cfg ac; v92chan_cfg cc;
-    uint8_t oct = v90_pcm_octet(s->alaw, 0, 1);
+    uint8_t oct = v90_pcm_octet(s->alaw, 0, 1), idle = oct;
     int16_t rx = 0;
-    int i, k, a_starts = 0, d_rx = 0;
+    int i, k, a_starts = 0, d_rx = 0, cpd_run = 0, cpd_more = 0;
+    v90tx_sig_t psig = V90TX_SILENCE, qsig = V90TX_NONE;
+    int nseq = 0;
+    uint32_t punits = 0;
     long sink0_n = 0, sink0_bad = 0;
 
     memset(&dc, 0, sizeof dc); memset(&ac, 0, sizeof ac); memset(&cc, 0, sizeof cc);
@@ -90,22 +110,58 @@ static void run(const scen_t *s, out_t *o)
     ac.b1u_lead = s->b1u_lead; ac.conv_start = s->conv_start; ac.ja_no_ones = s->ja_no_ones;
     if (s->ntrn1) ac.ntrn1 = s->ntrn1;
     if (s->jd_wait) ac.jd_wait = s->jd_wait;
-    ac.z2_dead = s->z2_dead;
+    ac.z2_dead = s->z2_dead; ac.drop_cpd = s->drop_cpd; ac.reneg_no_suvu = s->no_suvu; ac.reneg_no_ack = s->no_ack;
     ac.getbit = src_bit; ac.putbit = sink_bit; ac.user = &aio;
     v92a_init(&a, &ac);
     a.phase = s->phase0;
 
-    memset(o, 0, sizeof *o); o->d_data_at = -1;
+    memset(o, 0, sizeof *o); o->d_data_at = -1; o->reneg_at = -1; o->retrain_at = -1; o->cpd_on_suvu = -1;
     for (i = 0; i < s->seconds * 8000; i++) {
         double amp, frac;
         int valid, ms = i / 8, ev = (i % 8) == 0;
         if (s->tone_a_ms && ms >= s->tone_a_ms && ms < s->tone_a_ms + 120)      /* the caller's Tone A */
             rx = (int16_t)(3000.0 * sin(2 * 3.14159265358979 * 2400.0 * i / 8000.0));
         oct = v92d_tick(&d, rx);
+        {
+            /* what we send: a CPd begins (a new signal, or another copy of
+             * the one running: its unit count steps at the last sample of
+             * a copy, and the signal is still a CPd on the next); an SUVd
+             * between ends a run */
+            v90tx_sig_t sg = v90tx_signal(&d.tx);
+            uint32_t u = v90tx_units(&d.tx);
+            int is_cpd = sg == V90TX_CPD || sg == V90TX_CPD_ACK;
+            if (is_cpd && (sg != psig || (cpd_more && sg == psig))) {
+                o->cpd_copies++;
+                if (o->reneg_at >= 0 && o->reneg_cpds++ == 0) o->cpd_on_suvu = d.got_suvu;
+                if (++cpd_run > o->cpd_run) o->cpd_run = cpd_run;
+            } else if ((sg == V90TX_SUVD || sg == V90TX_SUVD_ACK) && sg != psig) {
+                cpd_run = 0;
+            }
+            cpd_more = is_cpd && sg == psig && u != punits;
+            if (o->reneg_at >= 0 && sg != qsig && nseq + 1 < (int)sizeof o->seq) {
+                static const char letter[V90TX_NSIG] = {
+                    [V90TX_DATA] = 'D', [V90TX_RD] = 'R', [V90TX_RD_BAR] = 'r', [V90TX_TRN2D] = 'T',
+                    [V90TX_SUVD] = 'S', [V90TX_SUVD_ACK] = 's', [V90TX_CPD] = 'C', [V90TX_CPD_ACK] = 'c',
+                    [V90TX_ED] = 'E', [V90TX_SILENCE] = '0' };
+                o->seq[nseq++] = sg >= 0 && letter[sg] ? letter[sg] : '?';
+                qsig = sg;
+            }
+            psig = sg; punits = u;
+        }
         dl_o[i % MAXD] = oct;
-        valid = v92a_tick(&a, dl_o[(i - s->d_down + MAXD) % MAXD], &amp, &frac);
+        valid = v92a_tick(&a, s->deaf_ms && ms >= s->deaf_ms ? idle : dl_o[(i - s->d_down + MAXD) % MAXD], &amp, &frac);
         if (s->mute_ms && ms >= s->mute_ms) valid = 0;
+        if (s->ru_ms && ms >= s->ru_ms) valid = 0;
         rx = v92chan_tick(&ch, oct, valid, amp, frac);
+        if (s->ru_ms && ms >= s->ru_ms) rx = (int16_t)(rx + ((i / 3) % 2 ? -s->ru_amp : s->ru_amp));
+        if (s->dead_ms && ms >= s->dead_ms) rx = 0;
+        for (k = 0; k < 2; k++) if (ev && s->burst_ms[k] && ms == s->burst_ms[k]) ch.cfg.noise = s->burst;
+        if (d.rate_drops > o->drops && o->drops < 4) {
+            o->drop_rate[o->drops] = d.up_rate; o->drop_ceil[o->drops] = -1; o->drops++;
+            ch.cfg.noise = s->noise;
+        }
+        if (o->drops && d.in_reneg && d.dsn_state == 1 && o->drop_ceil[o->drops - 1] < 0) o->drop_ceil[o->drops - 1] = d.dsn.cfg.max_rate;
+        if (o->reneg_at < 0 && d.state == V92D_RENEG) o->reneg_at = i;
         if (o->d_data_at < 0 && d.state == V92D_DATA) { o->d_data_at = i; o->peak = v92_trn_peak(&d.trn); }
         if (ev && s->a_reneg_ms && ms == s->a_reneg_ms) o->req_rc = v92a_renegotiate(&a, 0, 0);
         if (ev && s->a_clear_ms && ms == s->a_clear_ms) o->req_rc = v92a_renegotiate(&a, 0, 1);
@@ -116,6 +172,7 @@ static void run(const scen_t *s, out_t *o)
         if (a.data_starts != a_starts) { a_starts = a.data_starts; aio.src.s = 23; }
         if (d.rx_ready && !d_rx) { dio.sink.s = 23; sink0_n = dio.sink.n; sink0_bad = dio.sink.bad; }
         d_rx = d.rx_ready;
+        if (d.state == V92D_RETRAIN && o->retrain_at < 0) o->retrain_at = i;
         if (d.state == V92D_RETRAIN || d.state == V92D_FAILED) { o->d_end_at = i; break; }
     }
     o->ticks = i;
@@ -167,6 +224,21 @@ static void check_good(const scen_t *s, const out_t *o)
     CHECK(o->down_bits > 3 * 8000 * 38 / 6); CHECK_EQ_I(o->down_bad, 0);
     CHECK(o->up_bits > 3 * 24000); CHECK_EQ_I(o->up_bad, 0);
     CHECK_EQ_I(d.dec.bad_frames, 0);
+}
+
+/* our cleardown's signals as 9.8.1.1.2 and 9.6.1.1.2 give them: data, Rd,
+ * Rd-bar, TRN2d, SUVd; with cpd, then one CPd (no acknowledge bit) and
+ * after it SUVd only, the last of them SUVd'; without, nothing after SUVd */
+static int clear_seq_ok(const char *q, int cpd)
+{
+    const char *c;
+    size_t n = strlen(q);
+    if (strncmp(q, "DRrTS", 5) != 0) return 0;
+    if (!cpd) return n == 5;
+    c = strchr(q, 'C');
+    if (!c || strchr(q, 'c') || strchr(c + 1, 'C')) return 0;
+    if (c[1] == 0 || strspn(c + 1, "Ss") != strlen(c + 1)) return 0;
+    return q[n - 1] == 's';
 }
 
 static void base(scen_t *s, const char *name, int alaw, int shape, double noise, int dil_n)
@@ -320,6 +392,15 @@ int main(int argc, char **argv)
         run(&s, &o); report(&s, &o); check_good(&s, &o);
         CHECK_EQ_I(o.req_rc, 0); CHECK_EQ_I(o.renegs, 1); CHECK_EQ_I(a.renegs, 1);
         CHECK(o.up_bits2 > 2 * 24000); CHECK_EQ_I(o.up_bad2, 0);
+        /* the same on a noisy line: the data frames the decoder held before
+         * Ru are delivered, decided on the inputs it had (the baseline moved
+         * under Ru before it was heard) */
+        base(&s, "15b caller renegotiates, short noisy line", 0, 0, 40, 40);
+        s.echo = 0.05; s.level = 4000; s.phase0 = 0.4;
+        s.a_reneg_ms = 5541; s.seconds = 11;
+        run(&s, &o); report(&s, &o); check_good(&s, &o);
+        CHECK_EQ_I(o.req_rc, 0); CHECK_EQ_I(o.renegs, 1);
+        CHECK_EQ_I(o.up_bad2, 0);
         base(&s, "16 we renegotiate", 1, 1, 3, 40);
         s.d_reneg_ms = 5500; s.seconds = 11;
         run(&s, &o); report(&s, &o); check_good(&s, &o);
@@ -331,11 +412,74 @@ int main(int argc, char **argv)
         run(&s, &o); report(&s, &o);
         CHECK_EQ_I(o.req_rc, 0); CHECK_EQ_I(o.state, V92D_FAILED); CHECK_EQ_I(o.error, V92D_ERR_CLEARDOWN);
         CHECK_EQ_I(o.up_bad, 0); CHECK_EQ_I(o.down_bad, 0);
+        /* 9.11: a rate renegotiation that sends drn = 0. 9.8.1.1.2: Rd,
+         * Rd-bar, TRN2d, then SUVd; on the caller's SUVu a single CPd (the
+         * one in use, drn = 0) and more SUVd (9.6.1.1.2), with the
+         * acknowledge bit once the caller's CPu is in; over where 9.6.1.1.4
+         * would send Ed: our SUVd' out, the caller's acknowledge in */
         base(&s, "18 we clear down", 0, 0, 3, 0);
         s.d_clear_ms = 5500; s.seconds = 9;
         run(&s, &o); report(&s, &o);
+        printf("    sent %s; CPds %d, the first after SUVu %d; over after %d ms\n", o.seq, o.reneg_cpds, o.cpd_on_suvu,
+               (o.d_end_at - 5500 * 8) / 8);
         CHECK_EQ_I(o.req_rc, 0); CHECK_EQ_I(o.state, V92D_FAILED); CHECK_EQ_I(o.error, V92D_ERR_HANGUP);
         CHECK(a.clear_seen); CHECK_EQ_I(o.up_bad, 0); CHECK_EQ_I(o.down_bad, 0);
+        CHECK(o.d_end_at < 5500 * 8 + 4 * 8000);
+        CHECK_EQ_I(o.retrain_at, -1);
+        CHECK(clear_seq_ok(o.seq, 1));
+        CHECK_EQ_I(o.reneg_cpds, 1); CHECK_EQ_I(o.cpd_on_suvu, 1);
+        CHECK(a.suvd_ack);                          /* the caller heard our SUVd' */
+        /* the caller no longer hears us: Rd, TRN2d and SUVd go out all the
+         * same, no SUVu comes, and at our limit that is our cleardown, not
+         * a retrain */
+        base(&s, "18b we clear down, the caller deaf to us", 0, 0, 3, 0);
+        s.d_clear_ms = 5500; s.deaf_ms = 5400; s.seconds = 16;
+        run(&s, &o);
+        printf("  %-34s state %d err %d after %d ms\n", s.name, o.state, o.error, (o.d_end_at - 5500 * 8) / 8);
+        CHECK_EQ_I(o.req_rc, 0); CHECK_EQ_I(o.state, V92D_FAILED); CHECK_EQ_I(o.error, V92D_ERR_HANGUP);
+        CHECK_EQ_I(o.retrain_at, -1);
+        CHECK(o.d_end_at > 5500 * 8 && o.d_end_at < 5500 * 8 + 4 * 8000);
+        CHECK_EQ_I(o.reneg_cpds, 0);
+        /* the caller hears us and answers Rd with Ru, but sends no SUVu:
+         * SUVd until our limit, no CPd, our cleardown all the same */
+        base(&s, "18c we clear down, the caller sends no SUVu", 0, 0, 3, 0);
+        s.d_clear_ms = 5500; s.no_suvu = 1; s.seconds = 16;
+        run(&s, &o);
+        printf("  %-34s state %d err %d after %d ms; sent %s\n", s.name, o.state, o.error, (o.d_end_at - 5500 * 8) / 8, o.seq);
+        CHECK_EQ_I(o.req_rc, 0); CHECK_EQ_I(o.state, V92D_FAILED); CHECK_EQ_I(o.error, V92D_ERR_HANGUP);
+        CHECK_EQ_I(o.retrain_at, -1);
+        CHECK(o.d_end_at > 5500 * 8 && o.d_end_at < 5500 * 8 + 4 * 8000);
+        CHECK(clear_seq_ok(o.seq, 0)); CHECK_EQ_I(o.reneg_cpds, 0);
+        CHECK(a.rd_units >= 60); CHECK(a.suvd_n > 0);
+        /* the caller sends SUVu and CPu but never the acknowledge bit: our
+         * CPd again and again (9.6.1.1.3), SUVd between, until our limit */
+        base(&s, "18d we clear down, the caller never acknowledges", 0, 0, 3, 0);
+        s.d_clear_ms = 5500; s.no_ack = 1; s.seconds = 16;
+        run(&s, &o);
+        printf("  %-34s state %d err %d after %d ms; CPds %d, at most %d in a row\n", s.name, o.state, o.error,
+               (o.d_end_at - 5500 * 8) / 8, o.reneg_cpds, o.cpd_run);
+        CHECK_EQ_I(o.state, V92D_FAILED); CHECK_EQ_I(o.error, V92D_ERR_HANGUP);
+        CHECK_EQ_I(o.retrain_at, -1);
+        CHECK(o.d_end_at > 5500 * 8 + 3000 * 8 && o.d_end_at < 5500 * 8 + 4 * 8000);
+        CHECK(o.reneg_cpds >= 2); CHECK_EQ_I(o.cpd_run, 1); CHECK(a.clear_seen);
+        /* the caller's Tone A (its retrain) during our cleardown: still our
+         * cleardown, at once, no retrain */
+        base(&s, "18e the caller's Tone A in our cleardown", 0, 0, 3, 0);
+        s.d_clear_ms = 5500; s.tone_a_ms = 5600; s.seconds = 9;
+        run(&s, &o);
+        printf("  %-34s state %d err %d after %d ms\n", s.name, o.state, o.error, (o.d_end_at - 5500 * 8) / 8);
+        CHECK_EQ_I(o.state, V92D_FAILED); CHECK_EQ_I(o.error, V92D_ERR_HANGUP);
+        CHECK_EQ_I(o.retrain_at, -1);
+        CHECK(o.d_end_at < 5600 * 8 + 120 * 8);
+        /* both ends clear down at once: the caller's CPu with drn = 0 in
+         * ours ends it as ours */
+        base(&s, "18f both ends clear down at once", 0, 0, 3, 0);
+        s.d_clear_ms = 5500; s.a_clear_ms = 5500; s.seconds = 9;
+        run(&s, &o);
+        printf("  %-34s state %d err %d after %d ms\n", s.name, o.state, o.error, (o.d_end_at - 5500 * 8) / 8);
+        CHECK_EQ_I(o.state, V92D_FAILED); CHECK_EQ_I(o.error, V92D_ERR_HANGUP);
+        CHECK_EQ_I(o.retrain_at, -1);
+        CHECK(o.d_end_at < 5500 * 8 + 4 * 8000);
         base(&s, "19 the caller's Tone A", 0, 0, 3, 0);
         s.tone_a_ms = 5500;
         run(&s, &o); report(&s, &o);
@@ -345,6 +489,26 @@ int main(int argc, char **argv)
         s.d_retrain_ms = 5500;
         run(&s, &o); report(&s, &o);
         CHECK_EQ_I(o.req_rc, 0); CHECK_EQ_I(o.state, V92D_RETRAIN); CHECK_EQ_I(d.retrain_ours, 1);
+    }
+    /* ---- the line gets worse in data mode: our own rate renegotiations ---- */
+    if (WANT(11)) {
+        /* the noise rises twice (each time back to what it was once the
+         * drop has begun: the design does not see the noise of data mode);
+         * each time the decoder's bad frames bring a renegotiation of ours
+         * whose design may go no higher than one step (4000 bit/s) below
+         * the rate then in use */
+        int n;
+        base(&s, "36 the noise rises in data mode, twice", 0, 0, 3, 0);
+        s.burst_ms[0] = 4500; s.burst_ms[1] = 15000; s.burst = 90;
+        s.a_reneg_ms = 22000; s.seconds = 26;      /* then the caller renegotiates */
+        run(&s, &o); report(&s, &o);
+        for (n = 0; n < o.drops; n++) printf("    drop %d: at %d bit/s, ceiling %d\n", n + 1, o.drop_rate[n], o.drop_ceil[n]);
+        printf("    the caller's renegotiation after them: ceiling %d, %d bit/s\n", d.dsn.cfg.max_rate, o.up_rate);
+        CHECK_EQ_I(o.drops, 2);
+        for (n = 0; n < o.drops && n < 4; n++) CHECK_EQ_I(o.drop_ceil[n], o.drop_rate[n] - 4000);
+        /* the drops do not hold the caller's later renegotiation down */
+        CHECK_EQ_I(o.req_rc, 0); CHECK_EQ_I(o.renegs, 3); CHECK_EQ_I(o.state, V92D_DATA);
+        CHECK_EQ_I(d.dsn.cfg.max_rate, 0);
     }
     /* ---- the echo delay measured during TRN1d; the caller's signal lost ---- */
     if (WANT(7)) {
@@ -365,6 +529,32 @@ int main(int argc, char **argv)
         /* next to nothing was delivered from the silence: the tail in the
          * decoder and at most the 10 ms the carrier watch needs to see it */
         CHECK(o.up_bad < 400);
+        /* the line goes dead (the caller hung up; the network sends
+         * digital silence): what the canceller gives out is then its own
+         * estimate of our echo, and that is no carrier, nor (when what we
+         * send is Rd) the caller's Ru */
+        base(&s, "24b the line goes dead", 0, 0, 3, 0);
+        s.dead_ms = 5500;
+        run(&s, &o); report(&s, &o);
+        CHECK_EQ_I(o.state, V92D_FAILED); CHECK_EQ_I(o.error, V92D_ERR_CARRIER);
+        CHECK(o.d_end_at > 5500 * 8 + 3000 && o.d_end_at < 5500 * 8 + 6000);
+        CHECK_EQ_I(o.reneg_at, -1); CHECK_EQ_I(o.renegs, 0);
+        CHECK(o.up_bad < 400);
+        base(&s, "24c the line goes dead as we renegotiate", 0, 0, 3, 0);
+        s.dead_ms = 5500; s.d_reneg_ms = 5500;
+        run(&s, &o); report(&s, &o);
+        CHECK_EQ_I(o.req_rc, 0);
+        CHECK_EQ_I(o.state, V92D_FAILED); CHECK_EQ_I(o.error, V92D_ERR_CARRIER);
+        CHECK(o.d_end_at > 5500 * 8 + 3000 && o.d_end_at < 5500 * 8 + 6000);
+        CHECK_EQ_I(d.revs, 0); CHECK_EQ_I(o.renegs, 0);
+        CHECK(o.up_bad < 400);
+        /* and the caller's Ru as weak as the detector takes it (20: 18 is
+         * not taken), in place of its data with our echo under it */
+        base(&s, "24d the caller's weakest Ru", 0, 0, 3, 0);
+        s.ru_ms = 5500; s.ru_amp = 20; s.seconds = 7;
+        run(&s, &o);
+        printf("  %-34s Ru of amplitude %d taken after %d samples\n", s.name, s.ru_amp, o.reneg_at - 5500 * 8);
+        CHECK(o.reneg_at > 5500 * 8 && o.reneg_at < 5500 * 8 + 1200);
     }
     /* ---- what the first real V.92 caller showed (live/v92a.raw, readings 53 on) ---- */
     if (WANT(8)) {
@@ -396,6 +586,27 @@ int main(int argc, char **argv)
         s.level = 2700; s.echo = 0.02; s.echo_tail = 1.2; s.echo_delay = 270; s.echo_search = 1;
         s.pace = 8; s.suvd_wait = 30400; s.cpd_wait = 28000; s.first_cpd_plain = 1; s.seconds = 14;
         run(&s, &o); report(&s, &o); check_good(&s, &o);
+        CHECK_EQ_I(o.cpd_copies, 1); CHECK_EQ_I(o.cpd_run, 1);
+
+        /* a caller that misses its first CPds (9.6.1.1.3): CPd again, each
+         * copy with SUVd before it, 9.6.1.1.2's single CPd followed by
+         * SUVd once per copy (Figures 12 to 14 draw no repeat); a real
+         * Agere engine cleared down on CPds sent back to back */
+        {
+            static const int drop[] = { 2, 4 };
+            static char name[48];
+            unsigned n;
+            for (n = 0; n < sizeof drop / sizeof drop[0]; n++) {
+                snprintf(name, sizeof name, "25e the caller misses %d CPds", drop[n]);
+                base(&s, name, (int)n, 0, 3, n ? 40 : 0);
+                s.drop_cpd = drop[n]; s.seconds = 11;
+                run(&s, &o); report(&s, &o); check_good(&s, &o);
+                printf("    CPds sent %d, at most %d in a row\n", o.cpd_copies, o.cpd_run);
+                CHECK_EQ_I(a.cpd_dropped, drop[n]);
+                CHECK(o.cpd_copies >= drop[n] + 1);
+                CHECK_EQ_I(o.cpd_run, 1);
+            }
+        }
 
         /* and what it showed in data mode: a slow wander under the symbols
          * (our own low frequencies, which the tail estimate does not take
@@ -456,6 +667,82 @@ int main(int argc, char **argv)
         CHECK_EQ_I(p2.d.state, P2D_DONE); CHECK_EQ_I(p2.a.state, P2A_DONE);
         CHECK_EQ_I(p2.d.mode, P2D_MODE_V90);
         v90_call(&p2);
+    }
+    /* ---- the caller's data mode off the level the design asked for ---- */
+    if (WANT(9)) {
+        /* Implementations differ on the power reference of 8.8.3 (V.92
+         * servers have been seen to build for an upstream some 9 dB louder
+         * than another reading): the caller's data signal arrives louder or
+         * weaker than the design asked for. The digital modem measures the
+         * gain on B1u and decodes on. */
+        static const struct { double g; int alaw, shape; } c[] = {
+            { 1.4, 0, 0 }, { 0.7, 1, 0 }, { 0.5, 0, 1 }, { 0.6, 1, 0 }, { 0.85, 0, 0 }, { 0.9, 1, 1 },
+            { 1.1, 0, 0 }, { 1.15, 1, 0 }, { 1.25, 0, 1 }, { 1.7, 1, 0 }, { 2.0, 0, 0 }, { 2.4, 1, 0 },
+            { 2.8, 0, 0 } };
+        static char name[48];
+        unsigned n;
+        for (n = 0; n < sizeof c / sizeof c[0]; n++) {
+            snprintf(name, sizeof name, "32 data mode at %.2f of the design", c[n].g);
+            base(&s, name, c[n].alaw, c[n].shape, 3, n & 1 ? 40 : 0);
+            s.gain_err = c[n].g;
+            run(&s, &o); report(&s, &o); check_good(&s, &o);
+        }
+        /* with a data frame of Ki = 0 before B1u (reading 57): looked for
+         * again when the decoder starts over */
+        base(&s, "32b 0.6 of the design, Ki = 0 before B1u", 0, 1, 3, 40);
+        s.gain_err = 0.6; s.b1u_lead = 1; s.conv_start = 11;
+        run(&s, &o); report(&s, &o); check_good(&s, &o);
+        CHECK_EQ_I(d.b1_leads, 1);
+        base(&s, "32c 2.8 of the design, Ki = 0 before B1u", 1, 0, 3, 0);
+        s.gain_err = 2.8; s.b1u_lead = 1;
+        run(&s, &o); report(&s, &o); check_good(&s, &o);
+        CHECK_EQ_I(d.b1_leads, 1);
+        /* and on a noisy line, through a rate renegotiation (as 15b): the
+         * gain measured again on the new B1u */
+        base(&s, "33 1.4 of the design, renegotiates, noisy", 0, 0, 40, 40);
+        s.phase0 = 0.4; s.gain_err = 1.4;
+        s.a_reneg_ms = 5541; s.seconds = 11;
+        run(&s, &o); report(&s, &o); check_good(&s, &o);
+        CHECK_EQ_I(o.req_rc, 0); CHECK_EQ_I(o.renegs, 1);
+        CHECK(o.up_bits2 > 2 * 24000); CHECK_EQ_I(o.up_bad2, 0);
+        /* The limit: louder still, on a long line, the largest points the
+         * precoder asks for pass the codec's full scale. B1u is right and
+         * data flows; the clipped symbols are decided wrong. */
+        base(&s, "34 2.4 of the design on a long line", 1, 1, 3, 40);
+        s.gain_err = 2.4;
+        run(&s, &o); report(&s, &o);
+        CHECK_EQ_I(o.state, V92D_DATA); CHECK_EQ_I(d.b1_bad, 0);
+        CHECK(o.up_bits > 3 * 24000); CHECK(o.up_bad * 500 < o.up_bits);
+    }
+    /* ---- the gain measurement on its own: never a scale the power does
+     * not allow ---- */
+    if (WANT(10)) {
+        /* Points at the odd multiples of 64; the received samples at the
+         * odd multiples of 32. At scale 1 none is on a point; at scale 2
+         * (G.711's octaves) every one is. With the power at what the design
+         * expects, the scale stays 1; with it 6 dB under, it is 2. (The
+         * symbols are small: these points do not widen as G.711 levels do,
+         * so larger ones would want a finer search.) */
+        static v92_map_t m;
+        static v92_trn_t t;
+        uint64_t ms = 0;
+        int32_t k0 = 1000, c1, c2;
+        int n;
+        memset(&m, 0, sizeof m); memset(&t, 0, sizeof t);
+        m.lc[0] = 40;
+        for (n = 0; n < 40; n++) m.pt[0][n] = (uint16_t)(64 * (2 * n + 1));
+        for (n = 0; n < V92D_UP_EST; n++) {
+            int16_t v = (int16_t)(32 * (2 * (n * 3 % 8) + 1) * (n % 3 ? 1 : -1));
+            t.rb[(k0 + n) & 255] = v;
+            ms += (uint64_t)((int32_t)v * v);
+        }
+        ms /= V92D_UP_EST;
+        c1 = v92d_up_scale(&m, &t, k0, (uint32_t)ms);
+        c2 = v92d_up_scale(&m, &t, k0, (uint32_t)(4 * ms));
+        printf("  35 symbols on the points at scale 2 only: scale %.3f with the power as designed, %.3f with it 6 dB under\n",
+               c1 / 16384.0, c2 / 16384.0);
+        CHECK_EQ_I(c1, 16384);
+        CHECK(c2 > 32768 - 32768 / 20 && c2 < 32768 + 32768 / 20);
     }
     T_REPORT("v92call");
 }

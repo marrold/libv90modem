@@ -52,6 +52,7 @@
 #ifndef V90D_MODEM_V90A_H
 #define V90D_MODEM_V90A_H
 #include <stdint.h>
+#include "seqhunt.h"
 #include "p2call.h"
 #include "v90arx.h"
 #include "v90adec.h"
@@ -106,11 +107,13 @@ typedef enum {
 } v90a_state;
 
 #define V90A_MAX_RETRAINS 3         /* retrains without a minute of data mode between them */
+#define V90A_RT_P2_MS   30000       /* a retrain's Phase 2 once the call has carried data: past
+                                       this, V90A_ERR_RETRAINS */
 
 enum {
     V90A_OK = 0,
     V90A_ERR_PHASE2,                /* p2.error says how */
-    V90A_ERR_SD,                    /* no Sd-bar within 1500 ms of Ja (9.3.2.4) */
+    V90A_ERR_SD,                    /* no Sd-bar within 2000 ms of Ja (9.3.2.4 says 1500: v90a_priv.h) */
     V90A_ERR_TRAIN,                 /* the receiver found no channel on TRN1d */
     V90A_ERR_JD,                    /* no Jd within 4500 ms of the end of Ja (9.3.2.7) */
     V90A_ERR_JDP,                   /* no Jd' after our S */
@@ -131,17 +134,17 @@ typedef struct {
     v90a_cfg   cfg;
     v90a_state state;
     int        error;
-    int32_t    now, t;              /* samples since the start; in this state */
-    int32_t    t_info1a;            /* when Phase 2 ended */
+    uint32_t   now, t;              /* samples since the start; in this state (modem/clock.h) */
+    uint32_t   t_info1a;            /* when Phase 2 ended */
     p2call_t   p2;
     /* ---- receive ---- */
     v90arx_t   rx; int rx_on;
     int16_t    ecdl[V90A_ECDL]; int ecpos;
-    int        ds;                  /* downstream sub-state (v90a.c) */
+    int        ds;                  /* downstream sub-state (v90a_priv.h) */
     int        alaw;                /* the downstream's law (INFO0d bit 39) */
     /* Jd, Jd' */
     v90_scr_t  jscr; uint8_t jprev;
-    uint8_t    jb[V90_JD_BITS + 16]; int jbn, jones;
+    uint8_t    jb[V90_JD_BITS + 16]; int jbn; seqhunt_t jsh;
     v90_jd_t   jd; int jd_ok;
     int32_t    jdp_m; int jdp_zeros;
     /* DIL */
@@ -155,7 +158,7 @@ typedef struct {
     int32_t    cb_seg;              /* ... being handed to the receiver as known */
     v90dil_acc_t acc; int acc_on;
     v90dil_res_t res;
-    /* the DIL's analysis, CPt's and CP's designs, a step a tick (v90a.c) */
+    /* the DIL's analysis, CPt's and CP's designs, a step a tick (v90a_down.c) */
     int        job, job_new;
     union { v90dil_an_t an; v90dil_cpjob_t cp; } jw;
     uint32_t   sig_jd[6];           /* noise per interval at the end of Jd (Q8) */
@@ -168,7 +171,7 @@ typedef struct {
     v90_map_t  tmap, dmap;
     v90adec_t  dec; v90_scr_t dscr;
     uint8_t    fu[6], fp[6];
-    uint8_t    mb[V90_MP_MAX_BITS + 8]; int mbn, mones;
+    uint8_t    mb[V90_MP_MAX_BITS + 8]; int mbn; seqhunt_t msh;
     v90_mp_t   mp; int got_mp, got_mpa, after_mpa, got_ed;
     int        b1d_frames, b1d_bad, trn2d_frames, trn2d_bad, rd_frames, rd_pol, rd_units;
     int        rx_ready;
@@ -189,7 +192,7 @@ typedef struct {
     int        up_rate, down_rate;
     uint16_t   up_rates;            /* CP bits 36:48 */
     /* events as this end saw them (samples since the start; -1 = not yet), for tests */
-    int32_t    t_ja, t_ja_end, t_sd, t_jd, t_jdp, t_dil_end, t_ri, t_ribar, t_mp, t_ed, t_data;
+    uint32_t   t_ja, t_ja_end, t_sd, t_jd, t_jdp, t_dil_end, t_ri, t_ribar, t_mp, t_ed, t_data;
     int        dil_passes;          /* the least symbols measured per interval and Ucode */
     int        erle_db10;           /* the canceller at the end of MD */
     int64_t    erle_rx, erle_res;
@@ -210,12 +213,23 @@ typedef struct {
     uint32_t   up92_rates;          /* Ja: upstream rates, bit r = (r + 18) * 8000 / 6 */
     v92aseq_t  aseq;                /* SUVd, CPd, Ed */
     v92_cpd_t  cpd;                 /* the CPd in use */
-    int        got_suvd, got_ack, got_cpd;
-    int        cpu_sent, ack_sent, seq_ack, cpus_left;
+    int        got_suvd, got_ack, got_cpd;     /* got_cpd 2: one with drn = 0 (the digital
+                                                   modem's cleardown, 9.11) */
+    int        cpu_sent, ack_sent, seq_ack, cpus_left;  /* cpus_left: our cleardown, CPus still to
+                                                   send; the digital modem's, symbols of
+                                                   acknowledging SUVu / CPu still to send */
     int32_t    since_cpu;
     v92_enc_t  enc;
+    /* enc's map and filter, which it reads at every symbol: cpd's as
+       start_b1u found them (both checked), the filter less the zeros at the
+       ends of its sections (v92_filt_trim). Written there only, just before
+       v92_enc_init: a CPd merged into cpd later (the downstream decodes CPds
+       until Ed, after the upstream has started) does not reach the running
+       encoder */
+    v92_map_t  encm;
+    v92_filt_t encf;
     int32_t    b1_bits;
-    int32_t    t_su, t_jp, t_cpt, t_suvd;
+    uint32_t   t_su, t_jp, t_cpt, t_suvd;
     /* ---- retrains, our renegotiation, the receiver's watch on itself ---- */
     tonedet_t  tone_b;              /* the digital modem's Tone B: its retrain */
     info0_t    info0d;              /* the first Phase 2's INFO0d (a retrain has none) */

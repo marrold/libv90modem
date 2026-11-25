@@ -91,9 +91,8 @@ static void bench(unsigned S, unsigned R, int trellis, const int16_t h[3][2], do
            S, R, 16 << trellis, note, t_tx, t_rx, t_tent);
     /* the decoder did decode: all but the B1 frame and the decoding delay */
     CHECK(nsunk >= (NSYM / 8 - p.map.P - V34_VIT_DEPTH / 4 - 2) * (p.map.b - 1u));
-#ifndef TEST_SHORT
-    CHECK(t_rx < 5000 || TEST_EMULATED);    /* wall time: an emulator's own is no measure */
-#endif
+    /* the decoder's wall time (t_rx, printed above) is reported, not checked:
+     * a loaded machine or an emulator is no measure of it */
 }
 
 static const int16_t H[3][2] = { { -9830, 3277 }, { 4096, -1638 }, { -819, 410 } };

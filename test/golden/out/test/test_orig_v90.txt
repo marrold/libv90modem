@@ -1,0 +1,18 @@
+the library's caller (V.8, V.90 analogue) against the library's answerer, 10 s of data per line
+  line                                   data ms   down     up SNR dB   rtd  bits down  fail    bits up  fail  robbed
+  2 km,    0 ppm, -75 dBm0                  9892  52000  28800  55.0    46     519987     0     288000     0  000000
+  0 km, +100 ppm, -75 dBm0                  9896  46666  28800  52.9    47     466620     0     288000     0  000000
+  6 km, -100 ppm, -75 dBm0                  9895  46666  28800  52.9    46     466690     0     288000     0  000000
+  4 km,  +50 ppm, -65 dBm0                  9896  40000  28800  46.2    47     399990     0     288000     0  000000
+  2 km,  +30 ppm, 3 dB pad                  9893  48000  28800  52.1    47     479988     0     288000     0  000000
+    ... Table 1 levels                         0      0      0   0.0     0          0     0          0     0  000000
+  2 km,  -30 ppm, 6 dB pad                  9895  44000  28800  50.2    46     440022     0     288000     0  000000
+    ... Table 1 levels                      9895  28000  28800  37.3    45     280014     0     288000     0  000000
+  2 km,  +30 ppm, robbed bit                9893  49333  28800  53.8    47     493321     0     288000     0  000001
+    ... Table 1 levels                      9896  29333  28800   0.0    47     201454  3790     201816  1528  100000
+  2 km,  +30 ppm, 6 dB pad, robbed bit      9896  45333  28800  50.2    47     453322     0     288000     0  001000
+  2 km,  -50 ppm, A-law                     9895  46666  28800  53.6    46     466690     0     288000     0  000000
+ending a call
+  ours: caller ended 4 after 1224 ms (end 7), answerer phase 3, cleared 1
+  the answerer's: caller ended after 99 ms, end 6
+orig_v90: 104 checks, 0 failures

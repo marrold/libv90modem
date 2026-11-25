@@ -1,8 +1,5 @@
-arm_test_p34
 arm_test_orig_v34
 arm_test_orig_v90
-arm_test_orig_v92
-arm_test_orig_bell
 arm_test_orig_v32
 arm_test_v92a
 arm_test_v34call

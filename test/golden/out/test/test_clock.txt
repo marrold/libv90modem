@@ -1,0 +1,10 @@
+  V.90: 48000 bit/s down, 28800 up; after the clocks' wrap 144000 / 86400 bits, 0 / 0 wrong
+  V.90: the answerer's symbol count 1600
+  V.90 renegotiated: 40000 bit/s down, 28800 up; 79980 / 57600 bits, 0 / 0 wrong; renegotiations 1, retrains 0
+  V.92: 48000 bit/s down, 34666 up; after the clocks' wrap 144000 / 103948 bits, 0 / 0 wrong
+  V.92 renegotiated: 40000 bit/s down, 37333 up; 80010 / 74648 bits, 0 / 0 wrong; renegotiations 1, retrains 0
+  x2: 32000 bit/s down, 24000 up; after the clocks' wrap 96000 / 72000 bits, 0 / 0 wrong
+  K56flex: 56000 bit/s down, 31200 up; after the clocks' wrap 168000 / 93600 bits, 0 / 0 wrong
+  V.34: 28800 bit/s down, 28800 up; after the clocks' wrap 86400 / 86400 bits, 0 / 0 wrong
+  V.22bis: 2400 bit/s; after the clocks' wrap 7200 / 7200 bits, 0 / 0 wrong
+clock: 94 checks, 0 failures

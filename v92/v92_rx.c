@@ -14,7 +14,7 @@ void v92_p6_init(v92_p6_t *d) { memset(d, 0, sizeof *d); }
 
 int v92_p6_tick(v92_p6_t *d, int16_t x, int32_t floor_rms)
 {
-#define X(k) ((int32_t)d->x[(d->pos - (k)) & 63])
+#define X(k) ((int64_t)d->x[(d->pos - (k)) & 63])     /* int64: 2 x(n) x(n-6) at full scale passes int32 */
     int64_t fl = (int64_t)floor_rms * floor_rms * 2;
     int r = 0;
     d->pos = (uint8_t)((d->pos + 1) & 63);

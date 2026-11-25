@@ -144,6 +144,28 @@ int main(void)
     CHECK_EQ_I(jm.call_function, V8_CALLF_DATA);
     CHECK_EQ_I(jm.modes, 0);
     CHECK(!jm.has_pcm);
+
+    /* the calling (analogue) side: V.90 / V.92 needs a digital modem at the
+     * far end, so a JM naming "PCM analogue" only means V.34 */
+    {
+        v8_menu_t jm_v34_only;
+        memset(&jm, 0, sizeof jm);
+        jm.call_function = V8_CALLF_DATA; jm.n_mod_octets = 3;
+        jm.modes = V8_MOD_V34 | V8_MOD_V22;
+        jm_v34_only = jm;
+        jm.has_pcm = 1; jm.pcm = V8_PCM_ANALOG;
+        CHECK_EQ_I(v8_selected_caller(&jm), v8_selected(&jm_v34_only));
+        CHECK_EQ_I(v8_selected_caller(&jm), V8_SEL_V34);
+        jm.pcm = V8_PCM_DIGITAL;
+        CHECK_EQ_I(v8_selected_caller(&jm), v8_selected(&jm));
+        CHECK_EQ_I(v8_selected_caller(&jm), V8_SEL_V90);
+        jm.pcm = V8_PCM_DIGITAL | V8_PCM_ANALOG;
+        CHECK_EQ_I(v8_selected_caller(&jm), V8_SEL_V90);
+        jm.has_pcm = 0;
+        CHECK_EQ_I(v8_selected_caller(&jm), V8_SEL_V34);
+        jm.modes = 0; jm.has_pcm = 1; jm.pcm = V8_PCM_ANALOG;
+        CHECK_EQ_I(v8_selected_caller(&jm), 0);
+    }
     (void)i;
 
     T_REPORT("v8msg");

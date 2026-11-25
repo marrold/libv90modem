@@ -9,23 +9,59 @@ BUILD   := build
 ARM_CC  ?= $(wildcard $(CURDIR)/../toolchain/*/bin/arm-linux-gcc)
 QEMU    ?= qemu-arm-static
 
-INC     := -I. -I../test
+# V34_TEST_API: the diagnostics only the tests use (v34_rx_set_hard, v34_rx_flush)
+INC     := -I. -I../test -DV34_TEST_API
 LIB_SRC := v34_constel.c v34_core.c v34_params.c v34_shell.c v34_train.c \
            v34_tx.c v34_rx.c v34_nl.c
 LIB_HDR := v34.h v34_priv.h
-SUP_HDR := ../test/test.h test/fig5_data.h test/spec_tables.h test/testutil.h
+SUP_HDR := ../test/test.h test/fig5_data.h test/spec_tables.h test/testutil.h \
+           ../modem/compiler.h ../modem/fixdiv.h ../modem/divrcp.h
 TESTS   := test_scr test_params test_constel test_shell test_trellis \
            test_train test_roundtrip test_precoder test_ber test_resync \
-           test_bench test_nl
+           test_bench test_nl test_sflush test_nl_exact test_nl_exact_nb \
+           test_vit_hash
 
-.PHONY: all test test-arm cost-arm tables clean
+.PHONY: all test test-arm cost-arm tables clean build-tests build-tests-arm print-tests print-tests-arm
 all: test
 
 $(BUILD):
 	@mkdir -p $(BUILD)
 
-$(BUILD)/test_%: test/test_%.c $(LIB_SRC) $(LIB_HDR) $(SUP_HDR) | $(BUILD)
-	$(CC) $(CFLAGS) $(INC) -o $@ $< $(LIB_SRC) -lm
+# the sources compiled once, into an archive each test links: $(BUILD)/libtest.a,
+# and for ARM_CC $(BUILD)/arm/libtest.a (../x.c compiles to up/x.o)
+EXTRA_CPPFLAGS ?=
+T_SRC     := $(LIB_SRC)
+T_HDR     := $(LIB_HDR) $(SUP_HDR)
+T_FLAGS    = $(CFLAGS) $(EXTRA_CPPFLAGS) $(INC)
+T_OBJ     := $(patsubst %.c,$(BUILD)/tobj/%.o,$(subst ../,up/,$(T_SRC)))
+ARM_T_OBJ := $(patsubst %.c,$(BUILD)/arm/tobj/%.o,$(subst ../,up/,$(T_SRC)))
+# ar next to the compiler (arm-linux-gcc -> arm-linux-ar) when there is one
+ar_for     = $(firstword $(foreach a,$(patsubst %gcc,%ar,$(filter %gcc,$(1))),$(shell command -v $(a))) ar)
+$(BUILD)/tobj/%.o: %.c $(T_HDR)
+	@mkdir -p $(dir $@)
+	$(CC) $(T_FLAGS) -c -o $@ $<
+$(BUILD)/tobj/up/%.o: ../%.c $(T_HDR)
+	@mkdir -p $(dir $@)
+	$(CC) $(T_FLAGS) -c -o $@ $<
+$(BUILD)/arm/tobj/%.o: %.c $(T_HDR)
+	@mkdir -p $(dir $@)
+	$(ARM_CC) $(T_FLAGS) -c -o $@ $<
+$(BUILD)/arm/tobj/up/%.o: ../%.c $(T_HDR)
+	@mkdir -p $(dir $@)
+	$(ARM_CC) $(T_FLAGS) -c -o $@ $<
+$(BUILD)/libtest.a: $(T_OBJ)
+	rm -f $@ && $(call ar_for,$(CC)) rcs $@ $(T_OBJ)
+$(BUILD)/arm/libtest.a: $(ARM_T_OBJ)
+	rm -f $@ && $(call ar_for,$(ARM_CC)) rcs $@ $(ARM_T_OBJ)
+
+$(BUILD)/test_%: test/test_%.c $(BUILD)/libtest.a $(T_HDR) | $(BUILD)
+	$(CC) $(T_FLAGS) -o $@ $< $(BUILD)/libtest.a -lm
+
+# test_nl_exact once more with every builtin's C fallback (V90M_NO_BUILTINS):
+# this file and the library's v34_nl.c (linked ahead of libtest.a's copy)
+NB_FLAGS = $(T_FLAGS) -DV90M_NO_BUILTINS
+$(BUILD)/test_nl_exact_nb: test/test_nl_exact.c v34_nl.c $(BUILD)/libtest.a $(T_HDR) | $(BUILD)
+	$(CC) $(NB_FLAGS) -o $@ test/test_nl_exact.c v34_nl.c $(BUILD)/libtest.a -lm
 
 test: $(addprefix $(BUILD)/,$(TESTS))
 	@echo "== running host tests =="
@@ -34,8 +70,11 @@ test: $(addprefix $(BUILD)/,$(TESTS))
 
 # cross-build the same tests for the ARM926 target and run under qemu
 # (the tests shorten their own Monte Carlo runs when built for ARM)
-$(BUILD)/arm_test_%: test/test_%.c $(LIB_SRC) $(LIB_HDR) $(SUP_HDR) | $(BUILD)
-	$(ARM_CC) $(CFLAGS) $(INC) -static -o $@ $< $(LIB_SRC) -lm
+$(BUILD)/arm_test_%: test/test_%.c $(BUILD)/arm/libtest.a $(T_HDR) | $(BUILD)
+	$(ARM_CC) $(T_FLAGS) -static -o $@ $< $(BUILD)/arm/libtest.a -lm
+
+$(BUILD)/arm_test_nl_exact_nb: test/test_nl_exact.c v34_nl.c $(BUILD)/arm/libtest.a $(T_HDR) | $(BUILD)
+	$(ARM_CC) $(NB_FLAGS) -static -o $@ test/test_nl_exact.c v34_nl.c $(BUILD)/arm/libtest.a -lm
 
 test-arm: $(addprefix $(BUILD)/arm_,$(TESTS))
 	@echo "== running ARM tests under $(QEMU) =="
@@ -76,6 +115,14 @@ cost-arm: $(BUILD)/arm_test_bench
 # are checked in, so a normal build does not need this)
 tables:
 	python3 tools/gen_tables.py
+
+# the test programs built, not run; their paths (the top level's one pool)
+build-tests: $(addprefix $(BUILD)/,$(TESTS))
+build-tests-arm: $(addprefix $(BUILD)/arm_,$(TESTS))
+print-tests:
+	@for t in $(TESTS); do echo $(abspath $(BUILD))/$$t; done
+print-tests-arm:
+	@for t in $(TESTS); do echo $(abspath $(BUILD))/arm_$$t; done
 
 clean:
 	rm -rf $(BUILD)

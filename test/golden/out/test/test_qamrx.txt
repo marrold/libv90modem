@@ -1,0 +1,7 @@
+  3200 clean: training mse -45.2 dB, slicer SNR 53.9 dB, errors 0, centroid 36.00 -> 36.00
+  3200 clean: worst training mse over 12 alignments -45.2 dB
+  3000 clean: training mse -43.4 dB, slicer SNR 53.0 dB, errors 0
+  3200 tilt, 32 dB: slicer SNR 32.4 dB, errors 0
+  +100 ppm, +5 Hz: slicer SNR 37.2 dB, errors 0, centroid 36.01 -> 36.01, loop 4.79 Hz
+  -100 ppm, -5 Hz: slicer SNR 37.2 dB, errors 0, centroid 35.97 -> 35.98, loop -4.83 Hz
+qamrx: 22 checks, 0 failures

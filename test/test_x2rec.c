@@ -3,6 +3,7 @@
  * build, and any one flipped bit is caught. */
 #include "test.h"
 #include "x2rec.h"
+#include "info.h"
 
 /* the word bits alone, LSB first, as the CRC sees them */
 static int word_bits(const uint16_t *w, int nw, uint8_t *bits)
@@ -54,11 +55,11 @@ int main(void)
     int n, i, k, nw, bad;
 
     /* the CRC of the word bits: the facts' check values */
-    CHECK_EQ_I(x2_crc16(wb, word_bits(mp, 4, wb)), 0x14AD);
-    CHECK_EQ_I(x2_crc16(wb, word_bits(mpa, 4, wb)), 0x92B0);
-    CHECK_EQ_I(x2_crc16(wb, word_bits(srv, 3, wb)), 0x73F3);
-    CHECK_EQ_I(x2_crc16(wb, word_bits(srvn, 3, wb)), 0xF9A6);
-    CHECK_EQ_I(x2_crc16(wb, 0), 0xFFFF);
+    CHECK_EQ_I(info_crc(wb, word_bits(mp, 4, wb)), 0x14AD);
+    CHECK_EQ_I(info_crc(wb, word_bits(mpa, 4, wb)), 0x92B0);
+    CHECK_EQ_I(info_crc(wb, word_bits(srv, 3, wb)), 0x73F3);
+    CHECK_EQ_I(info_crc(wb, word_bits(srvn, 3, wb)), 0xF9A6);
+    CHECK_EQ_I(info_crc(wb, 0), 0xFFFF);
 
     /* the records: ack sets or clears word 0's bit 15 */
     n = x2rec_build(srvn, 3, 1, bits);

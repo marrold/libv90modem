@@ -61,6 +61,9 @@ static void bert_put(bert_t *b, int bit)
     if (++b->got > 23 && b->armed && want != (bit & 1)) b->fails++;
 }
 
+/* ---- or 16-bit counter words (test/wctr.h; vl_t.words) ---- */
+#include "wctr.h"
+
 /* ---- the line ---- */
 typedef struct {
     /* downstream (dschan) */
@@ -75,6 +78,12 @@ typedef struct {
     int full;                       /* 1: answer_t, 0: p2d + p34d */
     int max_down, max_up;           /* its ceilings */
     int v92;                        /* it offers V.92 (PCM upstream) */
+    int d_retrain;                  /* p2d + p34d / v92d: a retrain of either end restarts the digital
+                                       modem as answer.c does (70 ms of silence, Phase 2 again) */
+    /* an impulse added to one A/D sample of ours (a click): at imp_ms, imp_amp */
+    int imp_ms, imp_amp;
+    int trn1d_ms;                   /* p2d + p34d: its TRN1d lasts this long, Jd at its end (9.3.1.4
+                                       allows 4000 ms: a live server's habit); 0: p34d's own */
     /* the analogue modem */
     int caller_orig;                /* 1: orig_t, 0: v90a_t */
     int caller_level;
@@ -99,6 +108,13 @@ typedef struct {
     p2d_t p2; p34d_t p34; int dstate;  /* 0 Phase 2, 1 p34d, 2 dead, 3 v92d */
     v92d_t v92d;
     int dmute;                      /* the digital modem's output silenced (a test's doing) */
+    int d_rt_wait;                  /* d_retrain: samples of silence before its Phase 2 */
+    int d_v92_data, d_pcm_up;       /* d_retrain: v92d reached data mode; PCM upstream offered */
+    int d_retrains;                 /* d_retrain: retrains of the digital modem */
+    int d_rt_recent;                /* ... in a row, as answer.c's rt_recent: past 3 it gives up (dead);
+                                       a minute of data mode forgets one */
+    int64_t d_rt_clock;             /* samples of data mode toward that minute */
+    int64_t clips;                  /* our A/D samples at full scale (+-32767) */
     /* a digital modem of the test's own (tools/rec_orig: the answerer through the
        public API): when set, it takes each network sample's codeword in place of
        the ones above and gives the codeword it sends */
@@ -111,13 +127,31 @@ typedef struct {
     int64_t k;                      /* our samples */
     int64_t n;                      /* network samples */
     bert_t down, up;
+    int words;                      /* the data both ways: counter words (wctr_t), not 2^23 - 1 */
+    wctr_t wdown, wup;
     double up_gain, up_nrms;
 } vl_t;
 
-static void vl_put_down(void *u, int bit) { bert_put(&((vl_t *)u)->down, bit); }
-static int  vl_get_up(void *u) { return bert_get(&((vl_t *)u)->up); }
-static int  vl_get_down(void *u) { return bert_get(&((vl_t *)u)->down); }
-static void vl_put_up(void *u, int bit) { bert_put(&((vl_t *)u)->up, bit); }
+static void vl_put_down(void *u, int bit)
+{
+    vl_t *l = (vl_t *)u;
+    if (l->words) wctr_put(&l->wdown, bit); else bert_put(&l->down, bit);
+}
+static int  vl_get_up(void *u)
+{
+    vl_t *l = (vl_t *)u;
+    return l->words ? wctr_get(&l->wup) : bert_get(&l->up);
+}
+static int  vl_get_down(void *u)
+{
+    vl_t *l = (vl_t *)u;
+    return l->words ? wctr_get(&l->wdown) : bert_get(&l->down);
+}
+static void vl_put_up(void *u, int bit)
+{
+    vl_t *l = (vl_t *)u;
+    if (l->words) wctr_put(&l->wup, bit); else bert_put(&l->up, bit);
+}
 
 /* the digital modem's V.90 parts alone: p2d, then p34d as answer.c's start_p34 */
 static void vl_start_p34(vl_t *l)
@@ -162,6 +196,7 @@ static void vl_start_v92(vl_t *l)
     c.down_rms = (int)r;
     c.dsn_pace = 2;
     c.getbit = vl_get_down; c.putbit = vl_put_up; c.user = l;
+    l->d_v92_data = 0;              /* (answer.c's start_v92: this start-up's own) */
     l->dstate = v92d_init(&l->v92d, &c) != 0 ? 2 : 3;
 }
 
@@ -194,9 +229,47 @@ static uint8_t vl_src(void *ctx)
             out = pcm_encode(alaw, p2d_tick(&l->p2, x));
             if (l->p2.state == P2D_DONE) { if (l->p2.mode == P2D_MODE_V92) vl_start_v92(l); else vl_start_p34(l); }
             else if (l->p2.state == P2D_FAILED) l->dstate = 2;
-        } else if (l->dstate == 1) out = p34d_tick(&l->p34, x);
-        else if (l->dstate == 3) out = v92d_tick(&l->v92d, x);
-        else out = v90_pcm_octet(alaw, 0, 1);
+        } else if (l->dstate == 1) {
+            out = p34d_tick(&l->p34, x);
+            if (l->cfg.trn1d_ms && l->p34.state == P34_SD && v90tx_signal(&l->p34.tx) == V90TX_TRN1D) {
+                /* p34d moves on to Jd when its count of TRN1d symbols is
+                 * up: held short of that (past its canceller's training)
+                 * until trn1d_ms, then run out */
+                if ((int32_t)(l->p34.now - l->p34.t_trn1d) < l->cfg.trn1d_ms * 8) {
+                    if (l->p34.tx.nsym >= 6000) l->p34.tx.nsym = 5999;
+                } else l->p34.tx.nsym = 1u << 24;
+            }
+            if (l->p34.state == P34_DATA && ++l->d_rt_clock >= 8 * 60000) { l->d_rt_clock = 0; if (l->d_rt_recent > 0) l->d_rt_recent--; }
+            if (l->cfg.d_retrain && l->p34.state == P34_RETRAIN) {
+                if (l->d_rt_recent >= 3) l->dstate = 2;         /* answer.c: MAX_RETRAINS, no line */
+                else { l->dstate = 4; l->d_rt_wait = 0; l->d_retrains++; l->d_rt_recent++; }
+            }
+        } else if (l->dstate == 3) {
+            out = v92d_tick(&l->v92d, x);
+            if (l->v92d.state == V92D_DATA) {
+                l->d_v92_data = 1;
+                if (++l->d_rt_clock >= 8 * 60000) { l->d_rt_clock = 0; if (l->d_rt_recent > 0) l->d_rt_recent--; }
+            }
+            if (l->cfg.d_retrain && (l->v92d.state == V92D_RETRAIN
+                                     || (l->v92d.state == V92D_FAILED && l->v92d.error != V92D_ERR_CLEARDOWN
+                                         && l->v92d.error != V92D_ERR_HANGUP && l->v92d.error != V92D_ERR_CARRIER))) {
+                /* as answer.c: PCM upstream is offered again unless the
+                 * digital modem never reached data mode, failed, or its
+                 * upstream did not hold the lowest rate */
+                if (l->v92d.state == V92D_FAILED || !l->d_v92_data || l->v92d.up_floor) l->d_pcm_up = 0;
+                if (l->d_rt_recent >= 3) l->dstate = 2;         /* answer.c: MAX_RETRAINS, no line */
+                else { l->dstate = 4; l->d_rt_wait = 0; l->d_retrains++; l->d_rt_recent++; }
+            }
+        } else if (l->dstate == 4) {
+            /* 9.5.1 / 9.7.1: 70 ms of silence, then Phase 2 of a retrain */
+            out = v90_pcm_octet(alaw, 0, 1);
+            if (++l->d_rt_wait >= 8 * 70) {
+                p2d_cfg pc = l->p2.cfg;
+                p2d_init_retrain(&l->p2, &pc);
+                if (l->cfg.v92) p2d_retrain_v92(&l->p2, l->d_pcm_up);
+                l->dstate = 0;
+            }
+        } else out = v90_pcm_octet(alaw, 0, 1);
     }
     if (l->dmute) out = v90_pcm_octet(alaw, 0, 1);
     return out;
@@ -207,6 +280,7 @@ static void vl_init(vl_t *l, const vl_cfg *c)
     dschan_cfg dc;
     memset(l, 0, sizeof *l);
     l->cfg = *c;
+    l->d_pcm_up = 1;
     rng_seed(&l->rng, c->seed + 101);
     bert_init(&l->down, 0x1234 + c->seed); bert_init(&l->up, 0x4321 + c->seed);
     l->down.armed = l->up.armed = 1;
@@ -280,7 +354,12 @@ static void vl_tick(vl_t *l)
     int16_t rx = dschan_tick(&l->ch, l->last_tx), tx;
     double o[4];
     int i, n;
+    if (l->cfg.imp_amp && l->k == (int64_t)l->cfg.imp_ms * 8) {
+        int32_t v = rx + l->cfg.imp_amp;
+        rx = (int16_t)(v > 32767 ? 32767 : v < -32767 ? -32767 : v);
+    }
     l->last_rx = rx;
+    if (rx >= 32767 || rx <= -32767) l->clips++;
     tx = l->cfg.caller_orig ? orig_tick(&l->org, rx) : v90a_tick(&l->va, rx);
     n = l->cfg.up_line ? lresamp_push(&l->lrs, tx, o, 4) : sresamp_push(&l->rs, tx, o, 4);
     for (i = 0; i < n; i++) {

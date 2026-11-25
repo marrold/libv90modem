@@ -2,9 +2,9 @@
  * for, what it learns from it, and the constellations it asks for in CPt
  * and CP (V.90 8.3.1, 8.4.1, 8.5.2).
  *
- * The DIL asked for (v90dil_design). Every Ucode 0..119 is a training
- * symbol, one DIL-segment each (N = 120), in the order 0 2 4 ... 118 119
- * 117 ... 3 1 (no segment follows a much larger one: see v90dil.c); a segment is 18
+ * The DIL asked for (v90dil_design). Every Ucode 0..100 is a training
+ * symbol, one DIL-segment each (N = 101), in the order 0 2 4 ... 100 99
+ * 97 ... 3 1 (no segment follows a much larger one: see v90dil.c); a segment is 18
  * symbols (Hc = 2 for every Uchord). Each segment opens with REFc = UINFO
  * three times, all positive, and then 15 training symbols, the first of them
  * positive too (TP = 0 0 0 1 ..., SP = + + + + - - + - + + - - - + - + - +,
@@ -13,12 +13,21 @@
  * a segment boundary, the first three symbols are the same either way and
  * the fourth, a positive training symbol or -UINFO, tells the two apart
  * while the receiver's decision feedback still holds nothing wrong. A pass
- * is 2160 symbols (270 ms) and shows each Ucode three times in intervals 3,
- * 4 and 5 and twice in 0, 1 and 2. Ucodes 120..127 are left out: in runs of
- * 15 they overload the receiver's 16-bit input (modem/v90arx puts Sd at an
- * RMS of 4096 there; measured, Ucode 127 arrived 9 % low), and the
- * constellations, which never use what was not measured, do not need them
- * within Table 15's limits at -12 dBm0.
+ * is 1818 symbols (227 ms) and shows each Ucode three times in intervals 3,
+ * 4 and 5 and twice in 0, 1 and 2. Ucode 100 is the loudest at or under a
+ * third of full scale in either law (Table 1: 2591 of 8031 mu-law, 2624 of
+ * 8064 A-law); 101..127 are left out. A softphone's playback gain control
+ * (a live V.90 call through one, reported by an independent softmodem)
+ * passed every codeword to about a third of full scale exactly, held down
+ * louder ones, and went on reading what followed low for a third of a
+ * second: a DIL that asks for them is misread from there on. In runs of 15
+ * they also overload the receiver's 16-bit input (modem/v90arx puts Sd at an
+ * RMS of 4096 there; measured, Ucode 127 arrived 9 % low). The
+ * constellations never use what was not measured, so none goes above a
+ * third of full scale either. Within Table 15's limits at -12 dBm0 that
+ * costs most of our simulated lines nothing; some move a step either way
+ * (test_orig_v90's 6 km line 48000 to 46666, test_api's V.90 call 49333 to
+ * 52000).
  *
  * The analysis (v90dil_acc_* , v90dil_analyse): the equaliser output of
  * every DIL symbol, sign taken off, summed per interval and Ucode. Its mean
@@ -50,9 +59,9 @@
 #ifndef V90D_MODEM_V90DIL_H
 #define V90D_MODEM_V90DIL_H
 #include <stdint.h>
-#include "v90_seq.h"
+#include "../v90/v90_seq.h"
 
-#define V90DIL_NU   120             /* Ucodes measured: 0 .. V90DIL_NU - 1 */
+#define V90DIL_NU   101             /* Ucodes measured: 0 .. V90DIL_NU - 1 (a third of full scale) */
 #define V90DIL_PASS (V90DIL_NU * 18) /* symbols in one pass of the DIL of v90dil_design */
 
 /* the DIL descriptor we send in Ja */

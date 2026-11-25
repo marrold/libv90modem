@@ -19,7 +19,8 @@
 #define INFO_MAX_BITS 109
 
 /* CRC of n bits: x^16+x^12+x^5+1, register preset to ones, no inversion.
- * Bit 0 of the result is transmitted first. */
+ * Bit 0 of the result is transmitted first. The register is v90_crc()'s
+ * (v90/v90_seq.c), one bit at a time v90_crc_step(). */
 uint16_t info_crc(const uint8_t *bits, int n);
 /* 1 when a payload (information + CRC, npayload bits) checks out */
 int info_check(const uint8_t *payload, int npayload);
@@ -94,13 +95,15 @@ int info1d_build(const info1d_t *i, uint8_t *bits);
  * sr[5].hi_carrier. */
 int info1d_build_v92(const info1d_t *i, int pcm_up, uint8_t *bits);
 int info1a_build(const info1a_t *i, uint8_t *bits);
-int info1c_build(const info1c_t *i, uint8_t *bits);
 
 /* parse a payload (the bits after the sync). CRC is not checked here. */
 void info0d_parse(const uint8_t *payload, info0_t *i);
 void info0a_parse(const uint8_t *payload, info0_t *i);
 void info1d_parse(const uint8_t *payload, info1d_t *i);
 void info1a_parse(const uint8_t *payload, info1a_t *i);
-void info1c_parse(const uint8_t *payload, info1c_t *i);
+
+/* V.34 Table 15: INFO1c puts the same fields in the same bits as INFO1d */
+static inline int info1c_build(const info1c_t *i, uint8_t *bits) { return info1d_build(i, bits); }
+static inline void info1c_parse(const uint8_t *payload, info1c_t *i) { info1d_parse(payload, i); }
 
 #endif

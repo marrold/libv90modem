@@ -6,7 +6,7 @@
  *   CPt, Ri-bar, TRN2d, MP until CP, MP' until CP' or E, Ed, B1d, data.
  *
  * One received linear sample in, one PCM octet out, at 8 kHz. The transmit
- * side is v90/ (integer logic), the upstream receiver is qamrx + v34/.
+ * side is v90/ (integer logic), the upstream receiver is v34up (qamrx + v34/).
  *
  * What we impose on the caller's transmitter: 4-point CP / E / SCR (Jd bit
  * 47 = 0), 16-state trellis code, no non-linear encoder, minimum shaping, no
@@ -19,11 +19,11 @@
 #ifndef V90D_MODEM_P34D_H
 #define V90D_MODEM_P34D_H
 #include <stdint.h>
-#include "qamrx.h"
+#include "seqhunt.h"
 #include "ec.h"
 #include "ecdly.h"
 #include "tonedet.h"
-#include "v34train.h"
+#include "v34up.h"
 #include "../v90/v90_tx.h"
 #include "../v34/v34.h"
 
@@ -92,8 +92,8 @@ typedef struct {
     p34d_cfg   cfg;
     p34d_state state;
     int        error;
-    int32_t    now, t;              /* sample clock; samples in this state */
-    int32_t    t_trn1d;             /* when TRN1d began */
+    uint32_t   now, t;              /* sample clock; samples in this state (modem/clock.h) */
+    uint32_t   t_trn1d;             /* when TRN1d began */
     /* transmit */
     v90tx_t    tx;
     v90_jd_t   jd;
@@ -104,18 +104,14 @@ typedef struct {
     ecdly_t    ecd;                 /* what we sent, for the delayed echo reference; ecd.delay
                                        is the echo delay in use, given or measured */
     sdet_t     sdet;
-    qamrx_t    rx;
+    v34up_t    up;                  /* the receiver (up.ref: TRN reference); up.rx_ready: data */
     int        rxmode;
-    v34trn_t   ref;                 /* TRN reference */
-    v34_tdem_t tdem;
     sres_t     sres;
     int        s_events;            /* S / S-bar boundaries seen after Jd */
-    int64_t    zpw;                 /* smoothed |z|^2 */
-    int32_t    quiet;               /* symbols without signal */
     /* sequence framing (Ja, CPt, CP) */
     uint8_t    fbuf[P34_FBUF];
     int        fn;                  /* bits collected, 0 = hunting for a frame sync */
-    int        ones;                /* run of ones */
+    seqhunt_t  sh;                  /* run of ones */
     int        want_cp;             /* 0: DIL descriptor, 1: CP sequences */
     int        got_cpt, got_cp, got_cp_ack, got_e;
     int        got_cps, got_cps_ack;    /* CP with the request for silence (bit 30) */
@@ -124,19 +120,13 @@ typedef struct {
     v90_cp_t   cp;                  /* scratch / last CP */
     uint16_t   peer_up_rates;       /* CP bits 36:48 */
     /* data mode */
-    v34_params_t vpar;
-    v34_rx_t   vrx;
-    int32_t    vgain;               /* v34_gain_q14 of the data constellation */
     int        b1_left;             /* symbols of B1 still to come, <0 = not started */
-    int        tx_ready, rx_ready;
+    int        tx_ready;
     int        down_rate, up_rate;  /* bit/s */
     int        in_reneg;            /* a rate renegotiation is under way */
     int        clearing;            /* ... of ours, to send MP with drn = 0 */
     tonedet_t  tone_a;              /* Tone A (2400 Hz) watch */
     int        retrain_ours;        /* P34_RETRAIN: we asked for it */
-    /* is the line still good enough for the upstream rate? */
-    int32_t    mse_limit;           /* receiver error above which it is not */
-    int32_t    q_bad, q_dead;       /* symbols in a row above it; above -9 dB */
     int        rate_drops;          /* renegotiations we began to lower the rate */
 } p34d_t;
 

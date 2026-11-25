@@ -1,5 +1,6 @@
 /* HDLC framing tests: FCS vectors from V.42 8.1.1.6, bit-exact transmit
  * patterns, zero insertion and deletion, abort, flag fill, length limits. */
+#include <limits.h>
 #include <string.h>
 #include "test.h"
 #include "v42_hdlc.h"
@@ -251,6 +252,16 @@ static void test_errors(void)
     CHECK_EQ_I(r.flag_run, 10);
     for (i = 0; i < 20; i++) v42hdlc_rx_bit(&r, 1);
     CHECK_EQ_I(r.flag_run, 0);
+    /* an idle link sends flags for ever (T403 off): the count saturates,
+     * it does not overflow (at 56 kbit/s INT_MAX flags are ~85 hours) */
+    v42hdlc_tx_init(&t); v42hdlc_rx_init(&r);
+    for (i = 0; i < 80; i++) v42hdlc_rx_bit(&r, v42hdlc_tx_bit(&t));
+    r.flag_run = INT_MAX - 5;
+    for (i = 0; i < 80; i++) v42hdlc_rx_bit(&r, v42hdlc_tx_bit(&t));
+    CHECK(r.flag_run >= 3 && r.flag_run <= INT_MAX - 5);
+    v42hdlc_rx_init(&r);
+    for (i = 0; i < 8 * 70000; i++) v42hdlc_rx_bit(&r, v42hdlc_tx_bit(&t));
+    CHECK_EQ_I(r.flag_run, 65535);
 }
 
 /* A frame with no opening flag after a run of ones (seven or more: an abort,

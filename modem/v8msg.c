@@ -110,10 +110,21 @@ void v8_build_jm(const v8_menu_t *cm, const v8_menu_t *local, v8_menu_t *jm)
     }
 }
 
-int v8_selected(const v8_menu_t *jm)
+static int lowest_mode(const v8_menu_t *jm)
 {
     int i;
-    if (jm->has_pcm && (jm->pcm & (V8_PCM_DIGITAL | V8_PCM_ANALOG))) return V8_SEL_V90;
     for (i = 1; i <= 12; i++) if (jm->modes & (1u << i)) return i;
     return 0;
+}
+
+int v8_selected(const v8_menu_t *jm)
+{
+    if (jm->has_pcm && (jm->pcm & (V8_PCM_DIGITAL | V8_PCM_ANALOG))) return V8_SEL_V90;
+    return lowest_mode(jm);
+}
+
+int v8_selected_caller(const v8_menu_t *jm)
+{
+    if (jm->has_pcm && (jm->pcm & V8_PCM_DIGITAL)) return V8_SEL_V90;
+    return lowest_mode(jm);
 }

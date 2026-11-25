@@ -1,0 +1,3 @@
+  V.34 caller: 28800 bit/s to it, 28800 bit/s from it; 86400 / 86400 bits, 0 / 0 bad
+  V.34 caller, a click 1 s into data mode: 432000 bits 85 bad from it, 115200 bits 0 bad from 10 s after the click; 0 retrains; end 0
+answer_v34: 34 checks, 0 failures

@@ -1,0 +1,25 @@
+  one-way delay 64 samples (8.0 ms), rates offered 1f / 1f
+  turn-round at the line: answerer 64.50 T, caller 63.90 T (64 +- 2)
+  round trip 39.6 T: MT 103.5 T, NT 103.8 T (each less the other's turn-round: 39.6, 39.3)
+  caller saw: S-bar -> R1 1892.7 T (TRN 1831), S-bar -> R3 1334.1 T (TRN 1280)
+  echo attenuation after TRN: answerer 45.0 dB, caller 31.5 dB; connected at 14400 bit/s after 2.61 s
+  3 s of data: caller -> answerer 42721 bits 0 errors, answerer -> caller 43141 bits 0 errors
+  one-way delay 424 samples (53.0 ms), rates offered 1f / 1f
+  turn-round at the line: answerer 64.50 T, caller 63.90 T (64 +- 2)
+  round trip 255.6 T: MT 319.5 T, NT 319.8 T (each less the other's turn-round: 255.6, 255.3)
+  caller saw: S-bar -> R1 1852.8 T (TRN 1791), S-bar -> R3 1333.8 T (TRN 1280)
+  echo attenuation after TRN: answerer 44.0 dB, caller 37.4 dB; connected at 14400 bit/s after 3.22 s
+  3 s of data: caller -> answerer 42073 bits 0 errors, answerer -> caller 43135 bits 0 errors
+  one-way delay 2424 samples (303.0 ms), rates offered 1f / 07
+  turn-round at the line: answerer 64.50 T, caller 63.90 T (64 +- 2)
+  round trip 1455.6 T: MT 1519.5 T, NT 1519.8 T (each less the other's turn-round: 1455.6, 1455.3)
+  caller saw: S-bar -> R1 2796.9 T (TRN 2735), S-bar -> R3 1334.1 T (TRN 1280)
+  echo attenuation after TRN: answerer 46.0 dB, caller 48.8 dB; connected at 9600 bit/s after 7.11 s
+  3 s of data: caller -> answerer 25627 bits 0 errors, answerer -> caller 28739 bits 0 errors
+  one-way delay 32 samples (4.0 ms), rates offered 03 / 1f
+  turn-round at the line: answerer 63.90 T, caller 63.60 T (64 +- 2)
+  round trip 20.4 T: MT 84.0 T, NT 84.3 T (each less the other's turn-round: 20.4, 20.4)
+  caller saw: S-bar -> R1 1873.8 T (TRN 1812), S-bar -> R3 1334.1 T (TRN 1280)
+  echo attenuation after TRN: answerer 45.0 dB, caller 31.2 dB; connected at 7200 bit/s after 2.55 s
+  3 s of data: caller -> answerer 21358 bits 0 errors, answerer -> caller 21535 bits 0 errors
+test_startup: 140 checks, 0 failures

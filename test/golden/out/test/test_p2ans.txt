@@ -1,0 +1,27 @@
+  p2ans clean: done at 2.03 s (peer 2.02 s), rtd 46 / 46, 3200 SNR 37.0 dB, projected 28800
+  p2ans 2.9 kHz line: 2400 symbols/s, carrier low, SNR 39.4 dB, projected 21600
+  p2ans 3.2 kHz line: 3000 symbols/s, carrier low, SNR 35.3 dB, projected 24000
+  p2ans long line: rtd 842 / 843, SNR 33.2 dB, projected 24000
+  p2ans INFO1c lost: done at 4.95 s after 1 retrain(s)
+  p2ans x2 marker: P2N_X2 243 ms after L1 began, marker 4d
+  p2ans x2 marker refused (bad CRC): state 4, the same samples as without x2
+  p2ans x2 marker refused (late): state 4, the same samples as without x2
+  p2ans x2 marker refused (index 4): state 4, the same samples as without x2
+  p2ans x2 marker refused (index 0): state 3, the same samples as without x2
+  p2ans x2 marker refused (fill bit 0): state 4, the same samples as without x2
+  p2ans x2 marker sent 945 ms after L1 began: state 14
+  p2ans x2 marker sent 965 ms after L1 began: state 4
+  p2ans x2 marker in a retrain: state 4, the same samples as without x2
+  p2ans K56flex flag: state 15, INFO1a offset 1, P2N_K56 at 2.0293 s (P2N_DONE without: 2.0293 s), silent from then
+  p2ans K56flex, INFO1c 0x200, line offset +0.00 Hz: measured 0, INFO1a 0 (the same samples)
+  p2ans K56flex, INFO1c 0x200, line offset +0.10 Hz: measured 5, INFO1a 4 (samples differ)
+  p2ans K56flex, INFO1c 0x200, line offset -0.06 Hz: measured -3, INFO1a -2 (samples differ)
+  p2ans K56flex, INFO1c 0x200, line offset +0.02 Hz: measured 1, INFO1a 0 (samples differ)
+  p2ans K56flex, INFO1c 0x200, line offset +0.08 Hz: measured 4, INFO1a 4 (the same samples)
+  p2ans K56flex, INFO1c 0x200, line offset -0.04 Hz: measured -2, INFO1a -2 (the same samples)
+  p2ans K56flex, INFO1c 0x200, line offset -0.14 Hz: measured -7, INFO1a -6 (samples differ)
+  p2ans K56flex, INFO1c 0x200, line offset +0.18 Hz: measured 9, INFO1a 8 (samples differ)
+  p2ans K56flex, INFO1c 0x001, the client cannot send 3200: 3000 symbols/s, state 12, INFO1a offset 0 (measured 1)
+  p2ans K56flex, INFO1c 0x001, 3200 not allowed by us: 3000 symbols/s, state 12, INFO1a offset 0 (measured 1)
+  p2ans INFO0c for ever: state 13 error 5 at 20.00 s, INFO0c 67
+p2ans: 410 checks, 0 failures

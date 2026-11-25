@@ -29,13 +29,18 @@ v34_pt_t v34_sbar_point(unsigned i)
 
 /* ---- PP, 10.1.3.6 --------------------------------------------------- */
 
+unsigned v34_pp_phase(unsigned i)
+{
+    unsigned k = (i / 4) % 72, I = i % 4;
+    return (k * I + ((k % 3 == 1) ? 4 : 0)) % 12;
+}
+
 void v34_pp_point(unsigned i, int16_t *re, int16_t *im)
 {
     /* cos(n * 30 degrees), Q14 */
     static const int16_t c30[12] = {
         16384, 14189, 8192, 0, -8192, -14189, -16384, -14189, -8192, 0, 8192, 14189 };
-    unsigned k = (i / 4) % 72, I = i % 4;
-    unsigned ph = (k * I + ((k % 3 == 1) ? 4 : 0)) % 12;    /* units of pi/6 */
+    unsigned ph = v34_pp_phase(i);
     *re = c30[ph];
     *im = c30[(ph + 9) % 12];                               /* sin = cos(x - 90) */
 }

@@ -1,7 +1,9 @@
 /* CPU cost of the V.34 answering modem on the target, and a check that the
  * target computes exactly what the host does: replays what tools/rec_v34
  * recorded through modem/v8ans + modem/v34ans (integer only, so the transmit
- * hash must equal the host's) and times it per phase of the call.
+ * hash must equal the host's) and times it per phase of the call. It ends
+ * with "tx hash" (what it sent) and "rx hash" (the data bits it received,
+ * FNV-1a over one bit at a time) for tools/bench-hashes.sh.
  *
  *   bench_v34 RECORDING
  *
@@ -13,8 +15,9 @@
 #include "v34glue.h"
 
 static v34prbs src = { 5, 0, 0 }, sink = { 9, 0, 0 };
+static uint32_t rxh = 2166136261u;     /* FNV-1a of the data bits received */
 static int  get(void *u) { (void)u; src.n++; return v34prbs_next(&src); }
-static void put(void *u, int b) { (void)u; sink.n++; if (v34prbs_next(&sink) != (b & 1)) sink.bad++; }
+static void put(void *u, int b) { (void)u; sink.n++; rxh = (rxh ^ (uint32_t)(b & 1)) * 16777619u; if (v34prbs_next(&sink) != (b & 1)) sink.bad++; }
 
 static double now(void)
 {
@@ -55,6 +58,7 @@ int main(int argc, char **argv)
     fclose(f);
     printf("replayed %.1f s; transmit hash %08x; state %d, %d bit/s out, %d bit/s in; bits from line %ld (%ld bad)\n",
            total / 8000.0, (unsigned)hash, (int)a.m.state, a.m.dx.tx_rate, a.m.dx.rx_rate, sink.n, sink.bad);
+    printf("tx hash %08x\nrx hash %08x\n", (unsigned)hash, (unsigned)rxh);
     for (k = 0; k < NPH; k++)
         if (n_ph[k])
             printf("  %-28s %5.1f s of line: %5.1f %% of this CPU, worst 10 ms block took %5.2f ms\n",

@@ -39,6 +39,7 @@ static void common_init(p2c_t *p, const p2c_cfg *cfg)
 void p2c_init(p2c_t *p, const p2c_cfg *cfg)
 {
     common_init(p, cfg);
+    p->rep_left = cfg->info0_repeat;
     send_info0c(p, 0);
 }
 
@@ -110,6 +111,14 @@ int16_t p2c_tick(p2c_t *p, int16_t x)
             if (p->resend || (!p->got0a && p->rx.steady >= MS(50))) {
                 send_info0c(p, p->got0a);
                 p->resend = 0;
+            } else if (p->got0a && p->rx.steady >= TONE_SEEN && p->rep_left != 0) {
+                /* cfg.info0_repeat: INFO0c once more, 300 ms after the last
+                 * began (Tone B long enough between them for the answer
+                 * modem to send its Tone A reversal) */
+                if (p->t < MS(300)) break;
+                send_info0c(p, 1);
+                if (p->rep_left > 0) p->rep_left--;
+                p->t = 0;
             } else if (p->got0a && p->rx.steady >= TONE_SEEN) {
                 go(p, P2C_WAIT_REV1);
             }

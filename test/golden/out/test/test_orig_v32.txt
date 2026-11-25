@@ -1,0 +1,32 @@
+V.8 then V.32bis, against the library's answerer
+  clean line: data at 8.72 s, 14400 bit/s, modulation 6, V.8 1, SNR 43.7 dB, round trip 130 samples; TRN: ours 2816 T, the answerer's 8230 T
+    14400 bit/s: caller got 28321 bits, 0 bad; answerer got 28333 bits, 0 bad
+    retrain started by the answerer: data again after 5.96 s; ours 1, theirs 1
+    after it: caller got 28327 bits, 0 bad; answerer got 28327 bits, 0 bad
+    retrain started by the caller: data again after 5.97 s; ours 2, theirs 2
+    after it: caller got 28327 bits, 0 bad; answerer got 28333 bits, 0 bad
+    the answerer silent: phase 4, end 5
+  10 dB loss, echoes 12-18 dB, -45 dBm0 noise, 20 ms, 1 Hz, 100 ppm: data at 6.27 s, 9600 bit/s, SNR 20.8 dB
+    data: caller got 18683 bits, 0 bad; answerer got 18683 bits, 0 bad
+  the same with -60 dBm0 of noise and no carrier shift: data at 6.21 s, 14400 bit/s
+    data: caller got 28111 bits, 0 bad; answerer got 28111 bits, 0 bad
+  the same line, Te moved: 0 of 14 calls under 9600 or with errors (lowest 9600 bit/s)
+  rate ceilings of ours
+    9600: data at 8.72 s, 9600 bit/s (answerer 9600)
+    9600 bit/s: caller got 18859 bits, 0 bad; answerer got 18867 bits, 0 bad
+    4800: data at 8.71 s, 4800 bit/s (answerer 4800)
+    4800 bit/s: caller got 9445 bits, 0 bad; answerer got 9447 bits, 0 bad
+  R3 calling for a cleardown: phase 4, end 6
+  V.32bis not offered: modulation 3
+pre-V.8 answerers, V.32bis on offer (Annex A)
+  ANS 3.3 s, then V.32bis: AA at the answerer from 1.07 s; data at 6.75 s, 9600 bit/s, modulation 6, V.8 0
+    data: caller got 18683 bits, 0 bad; answerer got 18683 bits, 0 bad
+  ANS 0.9 s, then V.32bis: AA from 1.03 s; data at 6.91 s, 14400 bit/s
+  ANS 3.3 s, then V.22bis: data at 5.12 s, 2400 bit/s, modulation 3
+    caller got 32 of 32 octets, answerer 34 of 34
+  ANS 1.5 s, then V.22bis: AA at the answerer from 1.07 s; V.22bis after Tc, data at 6.43 s, modulation 3
+  ANS 1.5 s, USB1 3 s, then V.32bis (an automode answerer): data at 7.95 s, 9600 bit/s, modulation 6
+  ANS 3.3 s, then V.21: data at 5.26 s, modulation 1
+    answerer got 34 of 34 octets
+  V.32bis only, a V.21 answerer: phase 4, end 4
+orig_v32: 96 checks, 0 failures

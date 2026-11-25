@@ -2,15 +2,24 @@ name: CI
 
 on:
   push:
+    branches: ['**']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
 
 permissions:
   contents: read
 
+env:
+  # the recordings of real calls are private: the replay proof is skipped
+  V90M_NO_RECS: '1'
+
 jobs:
   host:
     name: host (${{ matrix.cc }})
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -22,10 +31,12 @@ jobs:
       - name: Install clang
         if: matrix.cc == 'clang'
         run: sudo apt-get update && sudo apt-get install -y clang
-      - name: Build
-        run: make -j"$(nproc)" CC=${{ matrix.cc }}
-      - name: make check
-        run: make CC=${{ matrix.cc }} check
+      - name: make check (every CPU), the fixtures included
+        run: make -j"$(nproc)" CC=${{ matrix.cc }} check PAR="$(nproc)"
+      - name: Every program's output against its golden file
+        run: tools/golden.sh check build
+      - name: The benches' hashes
+        run: tools/bench-hashes.sh check
       - name: Install, then build the example with pkg-config
         run: |
           make CC=${{ matrix.cc }} install PREFIX="$RUNNER_TEMP/inst"
@@ -36,6 +47,7 @@ jobs:
 
   ubsan:
     name: host, undefined behaviour trapped (clang)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -43,10 +55,48 @@ jobs:
       - name: Install clang
         run: sudo apt-get update && sudo apt-get install -y clang
       - name: make check-ubsan
-        run: make check-ubsan
+        run: make -j"$(nproc)" check-ubsan PAR="$(nproc)"
 
-  arm:
-    name: ARMv5 under qemu (short tests)
+  armv7hf:
+    name: armv7hf under qemu, output against the host's
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the cross compiler and qemu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user-static
+      - name: make check-arm (short suite, less the slowest programs)
+        run: |
+          make -j"$(nproc)" check-arm ARM_CC=arm-linux-gnueabihf-gcc QEMU=qemu-arm-static \
+            PAR="$(nproc)" BUILD=build/a7 ARM_SKIP=tools/ports-slow.txt
+      - name: Its output against the host's short suite (built here)
+        run: tools/short-cmp.sh build/short build/a7 tools/ports-slow.txt
+
+  s390x:
+    name: s390x (big-endian) under qemu, output against the host's
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the cross compiler and qemu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-s390x-linux-gnu libc6-dev-s390x-cross qemu-user-static
+      - name: make check-arm (short suite, less the slowest programs)
+        run: |
+          make -j"$(nproc)" check-arm ARM_CC=s390x-linux-gnu-gcc QEMU=qemu-s390x-static \
+            PAR="$(nproc)" BUILD=build/s390x EXTRA_CPPFLAGS=-DTEST_FORCE_SHORT \
+            ARM_SKIP=tools/ports-slow.txt
+      - name: Its output against the host's short suite (built here)
+        run: tools/short-cmp.sh build/short build/s390x tools/ports-slow.txt
+
+  armv5:
+    name: ARMv5 under qemu (short tests; nightly, tags, manual)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     # 0.4.0 took 2 h 57 min here, mostly test_p34 and the orig_* tests
     # (K56flex adds about 40 s). GitHub's limit for a job is 360 minutes.
@@ -59,10 +109,11 @@ jobs:
           sudo apt-get install -y gcc-arm-linux-gnueabi libc6-dev-armel-cross qemu-user-static
       - name: make check-arm
         # armel: ARMv5T, soft float, like the ARM926 the library was measured on
-        run: PAR="$(nproc)" make check-arm ARM_CC=arm-linux-gnueabi-gcc QEMU=qemu-arm-static
+        run: make -j"$(nproc)" check-arm ARM_CC=arm-linux-gnueabi-gcc QEMU=qemu-arm-static PAR="$(nproc)"
 
   win32:
     name: win32 (mingw, build only)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

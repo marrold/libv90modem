@@ -20,6 +20,8 @@
  *   been decoded, one MP', E (4 points), then V.34 data again (B1 first) at the highest rate of
  *   reneg_mask; the data bits run on from where they stopped. With
  *   reneg_index2, a second one as the first, reneg_ms after its data.
+ *   With reneg_up, reneg_ms is counted from its upstream B1's first
+ *   symbol, whatever has come down (its S before our start segment).
  *
  * Downstream it takes the server's octets as they leave it (ideal: no
  * analogue line, no equaliser), passes them through the network's digital
@@ -65,6 +67,10 @@ typedef struct {
     int reneg_md;           /* ... its MD; 0 = 5 */
     int reneg_index2;       /* a second rate change, reneg_ms after the first's data, asking
                                for this index (same mask and MD); 0 = none */
+    int reneg_whole;        /* its S once the mapping frame under way is out (0: at once,
+                               cutting it) */
+    int reneg_up;           /* reneg_ms from its upstream data's first symbol (B1), not
+                               from data mode both ways: its S before our start is in */
     int  (*getbit)(void *user);
     void (*putbit)(void *user, int bit);
     void *user;
@@ -117,6 +123,7 @@ typedef struct {
     int          up_rate;
     int          quiet;             /* cfg.silent has struck */
     int32_t      data_at;           /* when data mode began (-1 not yet) */
+    int32_t      up_at;             /* when its upstream data (B1) began (-1 not yet) */
     int          renegs;            /* rate changes begun */
     int          reneg_due, reneg_mp;   /* time for one; its first MP has gone out */
     int          rr_base;           /* the server's records counted before this rate change */

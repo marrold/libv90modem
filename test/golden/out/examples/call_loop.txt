@@ -1,0 +1,9 @@
+libv90modem 0.6.1
+caller   CONNECT 38666/52000 V.92
+answerer CONNECT 52000/38666 V.92
+caller   got "hello from the answerer"
+answerer got "hello from the caller"
+caller   SNR 60.0 dB, round trip 2 samples
+answerer ended: far end cleared down
+caller   ended: we cleared down
+line time 12.93 s

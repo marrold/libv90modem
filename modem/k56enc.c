@@ -7,7 +7,7 @@
 #include <string.h>
 #include "k56enc.h"
 #include "k56tab.h"
-#include "v90_pcm.h"
+#include "../v90/v90_pcm.h"
 
 /* the bits lost a frame for n6 robbed symbols in 6 */
 static const uint8_t rob_loss[7] = { 0, 2, 4, 4, 6, 8, 8 };
@@ -42,11 +42,6 @@ void k56enc_init(k56enc_t *e, int rate, int pad, uint8_t rbs)
     for (j = 0; j < 24; j++)
         if ((rbs >> (j % 6)) & 1)
             e->rob |= (uint32_t)1 << j;
-}
-
-void k56enc_set_rate(k56enc_t *e, int rate, int pad, uint8_t rbs)
-{
-    k56enc_init(e, rate, pad, rbs);
 }
 
 /* robbed symbols in frame f of the cycle */

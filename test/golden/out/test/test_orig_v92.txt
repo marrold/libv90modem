@@ -1,0 +1,20 @@
+the library's caller (V.8, V.92 analogue) against the library's answerer, 10 s of data per line
+  line                                    mod data ms   down     up SNR dB   rtd  bits down  fail    bits up  fail
+  2 km,    0 ppm, -75 dBm0               V.92   10901  52000  36000  53.6   184     520026     0     359964     0
+  0 km, +100 ppm, -75 dBm0               V.92   12398  46666  34666  52.9   184     466620     0     346632     0
+  6 km, -100 ppm, -75 dBm0               V.92   13263  46666  30666  52.0   183     466725     0     306682     0
+  4 km,  +50 ppm, -65 dBm0               V.92   10979  40000  34666  46.4   185     399990     0     346684     0
+  2 km,  +30 ppm, 3 dB pad               V.92   11655  48000  36000  51.7   184     479952     0     359964     0
+  2 km,  -30 ppm, 6 dB pad               V.92   10897  45333  36000  50.3   184     453356     0     359964     0
+  2 km,  +30 ppm, robbed bit             V.92   12406  45333  34666  53.4   184     453288     0     346632     0
+  2 km,  +30 ppm, 6 dB pad, robbed bit   V.92   10916  44000  36000  49.4   184     439989     0     359964     0
+  2 km,  -50 ppm, A-law                  V.92   10985  46666  37333  52.5   183     466690     0     373352     0
+V.90 when V.92 is not on both sides
+  the answerer without V.92              V.90   10064  50666  28800  53.3   184     506692     0     288000     0
+  ours with V.92 off                     V.90   10064  52000  28800  54.0   184     519987     0     288000     0
+reported only: the upstream through the downstream's loop and codec response
+  2 km,    0 ppm, dschan's response up   V.92   12444  52000  34666  53.8   195     520026     0     346632     0
+ending a call
+  ours: caller ended 4 after 798 ms (end 7), answerer phase 3, cleared 1
+  the answerer's: caller ended after 375 ms, end 6
+orig_v92: 109 checks, 0 failures

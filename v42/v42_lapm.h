@@ -101,6 +101,13 @@ typedef struct {
 
     int peer_busy, own_busy, rej_exc, timer_rec, busy_discard;
     int rc;                  /* retransmission count */
+    int no_progress;         /* recoveries (T401 polls, REJ go-backs) since
+                                V(A) last moved, with I frames unacknowledged;
+                                the one after N400 of them releases the link
+                                (V42LAPM_R_N400; a deviation from V.42, see
+                                docs/error-control.md). Not counted while
+                                the peer is busy (RNR, 8.4.7); a reset of the
+                                data path (destructive break) keeps it */
     int t401, t403;          /* ms left, negative = stopped */
     unsigned pend;           /* frames owed, see v42_lapm.c */
     int ua_f, dm_f, brkack_f;
